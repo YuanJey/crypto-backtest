@@ -134,17 +134,21 @@ go run ./cmd/backtest -strategy-id ema-boll-rsi -run -data-root data/market
 - **全局模块路径重命名 (Go Module Path Refactor)**：
   - 将根模块定义从 `github.com/bytedance/crypto-backtest` 全量重构为 `github.com/YuanJey/crypto-backtest`。
   - 同步原子更新 `cmd/` 下 3 个入口（`api`, `backtest`, `market-data`）及 `internal/` 下全部 23 个核心子包文件，全库 13 个包编译与单测 100% 通过。
+- **回测数据源智能解析与仿真演示降级 (Backtest Dataset Resolution & Sample Fallback)**：
+  - 公共仿真 K 线生成下沉（`internal/market/bar.go`）：
+    - 提炼公开的 `market.GenerateSampleBars(symbol, startMS, endMS)` 函数，基于多谐波与趋势漂移算法提供 672 根 15m 逼真仿真 K 线，兼顾时间窗口与起止边界容错。
+    - `internal/api/server.go` 统一接入该标准生成器。
+  - 回测执行器智能自适应（`internal/backtest/service.go`）：
+    - 显式支持 `dataset_id == "__sample__"` 仿真数据集回测。
+    - 针对策略默认配置但本地磁盘未下载的历史静态数据集，支持平滑降级到仿真数据集，消除 `no such file or directory` 阻断异常。
+  - 前端回测调度交互规范化（`web/src/app.js`）：
+    - 数据集下拉框精确绑定 `data-start` 与 `data-end`；回测发起时显式传递 `__sample__` 或目标本地数据集 ID 与对应起止时间。
 - **影响范围**：
-  - `go.mod`
-  - `cmd/api/main.go`
-  - `cmd/backtest/main.go`
-  - `cmd/market-data/main.go`
-  - `internal/api/` (全部文件)
-  - `internal/backtest/` (全部文件)
-  - `internal/compiler/` (全部文件)
-  - `internal/datafeed/` (全部文件)
-  - `internal/dataset/` (全部文件)
-  - `internal/engine/` (全部文件)
-  - `internal/strategy/` (全部文件)
+  - `internal/market/bar.go`
+  - `internal/api/server.go`
+  - `internal/backtest/service.go`
+  - `internal/backtest/service_test.go`
+  - `web/src/app.js`
   - `README.md`
+
 
