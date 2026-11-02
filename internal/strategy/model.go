@@ -15,6 +15,7 @@ type Definition struct {
 	Data          DataSelection   `json:"data"`
 	Account       AccountSpec     `json:"account"`
 	Behavior      BehaviorSpec    `json:"behavior"`
+	Position      PositionSpec    `json:"position,omitempty"`
 	Execution     ExecutionSpec   `json:"execution"`
 	Risk          RiskSpec        `json:"risk"`
 	Indicators    []IndicatorSpec `json:"indicators"`
@@ -46,6 +47,15 @@ type BehaviorSpec struct {
 	AllowPyramiding      bool `json:"allow_pyramiding"`
 	AllowSameBarReversal bool `json:"allow_same_bar_reversal"`
 	CooldownBars         int  `json:"cooldown_bars"`
+}
+
+type PositionSpec struct {
+	InitialSizePct    float64 `json:"initial_size_pct,omitempty"`
+	AllowPyramiding   bool    `json:"allow_pyramiding,omitempty"`
+	MaxAdditions      int     `json:"max_additions,omitempty"`
+	AddSizePct        float64 `json:"add_size_pct,omitempty"`
+	AddSizeMultiplier float64 `json:"add_size_multiplier,omitempty"`
+	MaxPositionPct    float64 `json:"max_position_pct,omitempty"`
 }
 
 type ExecutionSpec struct {
@@ -118,15 +128,17 @@ type ValueScope string
 const (
 	ValueScopeMarket    ValueScope = "market"
 	ValueScopeIndicator ValueScope = "indicator"
+	ValueScopePosition  ValueScope = "position"
 )
 
 type RuleSpec struct {
-	ID       string     `json:"id"`
-	Name     string     `json:"name,omitempty"`
-	Disabled bool       `json:"disabled,omitempty"`
-	Priority int        `json:"priority,omitempty"`
-	When     Expression `json:"when"`
-	Action   ActionSpec `json:"action"`
+	ID        string     `json:"id"`
+	Name      string     `json:"name,omitempty"`
+	Disabled  bool       `json:"disabled,omitempty"`
+	Priority  int        `json:"priority,omitempty"`
+	Condition string     `json:"condition,omitempty"`
+	When      Expression `json:"when"`
+	Action    ActionSpec `json:"action"`
 }
 
 type Expression struct {

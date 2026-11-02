@@ -10,6 +10,11 @@ import (
 )
 
 func Compile(definition strategy.Definition, registry *indicator.Registry) (Plan, error) {
+	normalized, err := strategy.Normalize(definition)
+	if err != nil {
+		return Plan{}, err
+	}
+	definition = normalized
 	if err := strategy.Validate(definition, registry); err != nil {
 		return Plan{}, err
 	}

@@ -82,6 +82,7 @@
 | `volume` | float64 | 基础资产成交量 |
 | `quote_volume` | float64，可选 | 计价资产成交量 |
 | `trade_count` | int64，可选 | 成交笔数 |
+| `state` | string | K 线状态，历史数据必须为 `closed` |
 
 交易所、标的和周期放在分区路径及 manifest 中，不在每一行重复存储：
 
@@ -168,6 +169,7 @@ type StrategyDefinition struct {
 	Data          DataSelection   `json:"data"`
 	Account       AccountSpec     `json:"account"`
 	Behavior      BehaviorSpec    `json:"behavior"`
+	Position      PositionSpec    `json:"position,omitempty"`
 	Execution     ExecutionSpec   `json:"execution"`
 	Risk          RiskSpec        `json:"risk"`
 	Indicators    []IndicatorSpec `json:"indicators"`
@@ -192,6 +194,15 @@ type BehaviorSpec struct {
 	AllowPyramiding      bool `json:"allow_pyramiding"`
 	AllowSameBarReversal bool `json:"allow_same_bar_reversal"`
 	CooldownBars         int  `json:"cooldown_bars"`
+}
+
+type PositionSpec struct {
+	InitialSizePct     float64 `json:"initial_size_pct,omitempty"`
+	AllowPyramiding   bool    `json:"allow_pyramiding,omitempty"`
+	MaxAdditions      int     `json:"max_additions,omitempty"`
+	AddSizePct        float64 `json:"add_size_pct,omitempty"`
+	AddSizeMultiplier float64 `json:"add_size_multiplier,omitempty"`
+	MaxPositionPct    float64 `json:"max_position_pct,omitempty"`
 }
 
 type ExecutionSpec struct {
@@ -297,21 +308,87 @@ type BollParams struct {
 前端主流程：
 
 ```text
-创建策略 -> 添加指标并设置参数/周期 -> 配置开多/开空/平仓规则 -> 保存策略 -> 选择策略执行回测
+创建策略 -> 添加指标并设置参数/周期 -> 配置开多/开空/平仓规则 -> 保存策略到 SQLite -> 选择策略和 ReportSpec 执行回测 -> 展示结果
 ```
 
-首版策略层使用本地 JSON 文件仓库，文件名为 `strategies/<strategy_id>.json`。API 和前端接入后可以替换为 SQLite / PostgreSQL 仓库，但策略定义结构、校验规则和编译入口保持不变。
+首版服务使用 SQLite 保存策略定义，只保存策略 JSON 和基础元数据，不保存回测结果文件。回测请求通过 `strategy_id` 选择已创建策略，并携带本次 report 配置。后续多实例部署时可以替换为 PostgreSQL，但策略定义结构、校验规则和编译入口保持不变。
 
-当前 CLI 入口按策略 ID 选择策略。默认只完成解码、校验和编译，方便前端保存策略后先做快速检查：
+常驻服务入口：
+
+```bash
+go run ./cmd/api -addr :8080 -db data/app.db -data-root data/market
+```
+
+核心 API：
+
+```http
+GET  /api/v1/catalog
+POST /api/v1/strategies
+GET  /api/v1/strategies
+GET  /api/v1/strategies/{id}
+POST /api/v1/backtests
+```
+
+`POST /api/v1/backtests` 请求示例：
+
+```json
+{
+  "strategy_id": "ema-boll-rsi",
+  "report": {
+    "equity_curve": true,
+    "orders": true,
+    "fills": true,
+    "metrics": ["final_equity", "total_return_pct", "max_drawdown_pct"],
+    "indicators": [
+      {"id": "ema_fast_15m", "fields": ["value"]},
+      {"id": "rsi_14_4h", "fields": ["value"]}
+    ]
+  }
+}
+```
+
+CLI 入口保留为开发调试工具。默认只完成解码、校验和编译：
 
 ```bash
 go run ./cmd/backtest -strategy-id ema-boll-rsi
+go run ./cmd/backtest -db data/app.db -strategy-id ema-boll-rsi
 ```
 
 执行回测时增加 `-run`，Go 会按策略里的 `dataset_id`、标的、时间范围从 `data/market` 读取 Parquet K 线：
 
 ```bash
 go run ./cmd/backtest -strategy-id ema-boll-rsi -run -data-root data/market
+go run ./cmd/backtest -db data/app.db -strategy-id ema-boll-rsi -run -data-root data/market
+```
+
+报告输出不属于策略定义本身，而属于本次回测请求。同一个策略可以用不同报告视图执行：
+
+```go
+type BacktestRequest struct {
+	Bars   []market.Bar `json:"-"`
+	Report ReportSpec  `json:"report"`
+}
+
+type ReportSpec struct {
+	EquityCurve bool               `json:"equity_curve,omitempty"`
+	Orders      bool               `json:"orders,omitempty"`
+	Fills       bool               `json:"fills,omitempty"`
+	Metrics     []MetricType       `json:"metrics,omitempty"`
+	Indicators  []IndicatorOverlay `json:"indicators,omitempty"`
+}
+
+type IndicatorOverlay struct {
+	ID     string   `json:"id"`
+	Fields []string `json:"fields,omitempty"`
+}
+```
+
+CLI 可用 `-report` 选择输出段，`-report-indicator` 选择具体指标曲线：
+
+```bash
+go run ./cmd/backtest -strategy-id ema-boll-rsi -run \
+  -report summary,equity,orders,fills,indicators \
+  -report-indicator ema_fast_15m.value,rsi_14_4h.value
 ```
 
 加载顺序：
@@ -423,6 +500,7 @@ type RuleSpec struct {
 	Name     string     `json:"name,omitempty"`
 	Disabled bool       `json:"disabled,omitempty"`
 	Priority int        `json:"priority,omitempty"`
+	Condition string    `json:"condition,omitempty"`
 	When     Expression `json:"when"`
 	Action   ActionSpec `json:"action"`
 }
@@ -442,6 +520,62 @@ type ActionSpec struct {
 | `close` | `side`、`size_pct` | 平多或平空 |
 
 `open_long`、`close_long` 等名称适合作为 UI 文案，不建议在底层定义为多个动作类型。统一的动作加 `side` 更容易扩展。保护性止损、止盈和减仓将作为 `ActionSpec` 的后续字段扩展。
+
+`ActionSpec.size_pct` 是规则级覆盖值。若开仓 action 不提供 `size_pct`，engine 使用策略级 `PositionSpec`：
+
+- 首次开仓用 `initial_size_pct`。
+- 加仓优先用 `add_size_pct`。
+- 若未配置 `add_size_pct` 且配置 `add_size_multiplier`，使用 `initial_size_pct * add_size_multiplier^entry_count`。
+- `max_additions` 限制当前持仓轮次内的加仓次数，不包含首次开仓。
+- `max_position_pct` 限制当前标的总仓位占权益比例。
+
+规则条件可以直接保存为 AST，也可以保存为公共链式表达式字符串，由后端统一解析为 AST：
+
+```json
+{
+  "id": "open_long",
+  "condition": "and(ema_fast_15m.gte(ema_slow_1h), rsi_14_4h.lt(70))",
+  "action": {
+    "type": "open",
+    "side": "long",
+    "size_pct": 0.2
+  }
+}
+```
+
+链式表达式规则：
+
+- `ema_15m.gte(2000)` 等价于引用 `indicator.ema_15m.value >= 2000`。
+- `boll_15m.upper.gte(market.close)` 可引用指定指标输出字段。
+- `market.close.cross_up(boll_15m.middle)` 可引用市场字段和指标字段。
+- `position.flat()`、`position.long()`、`position.short()` 可在指标条件前显式判断当前持仓状态。
+- `position.quantity.gte(1)`、`position.abs_quantity.gt(0)` 可引用当前持仓数量状态。
+- `position.entry_count.lt(3)` 可限制当前持仓轮次内的加仓次数。
+- `position.avg_entry_price`、`position.last_entry_price`、`position.unrealized_pnl_pct` 可用于加仓、止损或退出条件。
+- 顶层支持 `and(...)`、`or(...)`、`not(...)`。
+- 若同时提交 `condition` 和 `when`，服务端拒绝，避免一条规则有两套条件来源。
+
+当前 engine 还保留执行层安全门控：当 `allow_pyramiding=false` 且当前已有同向持仓时，即使规则信号再次满足也不会继续开仓。策略层推荐显式写状态条件，例如：
+
+```json
+{
+  "id": "open_long",
+  "condition": "and(position.flat(), ema_fast_15m.gte(ema_slow_1h))",
+  "action": {"type": "open", "side": "long", "size_pct": 0.2}
+}
+```
+
+后续马丁或加仓逻辑可以在同一状态模型上扩展，例如增加 `position.entry_count`、`position.last_entry_price`、`position.unrealized_pnl_pct` 等字段。
+
+马丁式加仓示例：
+
+```json
+{
+  "id": "martingale_long",
+  "condition": "or(position.flat(), and(position.long(), position.entry_count.lt(3), position.avg_entry_price.gte(market.close)))",
+  "action": {"type": "open", "side": "long"}
+}
+```
 
 ### 4.6 策略 JSON 示例
 
@@ -905,15 +1039,17 @@ crypto-backtest/
 - `internal/market` 存放行情领域基础类型，供数据层和回测层共同使用。
 - `internal/compiler` 将策略模型转换为运行模型。
 - `internal/engine` 不依赖 HTTP、数据库或前端模型；只接收编译计划和已加载的 15m K 线。
+- `internal/api` 编排 SQLite 策略仓库、策略编译、数据读取和回测执行，不把 HTTP 逻辑扩散到 engine。
 - `internal/indicator` 不依赖账户与撮合。
 - `internal/execution` 只通过订单、成交和市场规则交互。
 
 当前 engine MVP：
 
 - 按 15m K 线顺序推进。
+- 基础 K 线必须是 `closed` 状态，显式 `forming` K 线不能进入回测规则。
 - 本根 K 线收盘后更新指标并评估规则。
 - 市价动作最早在下一根 K 线开盘成交。
-- 高周期指标由 15m 聚合，只有完整高周期 K 线收盘后才更新可见值。
+- 高周期指标由 15m 聚合；聚合窗口内部是 `forming`，只有完整高周期 K 线转为 `closed` 后才更新可见值。
 - 首版支持单标的、单账户、`open/close + long/short + size_pct` 动作。
 
 MVP 可以让 API 和 worker 在同一进程运行，但代码边界需要从第一版分开，后续才能独立扩容回测 worker。

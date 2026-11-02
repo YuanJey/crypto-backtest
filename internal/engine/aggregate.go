@@ -26,6 +26,7 @@ func (a *barAggregator) Update(bar market.Bar) (market.Bar, bool) {
 			Volume:      bar.Volume,
 			QuoteVolume: bar.QuoteVolume,
 			TradeCount:  bar.TradeCount,
+			State:       market.BarStateForming,
 		}
 		a.count = 1
 		a.active = true
@@ -49,6 +50,7 @@ func (a *barAggregator) Update(bar market.Bar) (market.Bar, bool) {
 	}
 	expectedBars := a.timeframeMS / a.baseMS
 	completed := a.current
+	completed.State = market.BarStateClosed
 	complete := a.count == expectedBars
 	a.current = market.Bar{}
 	a.count = 0

@@ -2,14 +2,32 @@
 
 策略文件使用版本化 JSON 存储，文件名为 `<strategy_id>.json`。回测入口通过 `-strategy-id` 选择指定策略。
 
+正式服务模式下，策略保存到 SQLite：
+
+```bash
+go run ./cmd/api -addr :8080 -db data/app.db -data-root data/market
+```
+
+前端通过 API 创建策略，再通过 `POST /api/v1/backtests` 选择已创建策略和本次 report 配置执行回测。
+
 ```bash
 go run ./cmd/backtest -strategy-id ema-boll-rsi
+go run ./cmd/backtest -db data/app.db -strategy-id ema-boll-rsi
 ```
 
 执行回测时加 `-run`，从策略的 `dataset_id` 对应目录读取 Parquet：
 
 ```bash
 go run ./cmd/backtest -strategy-id ema-boll-rsi -run -data-root data/market
+go run ./cmd/backtest -db data/app.db -strategy-id ema-boll-rsi -run -data-root data/market
+```
+
+选择报告输出：
+
+```bash
+go run ./cmd/backtest -strategy-id ema-boll-rsi -run \
+  -report summary,equity,orders,fills,indicators \
+  -report-indicator ema_fast_15m.value,rsi_14_4h.value
 ```
 
 每个策略可以配置自己的指标列表和初始化参数：
@@ -49,11 +67,38 @@ go run ./cmd/backtest -strategy-id ema-boll-rsi -run -data-root data/market
 ```json
 {
   "id": "open_short",
-  "when": {"kind": "boolean", "bool": true},
+  "condition": "and(position.flat(), ema_fast_15m.lt(ema_slow_1h), rsi_14_4h.gt(30))",
   "action": {
     "type": "open",
     "side": "short",
     "size_pct": 0.2
+  }
+}
+```
+
+马丁式加仓可以通过 position 状态控制：
+
+```json
+{
+  "id": "martingale_long",
+  "condition": "or(position.flat(), and(position.long(), position.entry_count.lt(3), position.avg_entry_price.gte(market.close)))",
+  "action": {
+    "type": "open",
+    "side": "long"
+  }
+}
+```
+
+对应策略级仓位配置：
+
+```json
+{
+  "position": {
+    "initial_size_pct": 0.2,
+    "allow_pyramiding": true,
+    "max_additions": 2,
+    "add_size_multiplier": 2,
+    "max_position_pct": 1
   }
 }
 ```

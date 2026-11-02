@@ -20,6 +20,13 @@
     "allow_same_bar_reversal": false,
     "cooldown_bars": 0
   },
+  "position": {
+    "initial_size_pct": 0.2,
+    "allow_pyramiding": false,
+    "max_additions": 0,
+    "add_size_multiplier": 1,
+    "max_position_pct": 1
+  },
   "execution": {
     "signal_time": "bar_close",
     "market_fill_time": "next_bar_open",

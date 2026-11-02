@@ -18,6 +18,7 @@ type indicatorState struct {
 }
 
 func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, error) {
+	reportSpec := normalizeReportSpec(request.Report)
 	bars := append([]market.Bar(nil), request.Bars...)
 	sort.Slice(bars, func(i, j int) bool { return bars[i].OpenTimeMS < bars[j].OpenTimeMS })
 	if len(bars) == 0 {
@@ -50,6 +51,9 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 		if err := ctx.Err(); err != nil {
 			return Result{}, err
 		}
+		if !bar.IsClosed() {
+			return Result{}, fmt.Errorf("bar at open_time_ms=%d is not closed", bar.OpenTimeMS)
+		}
 		if len(pendingOrderIndexes) > 0 {
 			for _, orderIndex := range pendingOrderIndexes {
 				fillOrder(&portfolio, &result, orderIndex, bar, plan)
@@ -62,7 +66,7 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 			completedBar, completed := state.aggregator.Update(bar)
 			if completed {
 				inputs := make([]float64, 0, len(state.plan.Inputs))
-				evalCtx := evalContext{bars: bars, barIndex: index, indicators: indicatorSeries}
+				evalCtx := evalContext{bars: bars, barIndex: index, indicators: indicatorSeries, portfolio: portfolio}
 				for _, input := range state.plan.Inputs {
 					if input.Scope == strategy.ValueScopeMarket {
 						value, _, err := marketField(completedBar, input.Field)
@@ -95,13 +99,13 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 			}
 		}
 
-		evalCtx := evalContext{bars: bars, barIndex: index, indicators: indicatorSeries}
+		evalCtx := evalContext{bars: bars, barIndex: index, indicators: indicatorSeries, portfolio: portfolio}
 		for _, rule := range plan.Rules {
 			matched, err := evalBool(rule.When, evalCtx)
 			if err != nil {
 				return Result{}, fmt.Errorf("rule %q: %w", rule.ID, err)
 			}
-			if !matched || !eligible(portfolio, rule.Action, plan.Strategy.Behavior.AllowPyramiding) {
+			if !matched || !eligible(portfolio, rule.Action, plan.Strategy) {
 				continue
 			}
 			orderSequence++
@@ -128,6 +132,9 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 	if len(result.EquityCurve) > 0 {
 		result.FinalEquity = result.EquityCurve[len(result.EquityCurve)-1].Equity
 	}
+	if err := applyReportSpec(&result, reportSpec, indicatorSeries, plan.Strategy.Account.InitialCash); err != nil {
+		return Result{}, err
+	}
 	return result, nil
 }
 
@@ -139,9 +146,18 @@ func fillOrder(portfolio *portfolio, result *Result, orderIndex int, bar market.
 	var ok bool
 	switch order.Action.Type {
 	case strategy.ActionOpen:
-		quantity, fee, ok = portfolio.open(order.Action.Side, price, order.Action.SizePct, feeRate, plan.Strategy.Behavior.AllowPyramiding)
+		sizePct, sizeOK := resolveOpenSizePct(*portfolio, order.Action, plan.Strategy.Position, price)
+		if !sizeOK {
+			ok = false
+			break
+		}
+		quantity, fee, ok = portfolio.open(order.Action.Side, price, sizePct, feeRate, allowPyramiding(plan.Strategy))
 	case strategy.ActionClose:
-		quantity, fee, realized, ok = portfolio.close(order.Action.Side, price, order.Action.SizePct, feeRate)
+		sizePct := order.Action.SizePct
+		if sizePct == 0 {
+			sizePct = 1
+		}
+		quantity, fee, realized, ok = portfolio.close(order.Action.Side, price, sizePct, feeRate)
 	}
 	if !ok {
 		order.Status = OrderStatusSkipped
@@ -181,14 +197,60 @@ func fillPrice(open float64, action strategy.ActionSpec, slippage strategy.Slipp
 	}
 }
 
-func eligible(portfolio portfolio, action strategy.ActionSpec, allowPyramiding bool) bool {
+func eligible(portfolio portfolio, action strategy.ActionSpec, strategyDef strategy.Definition) bool {
 	currentSide := portfolio.currentSide()
 	switch action.Type {
 	case strategy.ActionOpen:
-		return currentSide == "" || (currentSide == action.Side && allowPyramiding)
+		if currentSide == "" {
+			return true
+		}
+		if currentSide != action.Side || !allowPyramiding(strategyDef) {
+			return false
+		}
+		maxEntries := 1 + strategyDef.Position.MaxAdditions
+		return maxEntries <= 1 || portfolio.entryCount < maxEntries
 	case strategy.ActionClose:
 		return currentSide == action.Side
 	default:
 		return false
 	}
+}
+
+func allowPyramiding(strategyDef strategy.Definition) bool {
+	return strategyDef.Position.AllowPyramiding || strategyDef.Behavior.AllowPyramiding
+}
+
+func resolveOpenSizePct(portfolio portfolio, action strategy.ActionSpec, position strategy.PositionSpec, price float64) (float64, bool) {
+	sizePct := action.SizePct
+	if sizePct == 0 {
+		if portfolio.entryCount == 0 {
+			sizePct = position.InitialSizePct
+		} else if position.AddSizePct > 0 {
+			sizePct = position.AddSizePct
+		} else if position.AddSizeMultiplier > 0 {
+			sizePct = position.InitialSizePct * math.Pow(position.AddSizeMultiplier, float64(portfolio.entryCount))
+		} else {
+			sizePct = position.InitialSizePct
+		}
+	}
+	if sizePct <= 0 {
+		return 0, false
+	}
+	if position.MaxPositionPct > 0 {
+		equity := portfolio.equity(price)
+		if equity <= 0 {
+			return 0, false
+		}
+		currentNotional := portfolio.positionNotional(price)
+		maxNotional := equity * position.MaxPositionPct
+		availableNotional := maxNotional - currentNotional
+		if availableNotional <= 0 {
+			return 0, false
+		}
+		requestedNotional := equity * sizePct
+		if requestedNotional > availableNotional {
+			sizePct = availableNotional / equity
+		}
+	}
+	return sizePct, sizePct > 0
 }

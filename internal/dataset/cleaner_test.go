@@ -36,6 +36,15 @@ func TestCleanBarsRejectsInvalidOHLC(t *testing.T) {
 	}
 }
 
+func TestCleanBarsRejectsFormingHistoricalBar(t *testing.T) {
+	bar := testBar(0)
+	bar.State = market.BarStateForming
+	_, _, err := CleanBars([]market.Bar{bar}, "BTC-USDT", "15m", 0, 900_000, DefaultCleanOptions())
+	if err == nil {
+		t.Fatal("expected forming historical bar to fail")
+	}
+}
+
 func testBar(openTimeMS int64) market.Bar {
 	return market.Bar{
 		OpenTimeMS:  openTimeMS,
@@ -46,5 +55,6 @@ func testBar(openTimeMS int64) market.Bar {
 		Volume:      1,
 		QuoteVolume: 10,
 		TradeCount:  1,
+		State:       market.BarStateClosed,
 	}
 }

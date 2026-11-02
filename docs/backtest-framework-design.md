@@ -144,6 +144,7 @@ crypto-backtest/
 | `volume` | float64 | 基础资产成交量，大于等于 0 |
 | `quote_volume` | float64 | 计价资产成交量，大于等于 0 |
 | `trade_count` | int64 | 成交笔数，大于等于 0 |
+| `state` | string | K 线状态，历史数据必须为 `closed`；聚合中的高周期 K 线为 `forming` |
 
 交易所、标的和周期放在分区路径及 `manifest.json` 中，不在每一行重复存储。`open_time_ms` 统一表示 K 线开盘时间，`bar_close_time = open_time_ms + timeframe`。规则的 `evaluation_time` 使用 `bar_close_time`，成交事件使用实际模拟成交时点，避免同一个时间戳同时被解释成开盘和收盘。
 
@@ -157,6 +158,13 @@ crypto-backtest/
 缺失 K 线默认记录告警但不自动填充。自动填充会虚构可成交行情；若策略确实需要连续时间轴，应由数据配置显式选择填充规则。
 
 多周期数据使用“已完成周期向后对齐”。例如，在 `10:00-10:59` 的 1 小时 K 线于 `11:00` 完成前，低周期策略不能读取它的最终值。
+
+K 线可见性由状态显式控制：
+
+- `forming`：仍在构建中的 K 线，不能参与指标更新或规则判断。
+- `closed`：已经完整收盘的 K 线，可以参与指标更新和规则判断。
+
+历史回测输入只接受 `closed` 的 15m 基础 K 线。高周期 K 线由 15m 聚合生成，窗口未完成时保持 `forming`，只有完整周期收盘后才转为 `closed` 并更新对应高周期指标。
 
 ## 6. 指标系统
 
@@ -258,6 +266,46 @@ indicators:
 | 常量 | `30`、`0.02`、`true` |
 
 首版规则不能直接引用未来偏移。历史引用仅通过受控操作符实现，且偏移必须小于等于 0。
+
+策略层支持显式状态条件：
+
+```text
+and(position.flat(), ema_fast_15m.gte(ema_slow_1h))
+```
+
+执行层仍保留安全门控：当 `allow_pyramiding=false` 且当前已有持仓时，开仓信号不会继续生成新仓。后续马丁 / 加仓逻辑应扩展持仓状态字段和加仓规则，而不是绕过执行层门控。
+
+策略级仓位参数：
+
+```json
+{
+  "position": {
+    "initial_size_pct": 0.2,
+    "allow_pyramiding": true,
+    "max_additions": 2,
+    "add_size_multiplier": 2,
+    "max_position_pct": 1
+  }
+}
+```
+
+规则级 `action.size_pct` 可以覆盖策略默认仓位；不填写时由 `PositionSpec` 计算。
+
+当前持仓状态字段：
+
+- `position.quantity`
+- `position.abs_quantity`
+- `position.avg_entry_price`
+- `position.last_entry_price`
+- `position.entry_count`
+- `position.unrealized_pnl_pct`
+- `position.side`
+
+马丁式加仓可以表达为：
+
+```text
+or(position.flat(), and(position.long(), position.entry_count.lt(3), position.avg_entry_price.gte(market.close)))
+```
 
 ### 7.3 操作符
 
@@ -538,11 +586,16 @@ result, err := engine.Run(ctx, plan)
 HTTP 和 CLI 入口：
 
 ```text
-POST /api/v1/strategies/validate
+GET /api/v1/catalog
+POST /api/v1/strategies
+GET /api/v1/strategies
+GET /api/v1/strategies/{id}
 POST /api/v1/backtests
 go run ./cmd/backtest -strategy-id ema-boll-rsi
+go run ./cmd/backtest -db data/app.db -strategy-id ema-boll-rsi
 go run ./cmd/backtest -strategies-dir strategies -strategy-id ema-boll-rsi
 go run ./cmd/backtest -strategy-id ema-boll-rsi -run -data-root data/market
+go run ./cmd/backtest -db data/app.db -strategy-id ema-boll-rsi -run -data-root data/market
 ```
 
 ## 12. 结果与可复现性

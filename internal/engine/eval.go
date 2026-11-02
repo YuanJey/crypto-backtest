@@ -12,6 +12,7 @@ type evalContext struct {
 	bars       []market.Bar
 	barIndex   int
 	indicators map[string]map[string][]float64
+	portfolio  portfolio
 }
 
 func evalBool(expression strategy.Expression, ctx evalContext) (bool, error) {
@@ -149,6 +150,8 @@ func evalRef(ref strategy.ValueRef, ctx evalContext, offsetDelta int) (float64, 
 			return math.NaN(), false, nil
 		}
 		return series[index], true, nil
+	case strategy.ValueScopePosition:
+		return positionField(ctx.portfolio, ref.Field, ctx.bars[index].Close)
 	default:
 		return 0, false, fmt.Errorf("unknown ref scope %q", ref.Scope)
 	}
@@ -172,5 +175,39 @@ func marketField(bar market.Bar, field string) (float64, bool, error) {
 		return float64(bar.TradeCount), true, nil
 	default:
 		return 0, false, fmt.Errorf("unknown market field %q", field)
+	}
+}
+
+func positionField(portfolio portfolio, field string, markPrice float64) (float64, bool, error) {
+	switch field {
+	case "quantity":
+		return portfolio.quantity, true, nil
+	case "abs_quantity":
+		return math.Abs(portfolio.quantity), true, nil
+	case "entry_price", "avg_entry_price":
+		return portfolio.avgPrice, true, nil
+	case "last_entry_price":
+		return portfolio.lastEntryPrice, true, nil
+	case "entry_count":
+		return float64(portfolio.entryCount), true, nil
+	case "unrealized_pnl_pct":
+		if portfolio.quantity == 0 || portfolio.avgPrice == 0 {
+			return 0, true, nil
+		}
+		if portfolio.quantity > 0 {
+			return (markPrice - portfolio.avgPrice) / portfolio.avgPrice, true, nil
+		}
+		return (portfolio.avgPrice - markPrice) / portfolio.avgPrice, true, nil
+	case "side":
+		switch portfolio.currentSide() {
+		case strategy.TradeSideLong:
+			return 1, true, nil
+		case strategy.TradeSideShort:
+			return -1, true, nil
+		default:
+			return 0, true, nil
+		}
+	default:
+		return 0, false, fmt.Errorf("unknown position field %q", field)
 	}
 }

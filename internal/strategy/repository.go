@@ -11,6 +11,12 @@ import (
 
 var safeStrategyID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
 
+type Repository interface {
+	LoadByID(ctx context.Context, id string) (Definition, error)
+	Save(ctx context.Context, definition Definition, raw []byte) error
+	ListIDs(ctx context.Context) ([]string, error)
+}
+
 type FileRepository struct {
 	Dir string
 }

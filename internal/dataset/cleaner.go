@@ -37,6 +37,7 @@ func CleanBars(bars []market.Bar, symbol, timeframe string, startMS, endMS int64
 		if bar.OpenTimeMS < startMS || bar.OpenTimeMS >= endMS {
 			continue
 		}
+		bar = bar.WithDefaultClosedState()
 		if _, exists := byOpenTime[bar.OpenTimeMS]; exists {
 			report.DuplicateRows++
 		}
@@ -78,6 +79,9 @@ func CleanBars(bars []market.Bar, symbol, timeframe string, startMS, endMS int64
 func validateBar(bar market.Bar, timeframeMS int64) (string, string) {
 	if bar.OpenTimeMS%timeframeMS != 0 {
 		return "misaligned_timestamp", "bar open time is not aligned to timeframe boundary"
+	}
+	if bar.State != market.BarStateClosed {
+		return "unclosed_bar", "historical dataset bars must be closed"
 	}
 	values := []float64{bar.Open, bar.High, bar.Low, bar.Close, bar.Volume, bar.QuoteVolume}
 	for _, value := range values {

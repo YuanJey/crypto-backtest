@@ -13,6 +13,11 @@ type IndicatorParamValidator interface {
 }
 
 func Validate(definition Definition, registry *indicator.Registry) error {
+	normalized, err := Normalize(definition)
+	if err != nil {
+		return err
+	}
+	definition = normalized
 	if definition.SchemaVersion != SchemaVersion {
 		return fmt.Errorf("schema_version must be %d", SchemaVersion)
 	}
@@ -31,6 +36,9 @@ func Validate(definition Definition, registry *indicator.Registry) error {
 	if err := validateBehavior(definition.Behavior); err != nil {
 		return err
 	}
+	if err := validatePosition(definition.Position); err != nil {
+		return err
+	}
 	if err := validateExecution(definition.Execution); err != nil {
 		return err
 	}
@@ -41,7 +49,7 @@ func Validate(definition Definition, registry *indicator.Registry) error {
 	if err != nil {
 		return err
 	}
-	return validateRules(definition.Rules, indicatorOutputs, definition.Account.MarketType)
+	return validateRules(definition.Rules, indicatorOutputs, definition.Account.MarketType, definition.Position)
 }
 
 func validateData(data DataSelection) error {
@@ -93,6 +101,25 @@ func validateAccount(account AccountSpec) error {
 func validateBehavior(behavior BehaviorSpec) error {
 	if behavior.CooldownBars < 0 {
 		return fmt.Errorf("behavior.cooldown_bars must be >= 0")
+	}
+	return nil
+}
+
+func validatePosition(position PositionSpec) error {
+	if position.InitialSizePct < 0 || position.InitialSizePct > 1 {
+		return fmt.Errorf("position.initial_size_pct must be in [0, 1]")
+	}
+	if position.MaxAdditions < 0 {
+		return fmt.Errorf("position.max_additions must be >= 0")
+	}
+	if position.AddSizePct < 0 || position.AddSizePct > 1 {
+		return fmt.Errorf("position.add_size_pct must be in [0, 1]")
+	}
+	if position.AddSizeMultiplier < 0 {
+		return fmt.Errorf("position.add_size_multiplier must be >= 0")
+	}
+	if position.MaxPositionPct < 0 || position.MaxPositionPct > 1 {
+		return fmt.Errorf("position.max_position_pct must be in [0, 1]")
 	}
 	return nil
 }
@@ -211,7 +238,7 @@ func validateIndicatorTimeframe(timeframe string, baseTimeframe string) error {
 	return nil
 }
 
-func validateRules(rules []RuleSpec, indicatorOutputs map[string]map[string]struct{}, marketType MarketType) error {
+func validateRules(rules []RuleSpec, indicatorOutputs map[string]map[string]struct{}, marketType MarketType, position PositionSpec) error {
 	ids := map[string]struct{}{}
 	for _, rule := range rules {
 		if strings.TrimSpace(rule.ID) == "" {
@@ -227,14 +254,14 @@ func validateRules(rules []RuleSpec, indicatorOutputs map[string]map[string]stru
 		if err := validateExpression(rule.When, indicatorOutputs); err != nil {
 			return fmt.Errorf("rule %q when: %w", rule.ID, err)
 		}
-		if err := validateAction(rule.Action, marketType); err != nil {
+		if err := validateAction(rule.Action, marketType, position); err != nil {
 			return fmt.Errorf("rule %q action: %w", rule.ID, err)
 		}
 	}
 	return nil
 }
 
-func validateAction(action ActionSpec, marketType MarketType) error {
+func validateAction(action ActionSpec, marketType MarketType, position PositionSpec) error {
 	switch action.Type {
 	case ActionOpen, ActionClose:
 	default:
@@ -249,8 +276,11 @@ func validateAction(action ActionSpec, marketType MarketType) error {
 	default:
 		return fmt.Errorf("side must be long or short")
 	}
-	if action.SizePct <= 0 || action.SizePct > 1 {
-		return fmt.Errorf("size_pct must be in (0, 1]")
+	if action.SizePct < 0 || action.SizePct > 1 {
+		return fmt.Errorf("size_pct must be in [0, 1]")
+	}
+	if action.Type == ActionOpen && action.SizePct == 0 && position.InitialSizePct <= 0 {
+		return fmt.Errorf("open action requires size_pct or position.initial_size_pct")
 	}
 	return nil
 }
@@ -339,6 +369,16 @@ func validateValueRef(ref ValueRef, indicatorOutputs map[string]map[string]struc
 			}
 		}
 		return nil
+	case ValueScopePosition:
+		if ref.Name != "current" {
+			return fmt.Errorf("position ref name must be current")
+		}
+		switch ref.Field {
+		case "quantity", "abs_quantity", "entry_price", "avg_entry_price", "last_entry_price", "entry_count", "unrealized_pnl_pct", "side":
+			return nil
+		default:
+			return fmt.Errorf("unknown position field %q", ref.Field)
+		}
 	default:
 		return fmt.Errorf("unknown scope %q", ref.Scope)
 	}

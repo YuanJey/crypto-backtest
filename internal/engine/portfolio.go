@@ -7,10 +7,12 @@ import (
 )
 
 type portfolio struct {
-	marketType strategy.MarketType
-	cash       float64
-	quantity   float64
-	avgPrice   float64
+	marketType     strategy.MarketType
+	cash           float64
+	quantity       float64
+	avgPrice       float64
+	entryCount     int
+	lastEntryPrice float64
 }
 
 func newPortfolio(marketType strategy.MarketType, initialCash float64) portfolio {
@@ -61,7 +63,13 @@ func (p *portfolio) open(side strategy.TradeSide, price float64, sizePct float64
 		p.cash -= fee
 	}
 	p.addQuantity(quantity, price)
+	p.entryCount++
+	p.lastEntryPrice = price
 	return quantity, fee, true
+}
+
+func (p portfolio) positionNotional(markPrice float64) float64 {
+	return math.Abs(p.quantity) * markPrice
 }
 
 func (p *portfolio) close(side strategy.TradeSide, price float64, sizePct float64, feeRate float64) (float64, float64, float64, bool) {
@@ -92,8 +100,7 @@ func (p *portfolio) close(side strategy.TradeSide, price float64, sizePct float6
 		p.quantity += closeAbs
 	}
 	if math.Abs(p.quantity) < 1e-12 {
-		p.quantity = 0
-		p.avgPrice = 0
+		p.resetPosition()
 	}
 	return signedQty, fee, realized, true
 }
@@ -108,4 +115,11 @@ func (p *portfolio) addQuantity(quantity float64, price float64) {
 	newAbs := math.Abs(quantity)
 	p.avgPrice = (p.avgPrice*oldAbs + price*newAbs) / (oldAbs + newAbs)
 	p.quantity += quantity
+}
+
+func (p *portfolio) resetPosition() {
+	p.quantity = 0
+	p.avgPrice = 0
+	p.entryCount = 0
+	p.lastEntryPrice = 0
 }

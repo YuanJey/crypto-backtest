@@ -228,6 +228,7 @@ func parseKline(row []json.RawMessage) (market.Bar, error) {
 		Volume:      volume,
 		QuoteVolume: quoteVolume,
 		TradeCount:  tradeCount,
+		State:       market.BarStateClosed,
 	}, nil
 }
 

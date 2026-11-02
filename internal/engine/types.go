@@ -6,10 +6,12 @@ import (
 )
 
 type Result struct {
-	Orders      []Order       `json:"orders"`
-	Fills       []Fill        `json:"fills"`
-	EquityCurve []EquityPoint `json:"equity_curve"`
-	FinalEquity float64       `json:"final_equity"`
+	Orders      []Order                    `json:"orders,omitempty"`
+	Fills       []Fill                     `json:"fills,omitempty"`
+	EquityCurve []EquityPoint              `json:"equity_curve,omitempty"`
+	Indicators  map[string]IndicatorReport `json:"indicators,omitempty"`
+	Metrics     map[MetricType]float64     `json:"metrics,omitempty"`
+	FinalEquity float64                    `json:"final_equity"`
 }
 
 type OrderStatus string
@@ -48,5 +50,50 @@ type EquityPoint struct {
 }
 
 type RunRequest struct {
-	Bars []market.Bar
+	Bars   []market.Bar
+	Report ReportSpec
+}
+
+type BacktestRequest = RunRequest
+
+type ReportSpec struct {
+	EquityCurve bool               `json:"equity_curve,omitempty"`
+	Orders      bool               `json:"orders,omitempty"`
+	Fills       bool               `json:"fills,omitempty"`
+	Metrics     []MetricType       `json:"metrics,omitempty"`
+	Indicators  []IndicatorOverlay `json:"indicators,omitempty"`
+}
+
+type MetricType string
+
+const (
+	MetricFinalEquity    MetricType = "final_equity"
+	MetricTotalReturnPct MetricType = "total_return_pct"
+	MetricMaxDrawdownPct MetricType = "max_drawdown_pct"
+	MetricOrderCount     MetricType = "order_count"
+	MetricFillCount      MetricType = "fill_count"
+)
+
+type IndicatorOverlay struct {
+	ID     string   `json:"id"`
+	Fields []string `json:"fields,omitempty"`
+}
+
+type IndicatorReport struct {
+	Fields map[string][]float64 `json:"fields"`
+}
+
+func DefaultReportSpec() ReportSpec {
+	return ReportSpec{
+		EquityCurve: true,
+		Orders:      true,
+		Fills:       true,
+		Metrics: []MetricType{
+			MetricFinalEquity,
+			MetricTotalReturnPct,
+			MetricMaxDrawdownPct,
+			MetricOrderCount,
+			MetricFillCount,
+		},
+	}
 }
