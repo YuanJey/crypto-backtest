@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bytedance/crypto-backtest/internal/compiler"
-	"github.com/bytedance/crypto-backtest/internal/indicator"
-	"github.com/bytedance/crypto-backtest/internal/market"
-	"github.com/bytedance/crypto-backtest/internal/strategy"
+	"github.com/YuanJey/crypto-backtest/internal/compiler"
+	"github.com/YuanJey/crypto-backtest/internal/indicator"
+	"github.com/YuanJey/crypto-backtest/internal/market"
+	"github.com/YuanJey/crypto-backtest/internal/strategy"
 )
 
 func TestRunFillsSignalAtNextBarOpen(t *testing.T) {

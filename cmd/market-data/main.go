@@ -9,9 +9,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/bytedance/crypto-backtest/internal/datafeed/binance"
-	"github.com/bytedance/crypto-backtest/internal/dataset"
-	"github.com/bytedance/crypto-backtest/internal/market"
+	"github.com/YuanJey/crypto-backtest/internal/datafeed/binance"
+	"github.com/YuanJey/crypto-backtest/internal/dataset"
+	"github.com/YuanJey/crypto-backtest/internal/market"
 )
 
 func main() {

@@ -3,7 +3,7 @@ package dataset
 import (
 	"testing"
 
-	"github.com/bytedance/crypto-backtest/internal/market"
+	"github.com/YuanJey/crypto-backtest/internal/market"
 )
 
 func TestCleanBarsReportsGaps(t *testing.T) {

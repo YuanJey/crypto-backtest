@@ -3,7 +3,7 @@ package engine
 import (
 	"math"
 
-	"github.com/bytedance/crypto-backtest/internal/strategy"
+	"github.com/YuanJey/crypto-backtest/internal/strategy"
 )
 
 type portfolio struct {

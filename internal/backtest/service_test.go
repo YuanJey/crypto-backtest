@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bytedance/crypto-backtest/internal/dataset"
-	"github.com/bytedance/crypto-backtest/internal/engine"
-	"github.com/bytedance/crypto-backtest/internal/indicator"
-	"github.com/bytedance/crypto-backtest/internal/market"
-	"github.com/bytedance/crypto-backtest/internal/strategy"
+	"github.com/YuanJey/crypto-backtest/internal/dataset"
+	"github.com/YuanJey/crypto-backtest/internal/engine"
+	"github.com/YuanJey/crypto-backtest/internal/indicator"
+	"github.com/YuanJey/crypto-backtest/internal/market"
+	"github.com/YuanJey/crypto-backtest/internal/strategy"
 )
 
 func TestServiceRunsSQLiteStrategy(t *testing.T) {
@@ -137,3 +137,73 @@ func testBar(openTimeMS int64, open float64) market.Bar {
 		State:       market.BarStateClosed,
 	}
 }
+
+func TestServiceSampleFallbackWhenDatasetMissing(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	repository, err := strategy.OpenSQLiteRepository(ctx, filepath.Join(root, "app.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+
+	definition := testDefinition()
+	definition.Data.DatasetID = "non-existent-dataset"
+	raw, err := json.Marshal(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.Save(ctx, definition, raw); err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewService(repository, indicator.MustBuiltinRegistry(), filepath.Join(root, "empty-market"))
+	response, err := service.Run(ctx, Request{
+		StrategyID: definition.ID,
+		Report: engine.ReportSpec{
+			Metrics: []engine.MetricType{engine.MetricFinalEquity, engine.MetricOrderCount},
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected fallback to sample data, but got err: %v", err)
+	}
+	if response.BarCount == 0 {
+		t.Fatalf("expected > 0 bars from sample generator, got 0")
+	}
+}
+
+func TestServiceExplicitSampleDataset(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	repository, err := strategy.OpenSQLiteRepository(ctx, filepath.Join(root, "app.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+
+	definition := testDefinition()
+	raw, err := json.Marshal(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.Save(ctx, definition, raw); err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewService(repository, indicator.MustBuiltinRegistry(), filepath.Join(root, "empty-market"))
+	response, err := service.Run(ctx, Request{
+		StrategyID: definition.ID,
+		DatasetID:  "__sample__",
+		Symbol:     "ETH-USDT",
+		Report: engine.ReportSpec{
+			Metrics: []engine.MetricType{engine.MetricFinalEquity, engine.MetricOrderCount},
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected explicit sample run to succeed, got: %v", err)
+	}
+	if response.BarCount == 0 {
+		t.Fatalf("expected sample bars, got 0")
+	}
+}
+

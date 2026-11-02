@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bytedance/crypto-backtest/internal/backtest"
-	"github.com/bytedance/crypto-backtest/internal/datafeed/binance"
-	"github.com/bytedance/crypto-backtest/internal/dataset"
-	"github.com/bytedance/crypto-backtest/internal/indicator"
-	"github.com/bytedance/crypto-backtest/internal/market"
-	"github.com/bytedance/crypto-backtest/internal/strategy"
+	"github.com/YuanJey/crypto-backtest/internal/backtest"
+	"github.com/YuanJey/crypto-backtest/internal/datafeed/binance"
+	"github.com/YuanJey/crypto-backtest/internal/dataset"
+	"github.com/YuanJey/crypto-backtest/internal/indicator"
+	"github.com/YuanJey/crypto-backtest/internal/market"
+	"github.com/YuanJey/crypto-backtest/internal/strategy"
 )
 
 type Server struct {
@@ -266,52 +266,9 @@ func aggregateBars(bars []market.Bar, targetMS int64) []market.Bar {
 }
 
 func generateSampleBars(symbol string, startMS, endMS int64) []market.Bar {
-	baseTime := int64(1735689600000) // 2025-01-01 00:00:00 UTC
-	if startMS > 0 && startMS > baseTime {
-		baseTime = (startMS / (15 * 60 * 1000)) * (15 * 60 * 1000)
-	}
-	totalBars := 672 // 7 days of 15m bars
-	stepMS := int64(15 * 60 * 1000)
-
-	bars := make([]market.Bar, 0, totalBars)
-	price := 93500.0
-
-	for i := 0; i < totalBars; i++ {
-		t := baseTime + int64(i)*stepMS
-		if t < startMS {
-			continue
-		}
-		if t >= endMS {
-			break
-		}
-		// Deterministic sinusoidal wave + trend oscillation
-		phase := float64(i) * 0.08
-		harmonic := math.Sin(phase)*180.0 + math.Cos(phase*0.35)*350.0 + math.Sin(float64(i)*0.015)*600.0
-		drift := float64(i) * 6.5
-
-		open := price
-		noise := math.Sin(float64(i*13))*45.0 + math.Cos(float64(i*7))*30.0
-		closePrice := 93500.0 + harmonic + drift + noise
-		high := math.Max(open, closePrice) + math.Abs(math.Sin(float64(i*17)))*75.0 + 20.0
-		low := math.Min(open, closePrice) - math.Abs(math.Cos(float64(i*23)))*75.0 - 20.0
-		volume := 120.0 + math.Abs(math.Sin(float64(i)))*250.0 + math.Abs(closePrice-open)*0.8
-
-		bar := market.Bar{
-			OpenTimeMS:  t,
-			Open:        math.Round(open*100) / 100,
-			High:        math.Round(high*100) / 100,
-			Low:         math.Round(low*100) / 100,
-			Close:       math.Round(closePrice*100) / 100,
-			Volume:      math.Round(volume*100) / 100,
-			QuoteVolume: math.Round(volume*closePrice*100) / 100,
-			TradeCount:  int64(1500 + (i%50)*30),
-			State:       market.BarStateClosed,
-		}
-		bars = append(bars, bar)
-		price = closePrice
-	}
-	return bars
+	return market.GenerateSampleBars(symbol, startMS, endMS)
 }
+
 
 func (s *Server) handleListDatasets(w http.ResponseWriter, r *http.Request) {
 	entries, err := os.ReadDir(s.dataRoot)

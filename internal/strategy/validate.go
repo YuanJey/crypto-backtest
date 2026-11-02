@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/bytedance/crypto-backtest/internal/indicator"
-	"github.com/bytedance/crypto-backtest/internal/market"
+	"github.com/YuanJey/crypto-backtest/internal/indicator"
+	"github.com/YuanJey/crypto-backtest/internal/market"
 )
 
 type IndicatorParamValidator interface {

@@ -1,4 +1,4 @@
-module github.com/bytedance/crypto-backtest
+module github.com/YuanJey/crypto-backtest
 
 go 1.23
 

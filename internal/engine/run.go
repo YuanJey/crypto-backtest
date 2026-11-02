@@ -6,9 +6,9 @@ import (
 	"math"
 	"sort"
 
-	"github.com/bytedance/crypto-backtest/internal/compiler"
-	"github.com/bytedance/crypto-backtest/internal/market"
-	"github.com/bytedance/crypto-backtest/internal/strategy"
+	"github.com/YuanJey/crypto-backtest/internal/compiler"
+	"github.com/YuanJey/crypto-backtest/internal/market"
+	"github.com/YuanJey/crypto-backtest/internal/strategy"
 )
 
 type indicatorState struct {

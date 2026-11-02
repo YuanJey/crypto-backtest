@@ -1,5 +1,7 @@
 package market
 
+import "math"
+
 type BarState string
 
 const (
@@ -31,3 +33,57 @@ func (b Bar) WithDefaultClosedState() Bar {
 	}
 	return b
 }
+
+// GenerateSampleBars 生成 7 天 15m 周期的基准仿真行情 K 线，用于演示或缺省回退
+func GenerateSampleBars(symbol string, startMS, endMS int64) []Bar {
+	stepMS := int64(15 * 60 * 1000)
+	totalBars := 672 // 默认生成 7 天 15m K 线
+
+	baseTime := int64(1735689600000) // 2025-01-01 00:00:00 UTC
+	if startMS > 0 {
+		baseTime = (startMS / stepMS) * stepMS
+	}
+
+	if endMS > baseTime {
+		barsInRange := int((endMS - baseTime) / stepMS)
+		if barsInRange > 0 && barsInRange < totalBars {
+			totalBars = barsInRange
+		}
+	}
+
+	bars := make([]Bar, 0, totalBars)
+	price := 93500.0
+
+	for i := 0; i < totalBars; i++ {
+		t := baseTime + int64(i)*stepMS
+		// Deterministic sinusoidal wave + trend oscillation
+
+		phase := float64(i) * 0.08
+		harmonic := math.Sin(phase)*180.0 + math.Cos(phase*0.35)*350.0 + math.Sin(float64(i)*0.015)*600.0
+		drift := float64(i) * 6.5
+
+		open := price
+		noise := math.Sin(float64(i*13))*45.0 + math.Cos(float64(i*7))*30.0
+		closePrice := 93500.0 + harmonic + drift + noise
+		high := math.Max(open, closePrice) + math.Abs(math.Sin(float64(i*17)))*75.0 + 20.0
+		low := math.Min(open, closePrice) - math.Abs(math.Cos(float64(i*23)))*75.0 - 20.0
+		volume := 120.0 + math.Abs(math.Sin(float64(i)))*250.0 + math.Abs(closePrice-open)*0.8
+
+		bar := Bar{
+			OpenTimeMS:  t,
+			Open:        math.Round(open*100) / 100,
+			High:        math.Round(high*100) / 100,
+			Low:         math.Round(low*100) / 100,
+			Close:       math.Round(closePrice*100) / 100,
+			Volume:      math.Round(volume*100) / 100,
+			QuoteVolume: math.Round(volume*closePrice*100) / 100,
+			TradeCount:  int64(1500 + (i%50)*30),
+			State:       BarStateClosed,
+		}
+		bars = append(bars, bar)
+		price = closePrice
+	}
+	return bars
+}
+
+

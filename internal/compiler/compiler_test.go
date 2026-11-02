@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/bytedance/crypto-backtest/internal/indicator"
-	"github.com/bytedance/crypto-backtest/internal/strategy"
+	"github.com/YuanJey/crypto-backtest/internal/indicator"
+	"github.com/YuanJey/crypto-backtest/internal/strategy"
 )
 
 func TestCompileBuildsIndicatorRuntimesAndRules(t *testing.T) {

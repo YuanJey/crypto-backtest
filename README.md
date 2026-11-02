@@ -124,12 +124,27 @@ go run ./cmd/backtest -strategy-id ema-boll-rsi -run -data-root data/market
     - `backtest.Request` 扩展支持动态覆盖 `DatasetID`、`Symbol`、`StartMS` 与 `EndMS`，彻底解耦策略与特定静态数据集的硬编码绑定。
   - 回测绩效看板实时渲染：
     - 点击【🚀 执行回测】即刻完成撮合引擎运算，并在控制条右侧实时展示收益率、最大回撤、胜率、总交易笔数与最终权益。
+- **指标自动绑定 K 线结构体与交互去冗余 (Indicator Inputs Auto-Inference)**：
+  - 前端模态框净化（`web/src/strategy.js`）：
+    - 彻底删除“输入价格字段”下拉框，用户无需手动选择任何价格列，消除认知负担。
+    - 保存指标时由系统依据指标语义自省填充（ATR 自动绑定 `high/low/close`，EMA/SMA/RSI/BOLL 自动默认绑定 `close`）。
+    - 指标概览卡片移除冗余的 `field: close` 视觉噪音，强化纯粹的量化参数属性呈现。
+  - 后端规范化层自动补全（`internal/strategy/normalize.go`）：
+    - 策略在 `Normalize` 阶段支持 `inputs` 为空时的自动推断与标准 K 线字段补齐，通过新单测 `TestValidateStrategyWithEmptyInputsAutoInferred` 确保极简策略定义 100% 兼容。
+- **全局模块路径重命名 (Go Module Path Refactor)**：
+  - 将根模块定义从 `github.com/bytedance/crypto-backtest` 全量重构为 `github.com/YuanJey/crypto-backtest`。
+  - 同步原子更新 `cmd/` 下 3 个入口（`api`, `backtest`, `market-data`）及 `internal/` 下全部 23 个核心子包文件，全库 13 个包编译与单测 100% 通过。
 - **影响范围**：
-  - `internal/backtest/service.go`
-  - `web/index.html`
-  - `web/styles.css`
-  - `web/src/app.js`
-  - `web/src/strategy.js`
-  - `web/src/data.js`
+  - `go.mod`
+  - `cmd/api/main.go`
+  - `cmd/backtest/main.go`
+  - `cmd/market-data/main.go`
+  - `internal/api/` (全部文件)
+  - `internal/backtest/` (全部文件)
+  - `internal/compiler/` (全部文件)
+  - `internal/datafeed/` (全部文件)
+  - `internal/dataset/` (全部文件)
+  - `internal/engine/` (全部文件)
+  - `internal/strategy/` (全部文件)
   - `README.md`
 

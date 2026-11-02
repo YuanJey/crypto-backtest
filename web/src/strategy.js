@@ -367,12 +367,12 @@ class StrategyWorkbench {
         </div>
         <div class="ind-card-body">
           <div class="ind-kv">
-            <span class="kv-k">参数:</span>
-            <span class="kv-v">${JSON.stringify(ind.params || {})}</span>
+            <span class="kv-k">参数配置:</span>
+            <span class="kv-v">${Object.entries(ind.params || {}).map(([k, v]) => `${k}=${v}`).join(', ') || '默认'}</span>
           </div>
           <div class="ind-kv">
-            <span class="kv-k">输入:</span>
-            <span class="kv-v">${(ind.inputs || []).map(inp => `${inp.scope}.${inp.field}`).join(', ')}</span>
+            <span class="kv-k">计算输入:</span>
+            <span class="kv-v text-accent">K线行情数据 (内部自动计算)</span>
           </div>
         </div>
       </div>
@@ -402,7 +402,6 @@ class StrategyWorkbench {
     const defaultType = existingInd ? existingInd.type : (this.catalog[0]?.type || 'ema');
     const defaultTf = existingInd ? (existingInd.timeframe || '15m') : '15m';
     const defaultId = existingInd ? existingInd.id : `${defaultType}_${Date.now().toString().slice(-4)}`;
-    const defaultField = (existingInd && existingInd.inputs && existingInd.inputs[0]?.field) || 'close';
     const currentParams = (existingInd && existingInd.params) || { period: 20, stddev: 2.0 };
 
     modalContainer.innerHTML = `
@@ -426,26 +425,14 @@ class StrategyWorkbench {
               </div>
             </div>
 
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">计算周期 (Timeframe)</label>
-                <select class="form-select" id="modalIndTf">
-                  <option value="15m" ${defaultTf === '15m' ? 'selected' : ''}>15m (基准)</option>
-                  <option value="1h" ${defaultTf === '1h' ? 'selected' : ''}>1h (小时线)</option>
-                  <option value="4h" ${defaultTf === '4h' ? 'selected' : ''}>4h (四小时线)</option>
-                  <option value="1d" ${defaultTf === '1d' ? 'selected' : ''}>1d (日线)</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label">输入价格字段</label>
-                <select class="form-select" id="modalIndField">
-                  <option value="close" ${defaultField === 'close' ? 'selected' : ''}>收盘价 (close)</option>
-                  <option value="open" ${defaultField === 'open' ? 'selected' : ''}>开盘价 (open)</option>
-                  <option value="high" ${defaultField === 'high' ? 'selected' : ''}>最高价 (high)</option>
-                  <option value="low" ${defaultField === 'low' ? 'selected' : ''}>最低价 (low)</option>
-                  <option value="volume" ${defaultField === 'volume' ? 'selected' : ''}>成交量 (volume)</option>
-                </select>
-              </div>
+            <div class="form-group">
+              <label class="form-label">计算周期 (Timeframe)</label>
+              <select class="form-select" id="modalIndTf">
+                <option value="15m" ${defaultTf === '15m' ? 'selected' : ''}>15m (基准)</option>
+                <option value="1h" ${defaultTf === '1h' ? 'selected' : ''}>1h (小时线)</option>
+                <option value="4h" ${defaultTf === '4h' ? 'selected' : ''}>4h (四小时线)</option>
+                <option value="1d" ${defaultTf === '1d' ? 'selected' : ''}>1d (日线)</option>
+              </select>
             </div>
 
             <div class="form-group" style="margin-top: 6px;">
@@ -506,7 +493,6 @@ class StrategyWorkbench {
       const id = document.getElementById('modalIndId').value.trim();
       const type = document.getElementById('modalIndType').value;
       const tf = document.getElementById('modalIndTf').value;
-      const field = document.getElementById('modalIndField').value;
       if (!id) {
         alert('请输入指标唯一标识');
         return;
@@ -518,6 +504,7 @@ class StrategyWorkbench {
       const stddevEl = document.getElementById('paramValStddev');
       if (stddevEl) params.stddev = parseFloat(stddevEl.value) || 2.0;
 
+      // 系统内部全自动解构并映射 K 线结构体输入，无需用户人工指定价格字段
       let inputs = [];
       if (type === 'atr') {
         inputs = [
@@ -526,7 +513,7 @@ class StrategyWorkbench {
           { scope: 'market', name: 'bar', field: 'close' }
         ];
       } else {
-        inputs = [{ scope: 'market', name: 'bar', field: field }];
+        inputs = [{ scope: 'market', name: 'bar', field: 'close' }];
       }
 
       const indSpec = {

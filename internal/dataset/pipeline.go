@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/bytedance/crypto-backtest/internal/datafeed"
-	"github.com/bytedance/crypto-backtest/internal/market"
+	"github.com/YuanJey/crypto-backtest/internal/datafeed"
+	"github.com/YuanJey/crypto-backtest/internal/market"
 )
 
 type BuildRequest struct {

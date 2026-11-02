@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/bytedance/crypto-backtest/internal/compiler"
-	"github.com/bytedance/crypto-backtest/internal/dataset"
-	"github.com/bytedance/crypto-backtest/internal/engine"
-	"github.com/bytedance/crypto-backtest/internal/indicator"
-	"github.com/bytedance/crypto-backtest/internal/strategy"
+	"github.com/YuanJey/crypto-backtest/internal/compiler"
+	"github.com/YuanJey/crypto-backtest/internal/dataset"
+	"github.com/YuanJey/crypto-backtest/internal/engine"
+	"github.com/YuanJey/crypto-backtest/internal/indicator"
+	"github.com/YuanJey/crypto-backtest/internal/market"
+	"github.com/YuanJey/crypto-backtest/internal/strategy"
 )
 
 type Service struct {
@@ -96,19 +97,36 @@ func (s *Service) Run(ctx context.Context, request Request) (Response, error) {
 		endMS = request.EndMS
 	}
 
-	bars, err := dataset.ReadBars(
-		s.dataRoot,
-		datasetID,
-		symbol,
-		timeframe,
-		startMS,
-		endMS,
-	)
-	if err != nil {
-		return Response{}, fmt.Errorf("read bars for dataset %q symbol %q: %w", datasetID, symbol, err)
+	var bars []market.Bar
+	if datasetID == "__sample__" || strings.EqualFold(datasetID, "sample") {
+		bars = market.GenerateSampleBars(symbol, startMS, endMS)
+	} else if datasetID != "" {
+		readBars, readErr := dataset.ReadBars(
+			s.dataRoot,
+			datasetID,
+			symbol,
+			timeframe,
+			startMS,
+			endMS,
+		)
+		if readErr == nil && len(readBars) > 0 {
+			bars = readBars
+		} else {
+			if strings.TrimSpace(request.DatasetID) == "" {
+				bars = market.GenerateSampleBars(symbol, startMS, endMS)
+			} else {
+				if readErr != nil {
+					return Response{}, fmt.Errorf("read bars for dataset %q symbol %q: %w", datasetID, symbol, readErr)
+				}
+				return Response{}, fmt.Errorf("no bars found in dataset %q for symbol %q", datasetID, symbol)
+			}
+		}
+	} else {
+		bars = market.GenerateSampleBars(symbol, startMS, endMS)
 	}
+
 	if len(bars) == 0 {
-		return Response{}, fmt.Errorf("no bars found in dataset %q for symbol %q", datasetID, symbol)
+		return Response{}, fmt.Errorf("no bars available for backtest")
 	}
 
 	result, err := engine.Run(ctx, plan, engine.BacktestRequest{

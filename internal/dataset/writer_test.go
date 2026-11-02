@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/bytedance/crypto-backtest/internal/market"
+	"github.com/YuanJey/crypto-backtest/internal/market"
 )
 
 func TestWriterWritesPartitionedParquet(t *testing.T) {

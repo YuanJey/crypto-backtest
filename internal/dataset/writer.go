@@ -12,7 +12,7 @@ import (
 
 	"github.com/parquet-go/parquet-go"
 
-	"github.com/bytedance/crypto-backtest/internal/market"
+	"github.com/YuanJey/crypto-backtest/internal/market"
 )
 
 type Writer struct {

@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "dataset_id": "binance-perpetual-15m-20261026144500-20261102144500",
+  "exchange": "binance",
+  "market_type": "perpetual",
+  "symbols": [
+    "BTC-USDT"
+  ],
+  "timeframes": [
+    "15m"
+  ],
+  "start_ms": 1793025900000,
+  "end_ms": 1793630700000,
+  "row_count": 672,
+  "missing_bars": 0,
+  "generated_at": "2026-11-02T14:54:37Z",
+  "market_rules": {
+    "BTC-USDT": {}
+  },
+  "files": [
+    {
+      "path": "exchange=binance/symbol=BTC-USDT/timeframe=15m/year=2026/month=10/part-000.parquet",
+      "sha256": "c84776f8fd40c9ec6174ecd3ed2a235d4b7001dbf6f7b5588fc1d73e70500e4d",
+      "row_count": 517,
+      "start_ms": 1793025900000,
+      "end_ms": 1793491200000
+    },
+    {
+      "path": "exchange=binance/symbol=BTC-USDT/timeframe=15m/year=2026/month=11/part-000.parquet",
+      "sha256": "f077cf9ca2250513c422a9f66e2d1b9551b19c05748a8781a105e0ad45d02d6e",
+      "row_count": 155,
+      "start_ms": 1793491200000,
+      "end_ms": 1793630700000
+    }
+  ]
+}

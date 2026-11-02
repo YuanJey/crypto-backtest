@@ -276,13 +276,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     const currentVal = selDataset.value;
     const datasets = await Api.fetchMarketDatasets();
 
-    let html = `<option value="__sample__" data-symbol="BTC-USDT">【仿真演示】BTC-USDT (15m · 7天)</option>`;
+    let html = `<option value="__sample__" data-symbol="BTC-USDT" data-start="0" data-end="0">【仿真演示】BTC-USDT (15m · 7天)</option>`;
     if (datasets && datasets.length > 0) {
       html += datasets
         .map((ds) => {
           const sym = (ds.symbols && ds.symbols[0]) || 'BTC-USDT';
           const count = ds.row_count ? `${ds.row_count.toLocaleString()}根` : '';
-          return `<option value="${ds.dataset_id}" data-symbol="${sym}">[本地数据] ${ds.dataset_id} (${sym} · ${count})</option>`;
+          const start = ds.start_ms || 0;
+          const end = ds.end_ms || 0;
+          return `<option value="${ds.dataset_id}" data-symbol="${sym}" data-start="${start}" data-end="${end}">[本地数据] ${ds.dataset_id} (${sym} · ${count})</option>`;
         })
         .join('');
     }
@@ -335,17 +337,24 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       const opt = selDataset.options[selDataset.selectedIndex];
-      const datasetId = selDataset.value === '__sample__' ? '' : selDataset.value;
+      const datasetVal = selDataset.value;
       const sym = (opt && opt.dataset.symbol) || 'BTC-USDT';
+      const startMS = parseInt((opt && opt.dataset.start) || '0', 10);
+      const endMS = parseInt((opt && opt.dataset.end) || '0', 10);
 
       btnRun.disabled = true;
       btnRun.innerHTML = `<span class="spinner-sm"></span> 回测撮合中...`;
 
       try {
-        const resp = await Api.runBacktest(strategyId, {
-          dataset_id: datasetId,
+        const payload = {
+          dataset_id: datasetVal,
           symbol: sym
-        });
+        };
+        if (startMS > 0) payload.start_ms = startMS;
+        if (endMS > 0) payload.end_ms = endMS;
+
+        const resp = await Api.runBacktest(strategyId, payload);
+
 
         // 渲染回测指标看板
         if (metricsBar && resp && resp.report) {

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/bytedance/crypto-backtest/internal/indicator"
+	"github.com/YuanJey/crypto-backtest/internal/indicator"
 )
 
 func TestValidateStrategyWithIndicatorParams(t *testing.T) {
@@ -146,3 +146,24 @@ func validDefinition() Definition {
 	}
 	return definition
 }
+
+func TestValidateStrategyWithEmptyInputsAutoInferred(t *testing.T) {
+	definition := validDefinition()
+	// 清空 inputs，模拟极简定义
+	definition.Indicators[0].Inputs = nil
+
+	// 新增一个 ATR 指标，同样不传 inputs
+	definition.Indicators = append(definition.Indicators, IndicatorSpec{
+		ID:        "atr_15m",
+		Type:      "atr",
+		Timeframe: "15m",
+		Inputs:    nil,
+		Params:    json.RawMessage(`{"period":14}`),
+	})
+
+	// 校验应由 Normalize 自动补齐 high/low/close 与 close，校验必须通过
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err != nil {
+		t.Fatalf("expected auto inferred inputs to pass validate, got: %v", err)
+	}
+}
+
