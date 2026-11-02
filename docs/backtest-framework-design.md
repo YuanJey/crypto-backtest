@@ -1,6 +1,6 @@
 # 动态规则回测框架设计
 
-> 技术方案已调整为“Python 下载数据 + Go 回测服务 + 前端策略构建器”。当前实现架构和 Go 结构体以 [Go 回测系统与前端策略构建器设计](./go-backtest-system-design.md) 为准；本文继续作为成交、账户、风控和防未来函数的行为语义说明，原 Python 技术栈与工程目录不再作为实现依据。
+> 技术方案已调整为“Go 统一控制面 + Go 数据下载清洗 + Go 回测服务 + 前端策略构建器”。当前实现架构和 Go 结构体以 [Go 回测系统与前端策略构建器设计](./go-backtest-system-design.md) 为准；本文继续作为成交、账户、风控和防未来函数的行为语义说明，原脚本数据工具链不再作为实现依据。
 
 ## 1. 目标
 
@@ -11,6 +11,7 @@
 - 支持 OHLCV K 线、多个交易标的和统一账户。
 - 内置常见技术指标，并允许注册自定义指标。
 - 通过声明式规则定义开多、开空、平仓和减仓。
+- 支持策略级指标配置，指标可声明初始化参数和多周期协同周期。
 - 支持手续费、滑点、最小下单量、价格精度和资金约束。
 - 严格区分信号时间和成交时间，默认不存在未来函数。
 - 产出可复现的订单、成交、交易、资金曲线和绩效指标。
@@ -27,12 +28,11 @@
 
 ### 2.1 技术栈
 
-- Go：策略模型、指标、规则编译、撮合、账户、API 和异步任务
-- Python：交易所 K 线下载、清洗、分区和数据清单生成
+- Go：交易所 K 线下载、清洗、分区、数据清单、策略模型、指标、规则编译、撮合、账户、API 和异步任务
 - JSON：前端和 Go 服务之间的策略定义契约
-- Parquet：Python 与 Go 共享的历史行情和结果明细格式
+- Parquet：Go 数据层、回测引擎和结果明细共享的列式格式
 - SQLite：首版策略版本与任务元数据
-- Go testing + pytest：Go 引擎测试和 Python 数据工具测试
+- Go testing：数据层、编译器、回测引擎和 API 的单元与集成测试
 
 完整技术架构、Go 结构体和前端 API 见 [Go 回测系统与前端策略构建器设计](./go-backtest-system-design.md)。指标库通过注册表接入，不能把第三方指标库的数据结构扩散到规则引擎。
 
@@ -71,7 +71,7 @@
                     |                       |
              Indicator DAG              Rule AST
                     |                       |
-Python -> Parquet -> Data Portal -> Timeline / Backtest Engine
+Go Datafeed / Dataset -> Parquet + Manifest -> Data Portal -> Timeline / Backtest Engine
                                       |
           +---------------------------+---------------------------+
           |                           |                           |
@@ -107,12 +107,16 @@ crypto-backtest/
 ├── cmd/
 │   ├── api/
 │   ├── worker/
-│   └── backtest/
+│   ├── backtest/
+│   └── market-data/
 ├── internal/
+│   ├── api/
+│   ├── datafeed/
+│   ├── dataset/
+│   ├── market/
 │   ├── strategy/
 │   ├── catalog/
 │   ├── compiler/
-│   ├── data/
 │   ├── indicator/
 │   ├── rule/
 │   ├── engine/
@@ -121,16 +125,13 @@ crypto-backtest/
 │   ├── risk/
 │   ├── reporting/
 │   └── job/
-├── tools/
-│   └── market-data/
-│       └── market_data/
 ├── web/
 ├── strategies/
 ├── testdata/
 └── docs/
 ```
 
-详细包职责见 Go 系统设计。Go 引擎不依赖 HTTP、数据库或 Python 工具，保证 CLI、API 和 worker 可以复用同一内核。
+详细包职责见 Go 系统设计。Go 回测内核不依赖 HTTP、数据库或前端模型，保证 CLI、API 和 worker 可以复用同一内核；数据下载清洗通过独立的 `internal/datafeed`、`internal/dataset` 和 `cmd/market-data` 落地。
 
 ## 5. 行情数据契约
 
@@ -138,13 +139,13 @@ crypto-backtest/
 
 | 字段 | 类型 | 约束 |
 | --- | --- | --- |
-| `timestamp` | UTC datetime | 表示 K 线开始时间；同一标的严格递增且唯一 |
-| `symbol` | string | 使用框架内部标准名称，如 `BTC-USDT` |
-| `timeframe` | string | 如 `1m`、`1h`、`1d` |
+| `open_time_ms` | int64 | UTC Unix 毫秒，表示 K 线开盘时间；同一标的严格递增且唯一 |
 | `open/high/low/close` | float64 | 大于 0，且满足 OHLC 关系 |
-| `volume` | float64 | 大于等于 0 |
+| `volume` | float64 | 基础资产成交量，大于等于 0 |
+| `quote_volume` | float64 | 计价资产成交量，大于等于 0 |
+| `trade_count` | int64 | 成交笔数，大于等于 0 |
 
-`timestamp` 统一表示 K 线开盘时间，`bar_close_time = timestamp + timeframe`。规则的 `evaluation_time` 使用 `bar_close_time`，成交事件使用实际模拟成交时点，避免同一个 `timestamp` 同时被解释成开盘和收盘。
+交易所、标的和周期放在分区路径及 `manifest.json` 中，不在每一行重复存储。`open_time_ms` 统一表示 K 线开盘时间，`bar_close_time = open_time_ms + timeframe`。规则的 `evaluation_time` 使用 `bar_close_time`，成交事件使用实际模拟成交时点，避免同一个时间戳同时被解释成开盘和收盘。
 
 加载阶段必须校验：
 
@@ -262,7 +263,7 @@ indicators:
 
 布尔操作：
 
-- `all`、`any`、`not`
+- `and`、`or`、`not`
 
 比较操作：
 
@@ -270,7 +271,7 @@ indicators:
 
 时序操作：
 
-- `cross_above`、`cross_below`
+- `cross_up`、`cross_down`
 - `rising`、`falling`
 - `consecutive`
 - `within_last`
@@ -279,7 +280,7 @@ indicators:
 
 - `add`、`sub`、`mul`、`div`、`abs`
 
-`cross_above(left, right)` 的固定语义：
+`cross_up(left, right)` 的固定语义：
 
 ```text
 left[t-1] <= right[t-1] AND left[t] > right[t]
@@ -295,15 +296,15 @@ left[t-1] <= right[t-1] AND left[t] > right[t]
 - 收盘价跌破 EMA20、RSI 高于 80 或收盘价触及 BOLL 上轨时平多。
 - 每次使用 20% 权益，附带 3% 止损和 6% 止盈。
 
-以下 YAML 同样是便于阅读的语义示例，不是 API 请求格式。
+以下 YAML 同样是便于阅读的语义示例，不是 API 请求格式。真实策略保存为 `strategies/<strategy_id>.json`，回测时通过 `-strategy-id` 选择。
 
 ```yaml
 schema_version: 1
 
 strategy:
-  id: ema_boll_rsi
+  id: ema-boll-rsi
   symbols: [BTC-USDT]
-  timeframe: 1h
+  timeframe: 15m
   allow_pyramiding: false
   allow_same_bar_reversal: false
   cooldown_bars: 1
@@ -312,44 +313,38 @@ rules:
   - id: open_long
     priority: 100
     when:
-      all:
+      and:
         - op: gt
-          left: indicator.ema_fast.value
-          right: indicator.ema_slow.value
-        - op: cross_above
+          left: indicator.ema_fast_15m.value
+          right: indicator.ema_slow_1h.value
+        - op: cross_up
           left: market.close
-          right: indicator.boll_20.middle
+          right: indicator.boll_20_15m.middle
         - op: lt
-          left: indicator.rsi_14.value
+          left: indicator.rsi_14_4h.value
           right: 70
     action:
-      type: open_long
-      sizing:
-        type: equity_pct
-        value: 0.20
-      protection:
-        stop_loss:
-          type: entry_pct
-          value: 0.03
-        take_profit:
-          type: entry_pct
-          value: 0.06
+      type: open
+      side: long
+      size_pct: 0.20
 
   - id: close_long
     priority: 200
     when:
-      any:
-        - op: cross_below
+      or:
+        - op: cross_down
           left: market.close
-          right: indicator.ema_fast.value
+          right: indicator.ema_fast_15m.value
         - op: gt
-          left: indicator.rsi_14.value
+          left: indicator.rsi_14_4h.value
           right: 80
         - op: gte
           left: market.close
-          right: indicator.boll_20.upper
+          right: indicator.boll_20_15m.upper
     action:
-      type: close_long
+      type: close
+      side: long
+      size_pct: 1
 ```
 
 ### 7.5 规则编译结果
@@ -380,14 +375,12 @@ Rule
 
 ### 8.1 动作类型
 
-首版动作：
+首版动作模型：
 
-- `open_long`
-- `open_short`，仅在市场配置允许时
-- `close_long`
-- `close_short`
-- `reduce_position`
-- `close_position`
+- `type=open, side=long`
+- `type=open, side=short`，仅在市场配置允许时
+- `type=close, side=long`
+- `type=close, side=short`
 
 动作只生成意图：
 
@@ -397,8 +390,8 @@ type ActionIntent struct {
 	Symbol     string
 	RuleID     string
 	ActionType ActionType
-	Sizing     *SizingSpec
-	Protection *ProtectionSpec
+	Side       TradeSide
+	SizePct    float64
 	Priority   int
 }
 ```
@@ -495,8 +488,8 @@ fill_price = open_price * (1 - slippage_rate)
 
 - 如果开盘已经越过止损价，按开盘价叠加滑点成交，不能按更优的止损价成交。
 - 如果同一根 K 线的高低价同时触发止盈和止损，OHLC 无法确定先后。
-- 默认使用 `worst_case`：选择对当前持仓最不利的成交。
-- 可配置 `best_case` 或更低周期数据重放，但报告必须记录歧义次数和采用的模型。
+- 默认使用 `conservative`：选择对当前持仓最不利的成交。
+- 后续可扩展更低周期数据重放，但报告必须记录歧义次数和采用的模型。
 
 退出优先级固定为：
 
@@ -519,7 +512,7 @@ fill_price = open_price * (1 - slippage_rate)
 - 订单被拒绝或取消不能影响账户余额。
 - 数量和价格统一经过交易规则量化。
 
-价格和数量约束由 Python 下载数据时写入数据集 manifest，手续费由策略执行配置指定。两者都必须随回测结果保存，不能在 Go 代码中硬编码：
+价格和数量约束由 Go 数据层写入数据集 manifest，手续费由策略执行配置指定。两者都必须随回测结果保存，不能在 Go 代码中硬编码：
 
 ```yaml
 market_rules:
@@ -547,8 +540,9 @@ HTTP 和 CLI 入口：
 ```text
 POST /api/v1/strategies/validate
 POST /api/v1/backtests
-crypto-backtest validate strategies/ema_boll_rsi.json
-crypto-backtest run strategies/ema_boll_rsi.json
+go run ./cmd/backtest -strategy-id ema-boll-rsi
+go run ./cmd/backtest -strategies-dir strategies -strategy-id ema-boll-rsi
+go run ./cmd/backtest -strategy-id ema-boll-rsi -run -data-root data/market
 ```
 
 ## 12. 结果与可复现性
@@ -595,7 +589,7 @@ Sharpe 等年化指标必须根据 timeframe 或实际时间间隔计算，不�
 
 - 每个指标与可信实现的 golden data 对比。
 - 每个操作符做真值表和边界测试。
-- `cross_above/cross_below` 覆盖相等、NaN 和首个有效值。
+- `cross_up/cross_down` 覆盖相等、NaN 和首个有效值。
 - 数量/价格量化、手续费和滑点计算。
 - 平均成本、部分平仓、反向成交和账本守恒。
 

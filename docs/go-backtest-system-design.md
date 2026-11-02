@@ -5,23 +5,23 @@
 采用以下职责拆分：
 
 ```text
-Python 数据工具 -> Parquet + Manifest -> Go 回测服务 <- JSON -> 前端策略构建器
-                                              |
-                                       回测结果与审计数据
+前端策略构建器 -> Go API / Worker -> Datafeed / Dataset -> Parquet + Manifest
+                         |                 |
+                         +-----------> Backtest Engine -> 回测结果与审计数据
 ```
 
-- Python 只负责从交易所下载、清洗和分区存储历史 K 线。
-- Go 是策略定义、指标计算、规则编译、撮合、账户和绩效计算的唯一执行引擎。
+- Go 是数据下载、数据清洗、策略定义、指标计算、规则编译、撮合、账户、任务调度和绩效计算的统一后端。
 - 前端不生成代码，只根据服务端能力目录构建版本化 `StrategyDefinition` JSON。
+- 前端通过 Go API 发起数据下载、数据校验、回测任务、进度查询和报告读取。
 - Go 收到 JSON 后先反序列化、校验并编译，再执行回测；不能逐 K 线解释未经校验的动态对象。
 
-该方案适合长期演进。Go 的类型约束、稳定性能和并发任务能力适合回测服务；Python 的交易所和数据处理生态适合离线数据采集。主要代价是 Go 的技术指标生态弱于 Python，因此指标必须有统一接口，并使用 Python 参考实现生成 golden data 做一致性测试。
+该方案适合长期演进。Go 的类型约束、稳定性能、并发任务能力和单二进制部署方式适合同时承担前端控制面、数据流水线和回测执行核心。主要代价是 Go 的技术指标生态弱于脚本生态，因此指标必须有统一接口，并使用固定 golden fixture 做一致性测试。
 
 详细的成交时间、K 线内冲突、资金预留和防未来函数语义继续遵循 [动态规则回测框架设计](./backtest-framework-design.md)。
 
 ## 2. 系统边界
 
-### 2.1 Python 数据层
+### 2.1 Go 数据层
 
 负责：
 
@@ -30,6 +30,7 @@ Python 数据工具 -> Parquet + Manifest -> Go 回测服务 <- JSON -> 前端�
 - 去重、排序和基础 OHLC 校验。
 - 写入统一 Parquet 数据集。
 - 生成数据清单、缺口报告和文件校验和。
+- 向 API / worker 暴露数据任务状态，支持前端触发和查询。
 
 不负责：
 
@@ -38,13 +39,14 @@ Python 数据工具 -> Parquet + Manifest -> Go 回测服务 <- JSON -> 前端�
 - 处理手续费、滑点或持仓。
 - 修改回测结果。
 
-指标必须只在 Go 中计算，否则 Python 和 Go 的舍入、warm-up 或公式差异会让同一策略出现两套结果。
+指标必须只在 Go 回测核心中计算，数据层只产出标准化 K 线和数据质量元信息，不能提前生成策略特征、信号或交易动作。
 
 ### 2.2 Go 服务
 
 负责：
 
 - 暴露指标、操作符和动作能力目录。
+- 暴露数据集创建、校验、清单读取和缺口报告接口。
 - 保存和版本化策略定义。
 - 校验并编译策略。
 - 加载 K 线并执行回测。
@@ -57,9 +59,10 @@ Python 数据工具 -> Parquet + Manifest -> Go 回测服务 <- JSON -> 前端�
 负责：
 
 - 通过表单选择数据集、标的、周期和账户参数。
-- 添加指标并编辑参数。
-- 通过嵌套条件组构建 `AND/OR/NOT` 规则。
-- 选择开仓、平仓、仓位和保护性条件。
+- 创建策略并添加指标，编辑指标初始化参数和指标周期。
+- 通过嵌套条件组构建 `AND/OR/NOT` 规则，规则可引用 15m 与高周期指标。
+- 配置开多、开空、平多、平空、仓位比例和保护性条件。
+- 保存策略版本，并在执行回测时选择指定策略。
 - 展示服务端结构校验和语义校验错误。
 - 提交回测任务并展示进度与结果。
 
@@ -84,11 +87,14 @@ Python 数据工具 -> Parquet + Manifest -> Go 回测服务 <- JSON -> 前端�
 
 ```text
 data/market/
-└── exchange=binance/
-    └── symbol=BTC-USDT/
-        └── timeframe=1h/
-            ├── year=2025/month=01/part-000.parquet
-            └── year=2025/month=02/part-000.parquet
+└── binance-spot-15m-20250101-20250201/
+    ├── exchange=binance/
+    │   └── symbol=BTC-USDT/
+    │       └── timeframe=15m/
+    │           ├── year=2025/month=01/part-000.parquet
+    │           └── year=2025/month=02/part-000.parquet
+    ├── gap_report.json
+    └── manifest.json
 ```
 
 ### 3.2 数据清单
@@ -102,10 +108,10 @@ data/market/
   "exchange": "binance",
   "market_type": "spot",
   "symbols": ["BTC-USDT"],
-  "timeframes": ["1h"],
+  "timeframes": ["15m"],
   "start_ms": 1735689600000,
-  "end_ms": 1738364400000,
-  "row_count": 744,
+  "end_ms": 1738368000000,
+  "row_count": 2976,
   "missing_bars": 0,
   "generated_at": "2026-10-12T08:00:00Z",
   "market_rules": {
@@ -118,8 +124,11 @@ data/market/
   },
   "files": [
     {
-      "path": "exchange=binance/symbol=BTC-USDT/timeframe=1h/year=2025/month=01/part-000.parquet",
-      "sha256": "..."
+      "path": "exchange=binance/symbol=BTC-USDT/timeframe=15m/year=2025/month=01/part-000.parquet",
+      "sha256": "...",
+      "row_count": 2976,
+      "start_ms": 1735689600000,
+      "end_ms": 1738368000000
     }
   ]
 }
@@ -232,6 +241,7 @@ const (
 type IndicatorSpec struct {
 	ID     string          `json:"id"`
 	Type   string          `json:"type"`
+	Timeframe string       `json:"timeframe,omitempty"`
 	Inputs []ValueRef      `json:"inputs"`
 	Params json.RawMessage `json:"params"`
 }
@@ -250,6 +260,7 @@ type ValueRef struct {
 {
   "id": "boll_20",
   "type": "boll",
+  "timeframe": "15m",
   "inputs": [
     {
       "scope": "market",
@@ -279,7 +290,48 @@ type BollParams struct {
 
 引擎内部不得持续传递 `map[string]any`。
 
-### 4.3 表达式 AST
+`timeframe` 为空时默认使用策略数据基准周期 `15m`。若显式配置，必须大于等于基准周期并且是 `15m` 的整数倍，例如 `15m`、`1h`、`4h`、`1d`。高周期指标只能在该高周期 K 线完整收盘后对低周期规则可见。
+
+### 4.3 策略文件与回测选择
+
+前端主流程：
+
+```text
+创建策略 -> 添加指标并设置参数/周期 -> 配置开多/开空/平仓规则 -> 保存策略 -> 选择策略执行回测
+```
+
+首版策略层使用本地 JSON 文件仓库，文件名为 `strategies/<strategy_id>.json`。API 和前端接入后可以替换为 SQLite / PostgreSQL 仓库，但策略定义结构、校验规则和编译入口保持不变。
+
+当前 CLI 入口按策略 ID 选择策略。默认只完成解码、校验和编译，方便前端保存策略后先做快速检查：
+
+```bash
+go run ./cmd/backtest -strategy-id ema-boll-rsi
+```
+
+执行回测时增加 `-run`，Go 会按策略里的 `dataset_id`、标的、时间范围从 `data/market` 读取 Parquet K 线：
+
+```bash
+go run ./cmd/backtest -strategy-id ema-boll-rsi -run -data-root data/market
+```
+
+加载顺序：
+
+```text
+strategy_id -> FileRepository.LoadByID -> strategy.Decode -> strategy.Validate -> compiler.Compile -> engine.Run
+```
+
+`strategy.Validate` 必须完成：
+
+- 策略 ID、schema 版本和数据选择校验。
+- 指标 ID 唯一性校验。
+- 指标类型存在性校验。
+- 指标 `params` 严格解码和参数范围校验。
+- 指标 `timeframe` 必须是 15m 基准周期的整数倍。
+- `ValueRef.Offset <= 0`，禁止正向未来偏移。
+- 规则引用的指标 ID 和输出字段必须存在。
+- 现货账户禁止配置 `short` 方向动作，开空需要 `perpetual` 市场类型。
+
+### 4.4 表达式 AST
 
 条件使用递归表达式树，前端可直接用树形控件构建：
 
@@ -290,19 +342,16 @@ const (
 	ExprOperator ExprKind = "operator"
 	ExprReference ExprKind = "reference"
 	ExprNumber    ExprKind = "number"
-	ExprText      ExprKind = "text"
 	ExprBoolean   ExprKind = "boolean"
 )
 
 type Expression struct {
-	NodeID  string       `json:"node_id"`
 	Kind    ExprKind     `json:"kind"`
 	Op      Operator     `json:"op,omitempty"`
 	Args    []Expression `json:"args,omitempty"`
 	Ref     *ValueRef    `json:"ref,omitempty"`
 	Number  *float64     `json:"number,omitempty"`
-	Text    *string      `json:"text,omitempty"`
-	Boolean *bool        `json:"boolean,omitempty"`
+	Bool    *bool        `json:"bool,omitempty"`
 }
 ```
 
@@ -311,8 +360,7 @@ type Expression struct {
 - `operator`：必须有合法 `op` 和符合签名的 `args`。
 - `reference`：必须有 `ref`。
 - `number`：必须有 `number`，包括合法的 `0`。
-- `text`：必须有 `text`。
-- `boolean`：必须有 `boolean`。
+- `boolean`：必须有 `bool`。
 
 使用指针保存常量是为了区分“未提供”和零值。
 
@@ -320,51 +368,44 @@ type Expression struct {
 
 ```json
 {
-  "node_id": "entry-root",
   "kind": "operator",
-  "op": "all",
+  "op": "and",
   "args": [
     {
-      "node_id": "ema-trend",
       "kind": "operator",
       "op": "gt",
       "args": [
         {
-          "node_id": "ema-fast-ref",
           "kind": "reference",
           "ref": {
             "scope": "indicator",
-            "name": "ema_fast",
+            "name": "ema_fast_15m",
             "field": "value"
           }
         },
         {
-          "node_id": "ema-slow-ref",
           "kind": "reference",
           "ref": {
             "scope": "indicator",
-            "name": "ema_slow",
+            "name": "ema_slow_1h",
             "field": "value"
           }
         }
       ]
     },
     {
-      "node_id": "rsi-limit",
       "kind": "operator",
       "op": "lt",
       "args": [
         {
-          "node_id": "rsi-ref",
           "kind": "reference",
           "ref": {
             "scope": "indicator",
-            "name": "rsi_14",
+            "name": "rsi_14_4h",
             "field": "value"
           }
         },
         {
-          "node_id": "rsi-threshold",
           "kind": "number",
           "number": 70
         }
@@ -374,43 +415,22 @@ type Expression struct {
 }
 ```
 
-`NodeID` 由前端生成并在一个策略版本内唯一。服务端校验错误可直接关联到节点，避免前端解析复杂 JSON 路径。
-
-### 4.4 规则和动作
+### 4.5 规则和动作
 
 ```go
 type RuleSpec struct {
-	ID       string         `json:"id"`
-	Name     string         `json:"name"`
-	Enabled  bool           `json:"enabled"`
-	Priority int            `json:"priority"`
-	Trigger  RuleTrigger    `json:"trigger"`
-	Position PositionFilter `json:"position"`
-	When     Expression     `json:"when"`
-	Action   ActionSpec     `json:"action"`
+	ID       string     `json:"id"`
+	Name     string     `json:"name,omitempty"`
+	Disabled bool       `json:"disabled,omitempty"`
+	Priority int        `json:"priority,omitempty"`
+	When     Expression `json:"when"`
+	Action   ActionSpec `json:"action"`
 }
 
 type ActionSpec struct {
-	Type       ActionType      `json:"type"`
-	Side       Side            `json:"side,omitempty"`
-	Sizing     *SizingSpec     `json:"sizing,omitempty"`
-	Protection *ProtectionSpec `json:"protection,omitempty"`
-	ReducePct  *float64        `json:"reduce_pct,omitempty"`
-}
-
-type SizingSpec struct {
-	Type  SizingType `json:"type"`
-	Value float64    `json:"value"`
-}
-
-type ProtectionSpec struct {
-	StopLoss   *PriceDistanceSpec `json:"stop_loss,omitempty"`
-	TakeProfit *PriceDistanceSpec `json:"take_profit,omitempty"`
-}
-
-type PriceDistanceSpec struct {
-	Type  PriceDistanceType `json:"type"`
-	Value float64           `json:"value"`
+	Type    ActionType `json:"type"`
+	Side    TradeSide  `json:"side"`
+	SizePct float64    `json:"size_pct"`
 }
 ```
 
@@ -418,13 +438,12 @@ type PriceDistanceSpec struct {
 
 | `type` | 必填字段 | 说明 |
 | --- | --- | --- |
-| `open_position` | `side`、`sizing` | 开多或开空 |
-| `close_position` | 无 | 平掉规则作用标的的当前仓位 |
-| `reduce_position` | `reduce_pct` | 按当前仓位比例减仓 |
+| `open` | `side`、`size_pct` | 开多或开空 |
+| `close` | `side`、`size_pct` | 平多或平空 |
 
-`open_long`、`close_long` 等名称适合作为 UI 文案，不建议在底层定义为多个动作类型。统一的动作加 `side` 更容易扩展。
+`open_long`、`close_long` 等名称适合作为 UI 文案，不建议在底层定义为多个动作类型。统一的动作加 `side` 更容易扩展。保护性止损、止盈和减仓将作为 `ActionSpec` 的后续字段扩展。
 
-### 4.5 策略 JSON 示例
+### 4.6 策略 JSON 示例
 
 ```json
 {
@@ -432,14 +451,14 @@ type PriceDistanceSpec struct {
   "id": "ema-boll-rsi",
   "name": "EMA BOLL RSI",
   "data": {
-    "dataset_id": "binance-spot-2025-01",
+    "dataset_id": "binance-perpetual-15m-202501",
     "symbols": ["BTC-USDT"],
-    "timeframe": "1h",
+    "timeframe": "15m",
     "start": "2025-01-01T00:00:00Z",
     "end": "2025-02-01T00:00:00Z"
   },
   "account": {
-    "market_type": "spot",
+    "market_type": "perpetual",
     "initial_cash": 100000,
     "quote_currency": "USDT"
   },
@@ -451,13 +470,13 @@ type PriceDistanceSpec struct {
   "execution": {
     "signal_time": "bar_close",
     "market_fill_time": "next_bar_open",
-    "intrabar_conflict": "worst_case",
+    "intrabar_conflict": "conservative",
     "fee": {
       "maker_rate": 0.001,
       "taker_rate": 0.001
     },
     "slippage": {
-      "type": "basis_points",
+      "type": "bps",
       "value": 2
     }
   },
@@ -469,8 +488,9 @@ type PriceDistanceSpec struct {
   },
   "indicators": [
     {
-      "id": "ema_fast",
+      "id": "ema_fast_15m",
       "type": "ema",
+      "timeframe": "15m",
       "inputs": [
         {
           "scope": "market",
@@ -483,8 +503,9 @@ type PriceDistanceSpec struct {
       }
     },
     {
-      "id": "boll_20",
-      "type": "boll",
+      "id": "ema_slow_1h",
+      "type": "ema",
+      "timeframe": "1h",
       "inputs": [
         {
           "scope": "market",
@@ -493,13 +514,13 @@ type PriceDistanceSpec struct {
         }
       ],
       "params": {
-        "period": 20,
-        "stddev": 2
+        "period": 60
       }
     },
     {
-      "id": "rsi_14",
+      "id": "rsi_14_4h",
       "type": "rsi",
+      "timeframe": "4h",
       "inputs": [
         {
           "scope": "market",
@@ -514,83 +535,48 @@ type PriceDistanceSpec struct {
   ],
   "rules": [
     {
-      "id": "entry-long",
-      "name": "趋势做多",
-      "enabled": true,
+      "id": "open_long",
+      "name": "Open long on trend confirmation",
       "priority": 100,
-      "trigger": "bar_close",
-      "position": "flat",
       "when": {
-        "node_id": "entry-root",
         "kind": "operator",
-        "op": "all",
+        "op": "and",
         "args": [
           {
-            "node_id": "price-above-ema",
             "kind": "operator",
             "op": "gt",
             "args": [
               {
-                "node_id": "close-ref",
-                "kind": "reference",
-                "ref": {
-                  "scope": "market",
-                  "name": "bar",
-                  "field": "close"
-                }
-              },
-              {
-                "node_id": "ema-ref",
                 "kind": "reference",
                 "ref": {
                   "scope": "indicator",
-                  "name": "ema_fast",
+                  "name": "ema_fast_15m",
+                  "field": "value"
+                }
+              },
+              {
+                "kind": "reference",
+                "ref": {
+                  "scope": "indicator",
+                  "name": "ema_slow_1h",
                   "field": "value"
                 }
               }
             ]
           },
           {
-            "node_id": "price-cross-boll-middle",
-            "kind": "operator",
-            "op": "cross_above",
-            "args": [
-              {
-                "node_id": "close-boll-ref",
-                "kind": "reference",
-                "ref": {
-                  "scope": "market",
-                  "name": "bar",
-                  "field": "close"
-                }
-              },
-              {
-                "node_id": "boll-middle-ref",
-                "kind": "reference",
-                "ref": {
-                  "scope": "indicator",
-                  "name": "boll_20",
-                  "field": "middle"
-                }
-              }
-            ]
-          },
-          {
-            "node_id": "rsi-under-70",
             "kind": "operator",
             "op": "lt",
             "args": [
               {
-                "node_id": "rsi-ref",
                 "kind": "reference",
                 "ref": {
                   "scope": "indicator",
-                  "name": "rsi_14",
+                  "name": "rsi_14_4h",
                   "field": "value"
                 }
               },
               {
-                "node_id": "rsi-limit",
                 "kind": "number",
                 "number": 70
               }
@@ -599,22 +585,9 @@ type PriceDistanceSpec struct {
         ]
       },
       "action": {
-        "type": "open_position",
+        "type": "open",
         "side": "long",
-        "sizing": {
-          "type": "equity_pct",
-          "value": 0.2
-        },
-        "protection": {
-          "stop_loss": {
-            "type": "entry_pct",
-            "value": 0.03
-          },
-          "take_profit": {
-            "type": "entry_pct",
-            "value": 0.06
-          }
-        }
+        "size_pct": 0.2
       }
     }
   ]
@@ -654,7 +627,7 @@ type RuntimeIndicator interface {
 - 每个回测任务持有独立指标实例，不共享可变状态。
 - 指标 DAG 决定每根 K 线的计算顺序。
 
-首版内置 EMA、SMA、BOLL、RSI、ATR。所有指标都用固定数据与可信 Python 实现对比。
+首版内置 EMA、SMA、BOLL、RSI、ATR。所有指标都用固定 golden fixture 与可信参考结果对比。
 
 ### 5.2 能力目录
 
@@ -699,7 +672,7 @@ GET /api/v1/catalog
   ],
   "operators": [
     {
-      "type": "cross_above",
+	      "type": "cross_up",
       "args": ["number_series", "number_series"],
       "returns": "boolean"
     }
@@ -719,14 +692,16 @@ GET /api/v1/catalog
 ├── 数据集 / 标的 / 周期 / 时间范围
 ├── 账户与撮合
 ├── 指标
-│   ├── EMA20
-│   └── RSI14
+│   ├── EMA20 15m
+│   ├── EMA60 1h
+│   └── RSI14 4h
 ├── 规则
 │   ├── 入场规则
 │   │   └── AND
-│   │       ├── close cross_above EMA20
-│   │       └── RSI14 < 70
-│   └── 出场规则
+│   │       ├── EMA20 15m > EMA60 1h
+│   │       └── RSI14 4h < 70
+│   ├── 开空规则
+│   └── 平仓规则
 ├── 风控
 └── 运行回测
 ```
@@ -739,7 +714,7 @@ GET /api/v1/catalog
 - 现货模式不显示开空动作。
 - `risk_pct` 仓位模式必须配置止损。
 - 前端做即时校验，但服务端始终重新校验。
-- 服务端错误返回 `node_id` 或字段路径，前端定位到具体控件。
+- 服务端错误返回字段路径，前端定位到具体控件。
 
 前端状态直接维护 `StrategyDefinition`，提交前不再做另一套格式转换，减少 UI 模型和执行模型不一致。
 
@@ -789,8 +764,7 @@ JSON
     {
       "code": "unknown_indicator_output",
       "path": "/rules/0/when/args/1/ref/field",
-      "node_id": "rsi-ref",
-      "message": "indicator rsi_14 has no output named upper"
+      "message": "indicator rsi_14_4h has no output named upper"
     }
   ]
 }
@@ -881,23 +855,33 @@ crypto-backtest/
 │   │   └── main.go
 │   ├── worker/
 │   │   └── main.go
-│   └── backtest/
+│   ├── backtest/
+│   │   └── main.go
+│   └── market-data/
 │       └── main.go
 ├── internal/
 │   ├── api/
+│   ├── datafeed/
+│   │   ├── client.go
+│   │   └── binance/
+│   ├── dataset/
+│   │   ├── cleaner.go
+│   │   ├── manifest.go
+│   │   ├── pipeline.go
+│   │   └── writer.go
+│   ├── market/
+│   │   ├── bar.go
+│   │   ├── symbol.go
+│   │   └── timeframe.go
 │   ├── strategy/
 │   │   ├── model.go
-│   │   ├── validation.go
+│   │   ├── validate.go
 │   │   └── repository.go
 │   ├── catalog/
 │   ├── compiler/
-│   ├── data/
-│   │   ├── bar.go
-│   │   ├── parquet.go
-│   │   └── manifest.go
 │   ├── indicator/
 │   │   ├── registry.go
-│   │   └── builtin/
+│   │   └── builtin.go
 │   ├── rule/
 │   ├── engine/
 │   ├── execution/
@@ -905,23 +889,32 @@ crypto-backtest/
 │   ├── risk/
 │   ├── reporting/
 │   └── job/
-├── tools/
-│   └── market-data/
-│       ├── pyproject.toml
-│       └── market_data/
 ├── web/
 ├── testdata/
 ├── strategies/
+│   ├── README.md
+│   └── ema-boll-rsi.json
 └── docs/
 ```
 
 边界要求：
 
 - `internal/strategy` 只定义持久化和 API 使用的策略模型。
+- `internal/datafeed` 只负责交易所原始 K 线获取和分页重试。
+- `internal/dataset` 只负责清洗校验、缺口报告、Parquet 分区和 manifest。
+- `internal/market` 存放行情领域基础类型，供数据层和回测层共同使用。
 - `internal/compiler` 将策略模型转换为运行模型。
-- `internal/engine` 不依赖 HTTP、数据库或前端模型。
+- `internal/engine` 不依赖 HTTP、数据库或前端模型；只接收编译计划和已加载的 15m K 线。
 - `internal/indicator` 不依赖账户与撮合。
 - `internal/execution` 只通过订单、成交和市场规则交互。
+
+当前 engine MVP：
+
+- 按 15m K 线顺序推进。
+- 本根 K 线收盘后更新指标并评估规则。
+- 市价动作最早在下一根 K 线开盘成交。
+- 高周期指标由 15m 聚合，只有完整高周期 K 线收盘后才更新可见值。
+- 首版支持单标的、单账户、`open/close + long/short + size_pct` 动作。
 
 MVP 可以让 API 和 worker 在同一进程运行，但代码边界需要从第一版分开，后续才能独立扩容回测 worker。
 
@@ -956,16 +949,17 @@ MVP 可使用 SQLite 保存策略和任务元数据，结果明细保存为 Parq
 - 持仓平均成本、部分平仓和账户守恒。
 - 严格 JSON 解码和每条校验规则。
 
-### 11.2 跨语言数据测试
+### 11.2 数据契约与存储测试
 
-- Python 写出的 Parquet 由 Go 读取并逐字段对比。
+- Go 写出的 Parquet 由 Go 数据层读取并逐字段对比。
 - manifest 文件数、行数和 SHA256 一致。
 - 时间戳、空值和可选列覆盖边界场景。
+- 下载分页、重复 K 线、乱序 K 线、非法 OHLC 和缺口检测覆盖边界场景。
 
 ### 11.3 指标一致性测试
 
-- Python 使用可信指标实现生成固定输入和预期输出。
-- Go 只读取固定 golden fixture，不在测试运行时依赖 Python。
+- 使用固定输入和预期输出的 golden fixture 验证指标实现。
+- Go 测试只读取固定 fixture，不在测试运行时依赖外部脚本或网络。
 - 明确比较 warm-up、NaN、舍入和边界值。
 
 ### 11.4 端到端测试
@@ -980,7 +974,7 @@ MVP 可使用 SQLite 保存策略和任务元数据，结果明细保存为 Parq
 ### Phase 1：先打通无前端内核
 
 1. 定义 Go 结构体、严格 JSON 解码和校验错误模型。
-2. 实现 Python 下载器和 Parquet/manifest 契约。
+2. 实现 Go `market-data` CLI、Binance 下载器、清洗器和 Parquet/manifest 契约。
 3. 实现 EMA、BOLL、RSI、ATR 与指标注册表。
 4. 实现表达式编译器、单标的现货和市价单撮合。
 5. 使用固定 JSON 策略通过 CLI 完成端到端回测。
@@ -1010,7 +1004,7 @@ MVP 可使用 SQLite 保存策略和任务元数据，结果明细保存为 Parq
 - 用字符串 `eval` 或脚本执行策略条件。
 - 在逐 K 线循环中反复解析 JSON。
 - 用 `map[string]any` 贯穿编译器和执行引擎。
-- 由 Python 计算一部分指标、Go 计算另一部分指标。
+- 由数据下载清洗链路提前计算策略指标或交易信号。
 - 修改已有策略 revision，导致历史回测不可复现。
 - 当前 K 线收盘产生信号后又默认按当前收盘价成交。
 - 只保存最终绩效，不保存订单、成交和规则命中审计。

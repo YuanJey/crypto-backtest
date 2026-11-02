@@ -1,0 +1,219 @@
+{
+  "schema_version": 1,
+  "id": "ema-boll-rsi",
+  "name": "EMA + BOLL + RSI",
+  "description": "Initial sample strategy with long/short rules and multi-timeframe indicators.",
+  "data": {
+    "dataset_id": "binance-perpetual-15m-202501",
+    "symbols": ["BTC-USDT"],
+    "timeframe": "15m",
+    "start": "2025-01-01T00:00:00Z",
+    "end": "2025-02-01T00:00:00Z"
+  },
+  "account": {
+    "market_type": "perpetual",
+    "initial_cash": 10000,
+    "quote_currency": "USDT"
+  },
+  "behavior": {
+    "allow_pyramiding": false,
+    "allow_same_bar_reversal": false,
+    "cooldown_bars": 0
+  },
+  "execution": {
+    "signal_time": "bar_close",
+    "market_fill_time": "next_bar_open",
+    "intrabar_conflict": "conservative",
+    "fee": {
+      "maker_rate": 0.001,
+      "taker_rate": 0.001
+    },
+    "slippage": {
+      "type": "bps",
+      "value": 1
+    }
+  },
+  "risk": {
+    "max_symbol_equity_pct": 1,
+    "max_total_exposure_pct": 1,
+    "max_open_positions": 1,
+    "max_drawdown_halt_pct": 0.25
+  },
+  "indicators": [
+    {
+      "id": "ema_fast_15m",
+      "type": "ema",
+      "timeframe": "15m",
+      "inputs": [
+        {
+          "scope": "market",
+          "name": "bar",
+          "field": "close"
+        }
+      ],
+      "params": {
+        "period": 20
+      }
+    },
+    {
+      "id": "ema_slow_1h",
+      "type": "ema",
+      "timeframe": "1h",
+      "inputs": [
+        {
+          "scope": "market",
+          "name": "bar",
+          "field": "close"
+        }
+      ],
+      "params": {
+        "period": 60
+      }
+    },
+    {
+      "id": "boll_20_15m",
+      "type": "boll",
+      "timeframe": "15m",
+      "inputs": [
+        {
+          "scope": "market",
+          "name": "bar",
+          "field": "close"
+        }
+      ],
+      "params": {
+        "period": 20,
+        "stddev": 2
+      }
+    },
+    {
+      "id": "rsi_14_4h",
+      "type": "rsi",
+      "timeframe": "4h",
+      "inputs": [
+        {
+          "scope": "market",
+          "name": "bar",
+          "field": "close"
+        }
+      ],
+      "params": {
+        "period": 14
+      }
+    }
+  ],
+  "rules": [
+    {
+      "id": "open_long",
+      "name": "Open long on trend confirmation",
+      "priority": 100,
+      "when": {
+        "kind": "operator",
+        "op": "and",
+        "args": [
+          {
+            "kind": "operator",
+            "op": "gt",
+            "args": [
+              {
+                "kind": "reference",
+                "ref": {
+                  "scope": "indicator",
+                  "name": "ema_fast_15m",
+                  "field": "value"
+                }
+              },
+              {
+                "kind": "reference",
+                "ref": {
+                  "scope": "indicator",
+                  "name": "ema_slow_1h",
+                  "field": "value"
+                }
+              }
+            ]
+          },
+          {
+            "kind": "operator",
+            "op": "lt",
+            "args": [
+              {
+                "kind": "reference",
+                "ref": {
+                  "scope": "indicator",
+                  "name": "rsi_14_4h",
+                  "field": "value"
+                }
+              },
+              {
+                "kind": "number",
+                "number": 70
+              }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "open",
+        "side": "long",
+        "size_pct": 0.2
+      }
+    },
+    {
+      "id": "open_short",
+      "name": "Open short on downside confirmation",
+      "priority": 90,
+      "when": {
+        "kind": "operator",
+        "op": "and",
+        "args": [
+          {
+            "kind": "operator",
+            "op": "lt",
+            "args": [
+              {
+                "kind": "reference",
+                "ref": {
+                  "scope": "indicator",
+                  "name": "ema_fast_15m",
+                  "field": "value"
+                }
+              },
+              {
+                "kind": "reference",
+                "ref": {
+                  "scope": "indicator",
+                  "name": "ema_slow_1h",
+                  "field": "value"
+                }
+              }
+            ]
+          },
+          {
+            "kind": "operator",
+            "op": "gt",
+            "args": [
+              {
+                "kind": "reference",
+                "ref": {
+                  "scope": "indicator",
+                  "name": "rsi_14_4h",
+                  "field": "value"
+                }
+              },
+              {
+                "kind": "number",
+                "number": 30
+              }
+            ]
+          }
+        ]
+      },
+      "action": {
+        "type": "open",
+        "side": "short",
+        "size_pct": 0.2
+      }
+    }
+  ]
+}
