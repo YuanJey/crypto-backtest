@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crypto Backtest | 多周期行情回放终端</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="theme-dark">
+  <div class="terminal-container">
+    <!-- 顶部状态栏 -->
+    <header class="terminal-header">
+      <div class="header-left">
+        <div class="brand-logo">
+          <span class="logo-icon">▲</span>
+          <span class="brand-name">QUANTIX</span>
+          <span class="sub-name">BACKTEST TERMINAL</span>
+        </div>
+        <div class="symbol-badge">
+          <span class="symbol-name" id="currentSymbol">BTC-USDT</span>
+          <span class="market-tag">SPOT</span>
+        </div>
+        <div class="kline-meta-group" id="headerKlineMeta">
+          <span class="meta-item"><span class="meta-label">TIME</span><span class="meta-val" id="metaTime">--:--:--</span></span>
+          <span class="meta-item"><span class="meta-label">O</span><span class="meta-val" id="metaOpen">--</span></span>
+          <span class="meta-item"><span class="meta-label">H</span><span class="meta-val" id="metaHigh">--</span></span>
+          <span class="meta-item"><span class="meta-label">L</span><span class="meta-val" id="metaLow">--</span></span>
+          <span class="meta-item"><span class="meta-label">C</span><span class="meta-val" id="metaClose">--</span></span>
+          <span class="meta-item"><span class="meta-label">VOL</span><span class="meta-val" id="metaVol">--</span></span>
+          <span class="meta-item"><span class="meta-label">CHG</span><span class="meta-val" id="metaChange">0.00%</span></span>
+        </div>
+      </div>
+      <div class="header-right">
+        <nav class="terminal-nav-tabs" id="mainNavTabs">
+          <button class="nav-tab-btn active" data-tab="backtest">
+            <span class="tab-icon">📈</span> 行情回测
+          </button>
+          <button class="nav-tab-btn" data-tab="strategies">
+            <span class="tab-icon">⚙️</span> 策略管理
+          </button>
+          <button class="nav-tab-btn" data-tab="data">
+            <span class="tab-icon">📥</span> 历史数据
+          </button>
+        </nav>
+        <div class="replay-status-pill" id="replayStatusPill">
+          <span class="status-dot"></span>
+          <span class="status-text" id="replayStatusText">回放就绪 (READY)</span>
+        </div>
+        <button class="btn btn-outline" id="btnReloadData" title="重新载入数据">
+          <span class="btn-icon">↻</span> 刷新数据
+        </button>
+      </div>
+    </header>
+
+    <!-- 视口容器 -->
+    <div class="terminal-main-viewport">
+      <!-- 视图 1：多周期行情回放与回测 -->
+      <div class="tab-pane active" id="view-backtest">
+        <!-- 行情回测控制中枢：自由组合策略与数据集 -->
+        <div class="backtest-orchestrator-bar" id="btOrchestratorBar">
+          <div class="orchestrator-left">
+            <div class="ctrl-select-group">
+              <span class="ctrl-icon">🗄️</span>
+              <label class="ctrl-sublabel" for="btSelectDataset">行情数据源:</label>
+              <select id="btSelectDataset" class="orchestrator-select">
+                <option value="__sample__">【仿真演示】BTC-USDT (15m · 7天)</option>
+              </select>
+            </div>
+            <div class="ctrl-select-group">
+              <span class="ctrl-icon">⚙️</span>
+              <label class="ctrl-sublabel" for="btSelectStrategy">回测策略:</label>
+              <select id="btSelectStrategy" class="orchestrator-select">
+                <option value="">正在读取策略库...</option>
+              </select>
+            </div>
+            <button class="btn btn-sm btn-primary btn-run-backtest" id="btnRunBacktest">
+              <span class="btn-icon">🚀</span> 执行回测
+            </button>
+          </div>
+          <div class="orchestrator-right" id="btMetricsBar" style="display: none;">
+            <div class="mini-metric">
+              <span class="m-label">总收益率</span>
+              <strong class="m-val" id="bmReturn">--</strong>
+            </div>
+            <div class="mini-metric">
+              <span class="m-label">最大回撤</span>
+              <strong class="m-val m-danger" id="bmMaxDD">--</strong>
+            </div>
+            <div class="mini-metric">
+              <span class="m-label">胜率</span>
+              <strong class="m-val" id="bmWinRate">--</strong>
+            </div>
+            <div class="mini-metric">
+              <span class="m-label">成交笔数</span>
+              <strong class="m-val" id="bmTrades">--</strong>
+            </div>
+            <div class="mini-metric">
+              <span class="m-label">最终权益</span>
+              <strong class="m-val" id="bmEquity">--</strong>
+            </div>
+          </div>
+        </div>
+
+        <main class="charts-grid-layout" id="chartsGrid">
+      <!-- 15m 分区 -->
+      <section class="chart-panel active" data-timeframe="15m" id="panel-15m">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="tf-badge base-tf">15m</span>
+            <span class="tf-title">基准驱动周期 (Base Driver)</span>
+          </div>
+          <div class="panel-kline-info" id="info-15m">--</div>
+          <div class="panel-actions">
+            <span class="forming-indicator" id="forming-15m">CLOSED</span>
+            <button class="btn-icon-only btn-maximize" title="最大化" data-target="panel-15m">⛶</button>
+          </div>
+        </div>
+        <div class="canvas-wrapper">
+          <canvas id="canvas-15m"></canvas>
+          <div class="chart-crosshair-tooltip" id="tooltip-15m"></div>
+        </div>
+      </section>
+
+      <!-- 1h 分区 -->
+      <section class="chart-panel" data-timeframe="1h" id="panel-1h">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="tf-badge">1h</span>
+            <span class="tf-title">小时线 (Aggregated 4×15m)</span>
+          </div>
+          <div class="panel-kline-info" id="info-1h">--</div>
+          <div class="panel-actions">
+            <span class="forming-indicator" id="forming-1h">FORMING</span>
+            <button class="btn-icon-only btn-maximize" title="最大化" data-target="panel-1h">⛶</button>
+          </div>
+        </div>
+        <div class="canvas-wrapper">
+          <canvas id="canvas-1h"></canvas>
+          <div class="chart-crosshair-tooltip" id="tooltip-1h"></div>
+        </div>
+      </section>
+
+      <!-- 4h 分区 -->
+      <section class="chart-panel" data-timeframe="4h" id="panel-4h">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="tf-badge">4h</span>
+            <span class="tf-title">4小时线 (Aggregated 16×15m)</span>
+          </div>
+          <div class="panel-kline-info" id="info-4h">--</div>
+          <div class="panel-actions">
+            <span class="forming-indicator" id="forming-4h">FORMING</span>
+            <button class="btn-icon-only btn-maximize" title="最大化" data-target="panel-4h">⛶</button>
+          </div>
+        </div>
+        <div class="canvas-wrapper">
+          <canvas id="canvas-4h"></canvas>
+          <div class="chart-crosshair-tooltip" id="tooltip-4h"></div>
+        </div>
+      </section>
+
+      <!-- 1d 分区 -->
+      <section class="chart-panel" data-timeframe="1d" id="panel-1d">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span class="tf-badge">1d</span>
+            <span class="tf-title">日线 (Aggregated 96×15m)</span>
+          </div>
+          <div class="panel-kline-info" id="info-1d">--</div>
+          <div class="panel-actions">
+            <span class="forming-indicator" id="forming-1d">FORMING</span>
+            <button class="btn-icon-only btn-maximize" title="最大化" data-target="panel-1d">⛶</button>
+          </div>
+        </div>
+        <div class="canvas-wrapper">
+          <canvas id="canvas-1d"></canvas>
+          <div class="chart-crosshair-tooltip" id="tooltip-1d"></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- 底部回放控制中心 -->
+    <footer class="terminal-footer">
+      <div class="timeline-scrubber-container">
+        <div class="timeline-labels">
+          <span class="timeline-time" id="lblStartTime">--</span>
+          <span class="timeline-current" id="lblCurrentTime">回放时刻: --</span>
+          <span class="timeline-time" id="lblEndTime">--</span>
+        </div>
+        <div class="scrubber-track">
+          <input type="range" id="timelineSlider" min="0" max="100" value="0" step="1" class="timeline-range-input">
+          <div class="scrubber-progress-fill" id="scrubberFill"></div>
+        </div>
+      </div>
+
+      <div class="controller-bar">
+        <div class="controller-left">
+          <button class="btn-ctrl btn-jump" id="btnJumpStart" title="跳至起始位置 (Home)">⏮</button>
+          <button class="btn-ctrl btn-step" id="btnStepBack" title="向后回退 1 根 15m (←)">◀</button>
+          <button class="btn-ctrl btn-play" id="btnPlayPause" title="播放/暂停 (Space)">
+            <span class="play-icon" id="playIcon">▶</span>
+            <span class="play-text" id="playText">PLAY</span>
+          </button>
+          <button class="btn-ctrl btn-step" id="btnStepForward" title="向前步进 1 根 15m (→)">▶</button>
+          <button class="btn-ctrl btn-jump" id="btnJumpEnd" title="跳至最新时刻 (End)">⏭</button>
+        </div>
+
+        <div class="controller-center">
+          <div class="speed-control-group">
+            <span class="ctrl-label">SPEED:</span>
+            <div class="speed-buttons" id="speedButtons">
+              <button class="btn-speed" data-speed="0.5">0.5x</button>
+              <button class="btn-speed active" data-speed="1">1x</button>
+              <button class="btn-speed" data-speed="2">2x</button>
+              <button class="btn-speed" data-speed="5">5x</button>
+              <button class="btn-speed" data-speed="10">10x</button>
+              <button class="btn-speed" data-speed="20">20x</button>
+            </div>
+          </div>
+          <div class="bar-counter-badge">
+            <span class="count-label">BAR:</span>
+            <span class="count-val" id="barIndexText">0 / 0</span>
+          </div>
+        </div>
+
+        <div class="controller-right">
+          <div class="keyboard-hints">
+            <span class="hint-item"><kbd>Space</kbd> 播放/暂停</span>
+            <span class="hint-item"><kbd>←</kbd> <kbd>→</kbd> 步退/步进</span>
+            <span class="hint-item"><kbd>滚轮</kbd> 缩放</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+    </div><!-- /#view-backtest -->
+
+    <!-- 视图 2：策略管理工作台 -->
+    <div class="tab-pane" id="view-strategies"></div>
+
+    <!-- 视图 3：历史数据管理与构建 -->
+    <div class="tab-pane" id="view-data"></div>
+  </div><!-- /.terminal-main-viewport -->
+  </div><!-- /.terminal-container -->
+  <div id="modalContainer"></div>
+
+  <script src="src/chart.js"></script>
+  <script src="src/replay.js"></script>
+  <script src="src/api.js"></script>
+  <script src="src/strategy.js"></script>
+  <script src="src/data.js"></script>
+  <script src="src/app.js"></script>
+</body>
+</html>

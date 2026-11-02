@@ -19,6 +19,7 @@ type BuildRequest struct {
 	OutputRoot string
 	DatasetID  string
 	Overwrite  bool
+	OnProgress datafeed.ProgressCallback
 }
 
 type BuildResult struct {
@@ -61,13 +62,18 @@ func Build(ctx context.Context, client datafeed.Client, request BuildRequest) (B
 	files := make([]FileEntry, 0)
 	for _, symbol := range request.Symbols {
 		rawBars, err := client.FetchOHLCV(ctx, datafeed.FetchRequest{
-			Symbol:    symbol,
-			Timeframe: request.Timeframe,
-			StartMS:   request.StartMS,
-			EndMS:     request.EndMS,
+			Symbol:     symbol,
+			Timeframe:  request.Timeframe,
+			StartMS:    request.StartMS,
+			EndMS:      request.EndMS,
+			OnProgress: request.OnProgress,
 		})
 		if err != nil {
 			return BuildResult{}, err
+		}
+
+		if request.OnProgress != nil {
+			request.OnProgress("clean", int64(len(rawBars)), int64(len(rawBars)), 86.0, fmt.Sprintf("正在对 %s 执行数据清洗、插值与防未来函数校验...", symbol))
 		}
 
 		cleaned, report, err := CleanBars(rawBars, symbol, request.Timeframe, request.StartMS, request.EndMS, DefaultCleanOptions())
@@ -75,6 +81,10 @@ func Build(ctx context.Context, client datafeed.Client, request BuildRequest) (B
 			return BuildResult{}, err
 		}
 		reports = append(reports, report)
+
+		if request.OnProgress != nil {
+			request.OnProgress("write", int64(len(cleaned)), int64(len(cleaned)), 94.0, fmt.Sprintf("正在生成 %s 的 Parquet 分区并计算 SHA256 校验码...", symbol))
+		}
 
 		entries, err := writer.WriteSymbolBars(symbol, cleaned)
 		if err != nil {
@@ -89,6 +99,10 @@ func Build(ctx context.Context, client datafeed.Client, request BuildRequest) (B
 	}
 	if err := WriteGapReport(root, reports); err != nil {
 		return BuildResult{}, err
+	}
+
+	if request.OnProgress != nil {
+		request.OnProgress("done", int64(manifest.RowCount), int64(manifest.RowCount), 100.0, "数据流水线全部构建完成！")
 	}
 
 	return BuildResult{

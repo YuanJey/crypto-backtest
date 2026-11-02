@@ -1,0 +1,135 @@
+# 🚀 Crypto-Backtest 动态规则回测系统与前端分析终端
+
+一个基于 Go 统一控制面 + Parquet 列式存储 + 原生 Canvas 前端的多周期加密货币规则回测与行情回放框架。
+
+---
+
+## 🌟 核心特性
+
+- **多周期防未来函数引擎**：以 15m 基础 K 线为驱动时钟，逐根增量推进；高周期（1h、4h、1d）在未收盘时标记为 `forming`，收盘瞬间固化为 `closed`，彻底避免时序穿越。
+- **纯原生高性能多视口终端**：原生 HTML5 + Vanilla CSS + 2D Canvas 实现，零外部重型依赖，同屏 2x2 网格分屏（15m/1h/4h/1d），支持 Crosshair 十字光标跨视口联动与平滑拖拽缩放。
+- **动态行情回放系统**：支持播放、暂停、单步步退（←）、单步步进（→）、多档调速（0.5x ~ 20x）与时间轴任意位置拖拽（Scrubbing）。
+- **静态强类型策略编译**：声明式 JSON 策略格式，支持嵌套 `AND/OR/NOT` 逻辑与交叉算子（`cross_up`/`cross_down`），由 Go 编译器在回测前完成静态类型检查与 DAG 构建。
+- **列式数据流水线**：集成币安 K 线数据下载、清洗去重、按 `exchange/symbol/timeframe` 分区的 Parquet 存储与 `manifest.json` 元数据管理。
+
+---
+
+## 📁 目录结构
+
+```text
+crypto-backtest/
+├── cmd/
+│   ├── api/            # HTTP 控制面与静态资源托管服务入口
+│   ├── backtest/       # 本地回测执行与报告生成 CLI
+│   └── market-data/    # 行情数据下载与清洗 CLI
+├── internal/
+│   ├── api/            # REST API 服务层与静态路由
+│   ├── backtest/       # 回测业务编排服务
+│   ├── compiler/       # 策略 AST 静态编译器
+│   ├── datafeed/       # 币安 REST 行情数据抓取客户端
+│   ├── dataset/        # 行情清洗、质量检测与 Parquet 读写器
+│   ├── engine/         # 事件驱动回测撮合引擎与高周期聚合器
+│   ├── indicator/      # 内置指标运行时（EMA/SMA/RSI/ATR/BOLL）与注册表
+│   ├── market/         # K 线、交易对、时间周期领域模型
+│   └── strategy/       # 策略模型、JSON 解码、静态语义校验器与 SQLite 仓储
+├── web/                # 前端多周期图表与回放终端
+│   ├── index.html      # 主页面结构
+│   ├── styles.css      # 暗黑金融终端样式系统（无 Tailwind）
+│   └── src/
+│       ├── chart.js    # 原生 Canvas 蜡烛图与成交量副图引擎
+│       ├── replay.js   # 严格防未来函数的多周期回放状态机
+│       ├── api.js      # 行情 API 客户端与备用仿真数据生成器
+│       └── app.js      # 界面交互与快捷键主控
+├── strategies/         # 示例策略文件库
+└── docs/               # 架构与系统设计文档
+```
+
+---
+
+## ⚡ 快速启动
+
+### 1. 启动 API 服务与前端终端
+
+```bash
+go run ./cmd/api -addr :8080 -data-root data/market -web-root web
+```
+
+打开浏览器访问 `http://localhost:8080` 即可进入多周期行情回放终端。
+
+### 2. 运行单元测试
+
+```bash
+go test -v ./...
+```
+
+### 3. 数据下载与本地回测执行
+
+```bash
+# 下载币安 15m K线
+go run ./cmd/market-data download -symbols BTC-USDT -start 2025-01-01T00:00:00Z -end 2025-02-01T00:00:00Z
+
+# 执行本地回测
+go run ./cmd/backtest -strategy-id ema-boll-rsi -run -data-root data/market
+```
+
+---
+
+## 📝 变更日志与追溯记录 (Change Log)
+
+### 2026-11-02
+- **新增模块**：前端多周期 K 线图分区（15m/1h/4h/1d）与动态回放终端（`web/index.html`、`web/styles.css`、`web/src/chart.js`、`web/src/replay.js`、`web/src/api.js`、`web/src/app.js`）。
+- **扩展接口**：在 `internal/api/server.go` 新增 `GET /api/v1/market/bars` 接口，支持按单周期或 `multi=true` 批量返回 15m/1h/4h/1d 数据；新增静态资源挂载与 `-web-root` 标志。
+- **策略管理与 Tab 导航系统**：
+  - 新增顶部/右侧全局 Tab 导航，实现“📈 行情回测”与“⚙️ 策略管理”无缝切换与视口平滑自适应。
+  - 新增策略管理工作台（`web/src/strategy.js`），支持策略列表/指标目录联动、可视化看板、Rule AST 条件树展示、JSON 源码编辑器、“校验并保存”以及“一键载入到回测”。
+  - 在 `cmd/api/main.go` 增加默认示例策略自动种子初始化。
+- **纯鼠标可视化策略构建器 (Visual Strategy Builder)**：
+  - 账户与标的可视化表单改造（策略名、资金、市场类型、标的实时双向绑定）。
+  - 指标可视化管理器：联动服务端 `/api/v1/catalog` 模态弹窗增删改，动态适配 EMA/SMA/RSI/ATR/BOLL 参数与输入源。
+  - 规则条件树交互编排器：条件行选择左操作数、算子（金叉/死叉/大于/小于）、右操作数模式切换（常数/指标）、AND/OR 逻辑门切换、仓位滑块。
+  - 前端 AST 编解码器：实现 UI 状态与 Go 强类型 AST 双向即时编译，无需编写任何 JSON 即可完成策略构建与保存。
+- **影响范围**：
+  - `cmd/api/main.go`
+  - `internal/api/server.go`
+  - `internal/api/server_test.go`
+  - `web/index.html`
+  - `web/styles.css`
+  - `web/src/api.js`
+  - `web/src/app.js`
+  - `web/src/strategy.js`
+- **历史数据下载与数据集管理 (Market Data Downloader & Manager)**：
+  - 后端 API 扩展：
+    - `POST /api/v1/market/download`：支持标的（BTC-USDT等）、现货/合约类型、起止时间戳，强制校验并锁死 15m 基准周期；自动调用 `binance.Client` 分页拉取、`dataset.CleanBars` 清洗插值并由 `dataset.Writer` 落地为 Parquet 与 `manifest.json`。
+    - `GET /api/v1/market/datasets`：检索本地已落地的数据集元数据清单。
+  - 前端“📥 历史数据”控制台：
+    - 新增全局 Tab 标签与 `#view-data` 面板（`web/src/data.js`）。
+    - 提供标的快捷 Chip（BTC/ETH/SOL/BNB/DOGE）与自由输入、市场类型切换、15m 基准驱动锁死、时间范围快捷区间（近 7/14/30/90 天）与自动 15m 对齐。
+    - 实时反馈数据下载流水线状态、K 线行数统计、缺失补全统计及 Parquet 分区信息。
+    - 本地已构建数据集卡片库，支持一键在 2x2 多周期图表中预览加载与一键注入策略回测。
+- **历史数据下载实时流式进度条 (Real-Time Download Progress Bar)**：
+  - 后端 SSE 流式推送协议与流水线回调：
+    - `internal/datafeed/client.go` 与 `internal/datafeed/binance/client.go`：定义 `ProgressCallback`，在 Binance 每批 1000 根 K 线的拉取循环中动态计算进度百分比（0% ~ 80%）与当前已获取 K 线条数。
+    - `internal/dataset/pipeline.go`：在数据清洗、防未来函数校验与 Parquet 分区落地阶段分别上报 86% 与 94% 进度，最后在 manifest 写入完成后触发 100% 结束包。
+    - `internal/api/server.go`：`POST /api/v1/market/download` 支持 `stream=true` 参数与 `text/event-stream` 协议，通过 `http.Flusher` 实时下发 SSE 进度事件。
+  - 前端流式消费与动态进度条组件：
+    - `web/src/api.js`：实现 `downloadMarketDataStream`，利用 `ReadableStream` 增量消费并分发事件。
+    - `web/src/data.js`：替换旧版静态 Spinner，构建三阶段流水线指示器（抓取 -> 清洗 -> 落地）、高精度动态百分比（0.0% ~ 100.0%）、已抓取行数统计与流光动画轨道，构建完成后平滑切入质量看板。
+    - `web/styles.css`：实现深色金融终端规范的进度条、光晕动画与状态胶囊。
+- **页面职责边界重构与行情回测调度中枢 (Page Responsibility Decoupling & Backtest Hub)**：
+  - 核心职责解耦规范：
+    - 数据页（`view-data`）：纯粹用于数据抓取与本地 Parquet 数据集浏览，彻底移除跨域跳页与侵入回测按钮。
+    - 策略页（`view-strategies`）：纯粹用于可视化策略创建、指标配置、条件树编排与强类型 JSON 保存，彻底移除直接发起回测跳转。
+    - 行情回测页（`view-backtest`）：升级为综合调度中枢，在 2x2 多周期图表上方配备专属控制栏，提供【行情数据源下拉框】与【策略选择下拉框】，支持自由组合任何数据集与策略。
+  - 后端回测服务适配（`internal/backtest/service.go`）：
+    - `backtest.Request` 扩展支持动态覆盖 `DatasetID`、`Symbol`、`StartMS` 与 `EndMS`，彻底解耦策略与特定静态数据集的硬编码绑定。
+  - 回测绩效看板实时渲染：
+    - 点击【🚀 执行回测】即刻完成撮合引擎运算，并在控制条右侧实时展示收益率、最大回撤、胜率、总交易笔数与最终权益。
+- **影响范围**：
+  - `internal/backtest/service.go`
+  - `web/index.html`
+  - `web/styles.css`
+  - `web/src/app.js`
+  - `web/src/strategy.js`
+  - `web/src/data.js`
+  - `README.md`
+

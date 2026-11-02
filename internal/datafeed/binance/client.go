@@ -61,6 +61,15 @@ func (c *Client) FetchOHLCV(ctx context.Context, request datafeed.FetchRequest) 
 	}
 
 	cursor := request.StartMS
+	timeframeMSVal := timeframeMS
+	totalEstimated := (request.EndMS - request.StartMS) / timeframeMSVal
+	if totalEstimated <= 0 {
+		totalEstimated = 1
+	}
+	if request.OnProgress != nil {
+		request.OnProgress("fetch", 0, totalEstimated, 0.0, fmt.Sprintf("开始拉取 %s 15m K线行情...", request.Symbol))
+	}
+
 	bars := make([]market.Bar, 0)
 	for cursor < request.EndMS {
 		rows, err := c.requestKlines(ctx, request.Symbol, request.Timeframe, cursor, request.EndMS-1)
@@ -91,6 +100,16 @@ func (c *Client) FetchOHLCV(ctx context.Context, request datafeed.FetchRequest) 
 			return nil, fmt.Errorf("binance pagination did not advance")
 		}
 		cursor = nextCursor
+
+		if request.OnProgress != nil {
+			currentCount := int64(len(bars))
+			progressPct := (float64(currentCount) / float64(totalEstimated)) * 80.0
+			if progressPct > 80.0 {
+				progressPct = 80.0
+			}
+			msg := fmt.Sprintf("正在拉取行情数据: 已获取 %d/%d 根 K 线...", currentCount, totalEstimated)
+			request.OnProgress("fetch", currentCount, totalEstimated, progressPct, msg)
+		}
 
 		if c.RequestPause > 0 {
 			timer := time.NewTimer(c.RequestPause)

@@ -28,6 +28,10 @@ func NewService(repository strategy.Repository, registry *indicator.Registry, da
 
 type Request struct {
 	StrategyID string            `json:"strategy_id"`
+	DatasetID  string            `json:"dataset_id"`
+	Symbol     string            `json:"symbol"`
+	StartMS    int64             `json:"start_ms"`
+	EndMS      int64             `json:"end_ms"`
 	Report     engine.ReportSpec `json:"report"`
 }
 
@@ -61,20 +65,52 @@ func (s *Service) Run(ctx context.Context, request Request) (Response, error) {
 	if err != nil {
 		return Response{}, err
 	}
-	if len(definition.Data.Symbols) != 1 {
+
+	datasetID := definition.Data.DatasetID
+	if strings.TrimSpace(request.DatasetID) != "" {
+		datasetID = strings.TrimSpace(request.DatasetID)
+	}
+
+	symbol := ""
+	if len(definition.Data.Symbols) > 0 {
+		symbol = definition.Data.Symbols[0]
+	}
+	if strings.TrimSpace(request.Symbol) != "" {
+		symbol = strings.TrimSpace(request.Symbol)
+	}
+	if symbol == "" {
 		return Response{}, fmt.Errorf("initial engine supports exactly one symbol")
 	}
+
+	timeframe := definition.Data.Timeframe
+	if timeframe == "" {
+		timeframe = "15m"
+	}
+
+	startMS := definition.Data.Start.UTC().UnixMilli()
+	if request.StartMS > 0 {
+		startMS = request.StartMS
+	}
+	endMS := definition.Data.End.UTC().UnixMilli()
+	if request.EndMS > 0 {
+		endMS = request.EndMS
+	}
+
 	bars, err := dataset.ReadBars(
 		s.dataRoot,
-		definition.Data.DatasetID,
-		definition.Data.Symbols[0],
-		definition.Data.Timeframe,
-		definition.Data.Start.UTC().UnixMilli(),
-		definition.Data.End.UTC().UnixMilli(),
+		datasetID,
+		symbol,
+		timeframe,
+		startMS,
+		endMS,
 	)
 	if err != nil {
-		return Response{}, err
+		return Response{}, fmt.Errorf("read bars for dataset %q symbol %q: %w", datasetID, symbol, err)
 	}
+	if len(bars) == 0 {
+		return Response{}, fmt.Errorf("no bars found in dataset %q for symbol %q", datasetID, symbol)
+	}
+
 	result, err := engine.Run(ctx, plan, engine.BacktestRequest{
 		Bars:   bars,
 		Report: request.Report,

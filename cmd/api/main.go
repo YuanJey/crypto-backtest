@@ -26,6 +26,7 @@ func run(args []string) error {
 	addr := flags.String("addr", ":8080", "HTTP listen address")
 	dbPath := flags.String("db", "data/app.db", "SQLite database path")
 	dataRoot := flags.String("data-root", "data/market", "dataset output root")
+	webRoot := flags.String("web-root", "web", "static web assets directory")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -39,9 +40,20 @@ func run(args []string) error {
 	}
 	defer repository.Close()
 
+	if ids, err := repository.ListIDs(context.Background()); err == nil && len(ids) == 0 {
+		if raw, err := os.ReadFile("strategies/ema-boll-rsi.json"); err == nil {
+			if def, err := strategy.Decode(raw); err == nil {
+				_ = repository.Save(context.Background(), def, raw)
+			}
+		}
+	}
+
+	apiServer := api.NewServer(repository, indicator.MustBuiltinRegistry(), *dataRoot)
+	apiServer.SetWebRoot(*webRoot)
+
 	server := &http.Server{
 		Addr:              *addr,
-		Handler:           api.NewServer(repository, indicator.MustBuiltinRegistry(), *dataRoot).Handler(),
+		Handler:           apiServer.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	fmt.Printf("crypto-backtest api listening on %s\n", *addr)

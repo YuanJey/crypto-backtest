@@ -1,0 +1,610 @@
+{
+  "schema_version": 1,
+  "dataset_id": "binance-perpetual-15m-20191231160000-20261102140000",
+  "exchange": "binance",
+  "market_type": "perpetual",
+  "symbols": [
+    "ETH-USDT"
+  ],
+  "timeframes": [
+    "15m"
+  ],
+  "start_ms": 1577808000000,
+  "end_ms": 1793628000000,
+  "row_count": 239800,
+  "missing_bars": 0,
+  "generated_at": "2026-11-02T14:12:24Z",
+  "market_rules": {
+    "ETH-USDT": {}
+  },
+  "files": [
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2019/month=12/part-000.parquet",
+      "sha256": "00072c420498c5ab455b96c035ba31d30102d817559d0e85ebef5c6eec465d68",
+      "row_count": 32,
+      "start_ms": 1577808000000,
+      "end_ms": 1577836800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2020/month=01/part-000.parquet",
+      "sha256": "318a1bfe6a80eb1538a016eb098f04cad0725da4b61fe4d493c468c2ac0a3305",
+      "row_count": 2976,
+      "start_ms": 1577836800000,
+      "end_ms": 1580515200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2020/month=02/part-000.parquet",
+      "sha256": "807b27031dbeda4d696def825f6878d232d09e8de3a18be649c8af03b45610d7",
+      "row_count": 2784,
+      "start_ms": 1580515200000,
+      "end_ms": 1583020800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2020/month=03/part-000.parquet",
+      "sha256": "02c85a868e4a8cb20312ff6858d828b7f4a8662ca462f3a7d85a0a560d02a2b7",
+      "row_count": 2976,
+      "start_ms": 1583020800000,
+      "end_ms": 1585699200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2020/month=04/part-000.parquet",
+      "sha256": "7a67bdf289787e1995bea9df64ac15589351b589ce329cdfde83fefbfbd26378",
+      "row_count": 2880,
+      "start_ms": 1585699200000,
+      "end_ms": 1588291200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2020/month=05/part-000.parquet",
+      "sha256": "2de6623d6f2eaf6fd38e4d91c6499823e63da3c2bea0776d499fdb1316d395a3",
+      "row_count": 2976,
+      "start_ms": 1588291200000,
+      "end_ms": 1590969600000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2020/month=06/part-000.parquet",
+      "sha256": "6f5e9efbd8d7bf158f8a1dafa22e7068086091f074ceb2fb054b2d25be8c8be6",
+      "row_count": 2880,
+      "start_ms": 1590969600000,
+      "end_ms": 1593561600000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2020/month=07/part-000.parquet",
+      "sha256": "b843e8daca7ed91b9c7e91e02bc46540cba39edb95d68e1611dd5eea6acb5dda",
+      "row_count": 2976,
+      "start_ms": 1593561600000,
+      "end_ms": 1596240000000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2020/month=08/part-000.parquet",
+      "sha256": "072aca580494e2e9026e780eb2417a692f554f6c0f53d86e0c442bcc9263929f",
+      "row_count": 2976,
+      "start_ms": 1596240000000,
+      "end_ms": 1598918400000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2020/month=09/part-000.parquet",
+      "sha256": "ade4cdff76e62251cd0b0b156ec43f14d9488129aad5572567dd9f4c32918c38",
+      "row_count": 2880,
+      "start_ms": 1598918400000,
+      "end_ms": 1601510400000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2020/month=10/part-000.parquet",
+      "sha256": "114b1abd947c451ab63f6ab3898f6e53f7d291cc0d9a8fe3ffb2a70840db516e",
+      "row_count": 2976,
+      "start_ms": 1601510400000,
+      "end_ms": 1604188800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2020/month=11/part-000.parquet",
+      "sha256": "ee625a2ab8736bb5b56503849162f15af4038738ac9ef6695e6a36d3645ec2ac",
+      "row_count": 2880,
+      "start_ms": 1604188800000,
+      "end_ms": 1606780800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2020/month=12/part-000.parquet",
+      "sha256": "6bf987a6c08549c128d5ae257412585b772eaee8f8f47c83ef42b1607d9c3673",
+      "row_count": 2976,
+      "start_ms": 1606780800000,
+      "end_ms": 1609459200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2021/month=01/part-000.parquet",
+      "sha256": "ba31f76206b46d6a288b7c00df153e5baf8ac279fef6028ffe5241bfe7d16909",
+      "row_count": 2976,
+      "start_ms": 1609459200000,
+      "end_ms": 1612137600000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2021/month=02/part-000.parquet",
+      "sha256": "0360efca4e0bdf0a3b00617f4aaef6125e79eace741ffd1d1b89ceeace593742",
+      "row_count": 2688,
+      "start_ms": 1612137600000,
+      "end_ms": 1614556800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2021/month=03/part-000.parquet",
+      "sha256": "60221c27088a163320a1e5b070c890c6b3c7e870d6d6d8cbb7a497ae2bfcbfc9",
+      "row_count": 2976,
+      "start_ms": 1614556800000,
+      "end_ms": 1617235200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2021/month=04/part-000.parquet",
+      "sha256": "9b277b1944b5a6f4c57b039167068d49da4784424367ca9339811fd3b99790fb",
+      "row_count": 2880,
+      "start_ms": 1617235200000,
+      "end_ms": 1619827200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2021/month=05/part-000.parquet",
+      "sha256": "cb5384b0f6dc74c5957826d2645699d84ef2acad09c0ac3481ddf3c18bb843a9",
+      "row_count": 2976,
+      "start_ms": 1619827200000,
+      "end_ms": 1622505600000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2021/month=06/part-000.parquet",
+      "sha256": "e0a939e92f3700dfee463152bd8cb7f8d3fc6a4bb399e35bf602b6b0c68d543b",
+      "row_count": 2880,
+      "start_ms": 1622505600000,
+      "end_ms": 1625097600000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2021/month=07/part-000.parquet",
+      "sha256": "0347862d4aec0eb3855d3706dbaf6b2cb1e4072a6450c1cb9ddee5fa61372487",
+      "row_count": 2976,
+      "start_ms": 1625097600000,
+      "end_ms": 1627776000000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2021/month=08/part-000.parquet",
+      "sha256": "7bd6692cbff90e5b7db286dc47ad04219d911f6ce8c65a31b0a528f695adca2b",
+      "row_count": 2976,
+      "start_ms": 1627776000000,
+      "end_ms": 1630454400000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2021/month=09/part-000.parquet",
+      "sha256": "799938de8ceb6e9f61f3fb966840841ba5dafdd7e364f8e5f6ac04a0ecfddd1b",
+      "row_count": 2880,
+      "start_ms": 1630454400000,
+      "end_ms": 1633046400000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2021/month=10/part-000.parquet",
+      "sha256": "0f3f5fdb1b0ac8e10b1ddbbda0e8557f53aab48457e34c12b281def113802777",
+      "row_count": 2976,
+      "start_ms": 1633046400000,
+      "end_ms": 1635724800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2021/month=11/part-000.parquet",
+      "sha256": "f18d15aa04a7b2b4ddb95d43aa7dc1b0fb5d634dfd213919283881e3baeaf53d",
+      "row_count": 2880,
+      "start_ms": 1635724800000,
+      "end_ms": 1638316800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2021/month=12/part-000.parquet",
+      "sha256": "d850b573e44bd87be96a0a05f72705c76666d3e31223415833393578dc6bc546",
+      "row_count": 2976,
+      "start_ms": 1638316800000,
+      "end_ms": 1640995200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2022/month=01/part-000.parquet",
+      "sha256": "57e31caa78508751ea3bcbc8642f8e22272b3be693542bcf50b650a216738ffc",
+      "row_count": 2976,
+      "start_ms": 1640995200000,
+      "end_ms": 1643673600000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2022/month=02/part-000.parquet",
+      "sha256": "6f4b91a45a5cc34b3da1d608015d5f79da081e2515df98360da32faa0d5c8781",
+      "row_count": 2688,
+      "start_ms": 1643673600000,
+      "end_ms": 1646092800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2022/month=03/part-000.parquet",
+      "sha256": "5d03e773e9e4ab88c6cdee7d65313119a1da98b44135cab2d8560f64b03d8397",
+      "row_count": 2976,
+      "start_ms": 1646092800000,
+      "end_ms": 1648771200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2022/month=04/part-000.parquet",
+      "sha256": "0937b4e16005795ed9e8649d38fd777b7deb02b87d3a4b8b9cd23c6c920d1973",
+      "row_count": 2880,
+      "start_ms": 1648771200000,
+      "end_ms": 1651363200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2022/month=05/part-000.parquet",
+      "sha256": "79616cc4532609c76a8770dc62ccacb59d610207a0c6133edd8b9a7124b6efe9",
+      "row_count": 2976,
+      "start_ms": 1651363200000,
+      "end_ms": 1654041600000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2022/month=06/part-000.parquet",
+      "sha256": "3bc2a75d34b206768ccdd66c979964145a56c185e8e440d7239480752260861d",
+      "row_count": 2880,
+      "start_ms": 1654041600000,
+      "end_ms": 1656633600000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2022/month=07/part-000.parquet",
+      "sha256": "1ca50c2cc8891c4b8f7c5dacab27116d82383c2ab579ebf799b1a6a360d7304b",
+      "row_count": 2976,
+      "start_ms": 1656633600000,
+      "end_ms": 1659312000000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2022/month=08/part-000.parquet",
+      "sha256": "1b66cfa376b9bc64f078550d24aedeb088c0d6c6b4affe513dc8f8ff1461da79",
+      "row_count": 2976,
+      "start_ms": 1659312000000,
+      "end_ms": 1661990400000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2022/month=09/part-000.parquet",
+      "sha256": "42b6162059a07324c0ca230164a42152640b6af3234a5a7ecbe8db1d3b66b326",
+      "row_count": 2880,
+      "start_ms": 1661990400000,
+      "end_ms": 1664582400000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2022/month=10/part-000.parquet",
+      "sha256": "b7c05ec5747330805e585f172599ab4b008ddcdb278cd9a796b76340cec976f6",
+      "row_count": 2976,
+      "start_ms": 1664582400000,
+      "end_ms": 1667260800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2022/month=11/part-000.parquet",
+      "sha256": "7118c7ee0dbffc28b1e21e83eb6d259f793fe0197a3639b71dbb2969f1b11b6d",
+      "row_count": 2880,
+      "start_ms": 1667260800000,
+      "end_ms": 1669852800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2022/month=12/part-000.parquet",
+      "sha256": "6287d75c6baf6894aa78533be1a83aa777a40b77318e0d08e6557bd05f9f286e",
+      "row_count": 2976,
+      "start_ms": 1669852800000,
+      "end_ms": 1672531200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2023/month=01/part-000.parquet",
+      "sha256": "ad22e81f9848603ada07ca0ee1c811299fb217866419a66841dce11c95a22484",
+      "row_count": 2976,
+      "start_ms": 1672531200000,
+      "end_ms": 1675209600000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2023/month=02/part-000.parquet",
+      "sha256": "9baf53dba5eadba3f1b10f1e425923f1d61b107b74d4f690059343820f4940f2",
+      "row_count": 2688,
+      "start_ms": 1675209600000,
+      "end_ms": 1677628800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2023/month=03/part-000.parquet",
+      "sha256": "0368cf864afcd11b8f305792f35e6bf11b5bb605285991fb5a77dff7170f08af",
+      "row_count": 2976,
+      "start_ms": 1677628800000,
+      "end_ms": 1680307200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2023/month=04/part-000.parquet",
+      "sha256": "cee38d616d27fe2a676310eb8b138a72ea8114ed9a1854b8438ef59b6c779ad2",
+      "row_count": 2880,
+      "start_ms": 1680307200000,
+      "end_ms": 1682899200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2023/month=05/part-000.parquet",
+      "sha256": "f1dba3fcd64567ca27e91bf63858101ef4f035198cb97d4868ecaf0559cdccb9",
+      "row_count": 2976,
+      "start_ms": 1682899200000,
+      "end_ms": 1685577600000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2023/month=06/part-000.parquet",
+      "sha256": "c364315b3535ac1311f03eec21bab53871918e30f3c823dded9be91363e3a69b",
+      "row_count": 2880,
+      "start_ms": 1685577600000,
+      "end_ms": 1688169600000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2023/month=07/part-000.parquet",
+      "sha256": "a6f1ca20c12cb3fcc92b7aa6adea6526e493ad6bdd331f8e5aea0556e9d29280",
+      "row_count": 2976,
+      "start_ms": 1688169600000,
+      "end_ms": 1690848000000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2023/month=08/part-000.parquet",
+      "sha256": "0b9404a751f2ff5201ea9ba92d4ac8ec5076a4f18430a2c52a4d4a4fc22b47cf",
+      "row_count": 2976,
+      "start_ms": 1690848000000,
+      "end_ms": 1693526400000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2023/month=09/part-000.parquet",
+      "sha256": "a87d448dbf9a7888b83f7b684b88bd9d0b07856ed9b5778562dba14596f15ec0",
+      "row_count": 2880,
+      "start_ms": 1693526400000,
+      "end_ms": 1696118400000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2023/month=10/part-000.parquet",
+      "sha256": "de48098e40e40d8205dc0cdc393fa4b23428fbb5cc539fc1824988d009b61f29",
+      "row_count": 2976,
+      "start_ms": 1696118400000,
+      "end_ms": 1698796800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2023/month=11/part-000.parquet",
+      "sha256": "7075e19f289d52125a21442fd19cac9aff4331bcf749659ee6b77b3151d3c544",
+      "row_count": 2880,
+      "start_ms": 1698796800000,
+      "end_ms": 1701388800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2023/month=12/part-000.parquet",
+      "sha256": "f62d933eb3746684dff145a779794df640882de9554c86939c8c84143958c42d",
+      "row_count": 2976,
+      "start_ms": 1701388800000,
+      "end_ms": 1704067200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2024/month=01/part-000.parquet",
+      "sha256": "44c4e6d92c273b97aa30dc8c3b46836e658334fce8590285723554a2f064cadd",
+      "row_count": 2976,
+      "start_ms": 1704067200000,
+      "end_ms": 1706745600000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2024/month=02/part-000.parquet",
+      "sha256": "1dd5e592b314519dad8379773f494d9964e83a723188039d9891c7eb83f7a419",
+      "row_count": 2784,
+      "start_ms": 1706745600000,
+      "end_ms": 1709251200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2024/month=03/part-000.parquet",
+      "sha256": "1b73fbdf90bef390682368806db2c3ade63f0cf3beebae9ff0606222444af4b9",
+      "row_count": 2976,
+      "start_ms": 1709251200000,
+      "end_ms": 1711929600000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2024/month=04/part-000.parquet",
+      "sha256": "3d0a42534fcc35d994c7864c23512777a6ca7fa077978694eba61526667da00f",
+      "row_count": 2880,
+      "start_ms": 1711929600000,
+      "end_ms": 1714521600000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2024/month=05/part-000.parquet",
+      "sha256": "9369682e735b1c0bd71c285f14b0e1a1a3c4a1c5bc5aa6a8859167a279907925",
+      "row_count": 2976,
+      "start_ms": 1714521600000,
+      "end_ms": 1717200000000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2024/month=06/part-000.parquet",
+      "sha256": "c6ebfeeb9178a0296347cbef122003b132a5ef1f0ff0f3d7cd98f5de4c2abfd2",
+      "row_count": 2880,
+      "start_ms": 1717200000000,
+      "end_ms": 1719792000000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2024/month=07/part-000.parquet",
+      "sha256": "d73d55648b482d1052976519278a430f70b6e39e569f3543ed3edb41d69cc803",
+      "row_count": 2976,
+      "start_ms": 1719792000000,
+      "end_ms": 1722470400000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2024/month=08/part-000.parquet",
+      "sha256": "bbb01c3ba32a1480d516f7b6be3c6c56833d8ea6c479ad9cd46ec846fb4369bd",
+      "row_count": 2976,
+      "start_ms": 1722470400000,
+      "end_ms": 1725148800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2024/month=09/part-000.parquet",
+      "sha256": "10c511530299103a150fa11b2338e1dd52ce6faea8fd9fe703b08d3975e777b1",
+      "row_count": 2880,
+      "start_ms": 1725148800000,
+      "end_ms": 1727740800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2024/month=10/part-000.parquet",
+      "sha256": "1fec018afbdc871f39ae4f30e5b5258a2d0da21e44db08544e78c9278e3a50f7",
+      "row_count": 2976,
+      "start_ms": 1727740800000,
+      "end_ms": 1730419200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2024/month=11/part-000.parquet",
+      "sha256": "cbd7c693b502fd78884c8f25c6b880da3d484c92a7a75a648f08b23a19f1a74f",
+      "row_count": 2880,
+      "start_ms": 1730419200000,
+      "end_ms": 1733011200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2024/month=12/part-000.parquet",
+      "sha256": "9785890a72b4d470782ec9bd0e4d3099f39a0a1bc10b0e0368835c8fcc17f4db",
+      "row_count": 2976,
+      "start_ms": 1733011200000,
+      "end_ms": 1735689600000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2025/month=01/part-000.parquet",
+      "sha256": "44c449f43b4035ac4ebe18b7924d1f8b02e770a756f13fedc55f3f77c61f9fe5",
+      "row_count": 2976,
+      "start_ms": 1735689600000,
+      "end_ms": 1738368000000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2025/month=02/part-000.parquet",
+      "sha256": "e63ffae58fa7c6a2ba3d2e2ff564e11f80e5bcfb63701ee2515aeff99f4409ef",
+      "row_count": 2688,
+      "start_ms": 1738368000000,
+      "end_ms": 1740787200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2025/month=03/part-000.parquet",
+      "sha256": "17ed2f05c2c7f8cb0a2aa284b6a3bb482e73b25c601186ed4137cf3383a691af",
+      "row_count": 2976,
+      "start_ms": 1740787200000,
+      "end_ms": 1743465600000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2025/month=04/part-000.parquet",
+      "sha256": "391e3485078b5d133bcb314266fd1191cc2e87af0638a1ad620a5ee51dc6a215",
+      "row_count": 2880,
+      "start_ms": 1743465600000,
+      "end_ms": 1746057600000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2025/month=05/part-000.parquet",
+      "sha256": "f5363af78bec6a7e296d3f0901b91eeaf3e47a1d515857e77204d02fd48b0f6a",
+      "row_count": 2976,
+      "start_ms": 1746057600000,
+      "end_ms": 1748736000000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2025/month=06/part-000.parquet",
+      "sha256": "fd0e1240337254fc510c316fa79ed9d31fd72c74c27417d096a06a489c2a0fcd",
+      "row_count": 2880,
+      "start_ms": 1748736000000,
+      "end_ms": 1751328000000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2025/month=07/part-000.parquet",
+      "sha256": "264b92392deb44c61ead114838b68390a87b3e3f25a99c1b146cf427b007fd5e",
+      "row_count": 2976,
+      "start_ms": 1751328000000,
+      "end_ms": 1754006400000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2025/month=08/part-000.parquet",
+      "sha256": "71d26cba05f7ac9d4fa32996dc2dd27637410a668f57927449f255356eca590a",
+      "row_count": 2976,
+      "start_ms": 1754006400000,
+      "end_ms": 1756684800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2025/month=09/part-000.parquet",
+      "sha256": "53aedbe52e7f81e77e7c30b81b7f646b317b8992a038c70e2aaef5392b0c055e",
+      "row_count": 2880,
+      "start_ms": 1756684800000,
+      "end_ms": 1759276800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2025/month=10/part-000.parquet",
+      "sha256": "18d6f1ddc13681475045e6c6fa2ff207d91ac7ba5b7d95dcfb45cdeb288a182d",
+      "row_count": 2976,
+      "start_ms": 1759276800000,
+      "end_ms": 1761955200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2025/month=11/part-000.parquet",
+      "sha256": "81ffaa381de42b1d108a28f0a55242afe1233fbead6dcb762292a1a3b5ec4178",
+      "row_count": 2880,
+      "start_ms": 1761955200000,
+      "end_ms": 1764547200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2025/month=12/part-000.parquet",
+      "sha256": "7534dc1088aeb5349474c7f8c8a52a44abcb57d3c9578c16c3e9e49423a137f9",
+      "row_count": 2976,
+      "start_ms": 1764547200000,
+      "end_ms": 1767225600000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=01/part-000.parquet",
+      "sha256": "ba13f283a3aaec807082cce9e0a8d9a59283e56682eff714421331d4956b4a2e",
+      "row_count": 2976,
+      "start_ms": 1767225600000,
+      "end_ms": 1769904000000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=02/part-000.parquet",
+      "sha256": "0b577125e8edddec30c1cdbd5b1040707c36403d7a60220e168ead31c803e8d9",
+      "row_count": 2688,
+      "start_ms": 1769904000000,
+      "end_ms": 1772323200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=03/part-000.parquet",
+      "sha256": "02d43073a711faed10cfc02856fdd5d79b0fa51119df13adac54e4cd0715d172",
+      "row_count": 2976,
+      "start_ms": 1772323200000,
+      "end_ms": 1775001600000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=04/part-000.parquet",
+      "sha256": "3f6112752e2adc105cbd2b59ec1eb0e772f67686f9222f0fcf768aafb95d9311",
+      "row_count": 2880,
+      "start_ms": 1775001600000,
+      "end_ms": 1777593600000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=05/part-000.parquet",
+      "sha256": "cf99ce664c0d31a758e6f2b629c628cb48d5ce269e66fa2c1d12930f540f30e2",
+      "row_count": 2976,
+      "start_ms": 1777593600000,
+      "end_ms": 1780272000000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=06/part-000.parquet",
+      "sha256": "07f3ce55a52a87d4687e8b911b2235a8fbd454e2ffeec831c955d6d9baa48f93",
+      "row_count": 2880,
+      "start_ms": 1780272000000,
+      "end_ms": 1782864000000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=07/part-000.parquet",
+      "sha256": "3737e92380134eead57b7776098dcd6ccdc5dde41619ddeb181d16477d5b247b",
+      "row_count": 2976,
+      "start_ms": 1782864000000,
+      "end_ms": 1785542400000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=08/part-000.parquet",
+      "sha256": "57861fcdfbe14bc58904720be00fe95ae6a998def4c0c47c69d7a3147a78cc21",
+      "row_count": 2976,
+      "start_ms": 1785542400000,
+      "end_ms": 1788220800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=09/part-000.parquet",
+      "sha256": "edb771e0a6d82f42ac2fc7ee3f8f8628498495c586a402e1b1e7a7ef33bc8b46",
+      "row_count": 2880,
+      "start_ms": 1788220800000,
+      "end_ms": 1790812800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=10/part-000.parquet",
+      "sha256": "887b26a63b53f0e6bce073e9bd52fafe18aad1f8d653f28797ce6f2798f8299c",
+      "row_count": 2976,
+      "start_ms": 1790812800000,
+      "end_ms": 1793491200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=11/part-000.parquet",
+      "sha256": "04ebba1002a5b5f3943de77e2c01739c01522e58180030a5972c3754848af3a8",
+      "row_count": 152,
+      "start_ms": 1793491200000,
+      "end_ms": 1793628000000
+    }
+  ]
+}
