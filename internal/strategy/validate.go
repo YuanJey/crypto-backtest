@@ -119,10 +119,12 @@ func validateBehavior(behavior BehaviorSpec) error {
 
 func validatePosition(position PositionSpec, behavior BehaviorSpec, account AccountSpec) error {
 	for field, value := range map[string]float64{
-		"initial_size_pct":    position.InitialSizePct,
-		"add_size_pct":        position.AddSizePct,
-		"add_size_multiplier": position.AddSizeMultiplier,
-		"position_leverage":   position.PositionLeverage,
+		"initial_size_pct":          position.InitialSizePct,
+		"add_size_pct":              position.AddSizePct,
+		"add_size_multiplier":       position.AddSizeMultiplier,
+		"position_leverage":         position.PositionLeverage,
+		"long_capital_decay_power":  position.LongCapitalDecayPower,
+		"short_capital_decay_power": position.ShortCapitalDecayPower,
 	} {
 		if !isFinite(value) {
 			return fmt.Errorf("position.%s must be finite", field)
@@ -145,6 +147,12 @@ func validatePosition(position PositionSpec, behavior BehaviorSpec, account Acco
 		return fmt.Errorf(
 			"position.position_leverage must be finite and in [1, account.exchange_leverage]",
 		)
+	}
+	if position.LongCapitalDecayPower <= 0 {
+		return fmt.Errorf("position.long_capital_decay_power must be finite and > 0")
+	}
+	if position.ShortCapitalDecayPower <= 0 {
+		return fmt.Errorf("position.short_capital_decay_power must be finite and > 0")
 	}
 	if position.MaxAdditions > 0 && !behavior.AllowPyramiding {
 		return fmt.Errorf("position.max_additions requires behavior.allow_pyramiding=true")
@@ -647,6 +655,21 @@ func referenceDomain(expression Expression, outputs indicatorOutputs) string {
 			return "volatility"
 		case indicator.OutputSemanticTrendDirection:
 			return "trend_direction"
+		}
+	case ValueScopePosition:
+		switch ref.Field {
+		case "entry_price", "avg_entry_price", "last_entry_price":
+			return "price"
+		case "quantity", "abs_quantity":
+			return "quantity"
+		case "entry_count":
+			return "count"
+		case "unrealized_pnl_pct":
+			return "ratio"
+		case "side":
+			return "side"
+		case "actual_leverage":
+			return "leverage"
 		}
 	}
 	return ""

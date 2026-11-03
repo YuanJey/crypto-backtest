@@ -204,7 +204,7 @@ func TestRunAppliesCooldownAfterFill(t *testing.T) {
 	}
 }
 
-func TestRunUsesExchangeLeverageAsOnlyExposureCap(t *testing.T) {
+func TestRunCapsInitialPositionNotionalAtEquity(t *testing.T) {
 	definition := baseDefinition()
 	definition.Account.ExchangeLeverage = 2
 	definition.Position.PositionLeverage = 2
@@ -228,8 +228,8 @@ func TestRunUsesExchangeLeverageAsOnlyExposureCap(t *testing.T) {
 		t.Fatalf("len(result.Fills)=%d, want 1", len(result.Fills))
 	}
 	notional := math.Abs(result.Fills[0].Quantity) * result.Fills[0].Price
-	if math.Abs(notional-definition.Account.InitialCash*2) > 1e-9 {
-		t.Fatalf("fill notional=%f, want exchange leverage cap %f", notional, definition.Account.InitialCash*2)
+	if math.Abs(notional-definition.Account.InitialCash) > 1e-9 {
+		t.Fatalf("fill notional=%f, want initial position capped at equity %f", notional, definition.Account.InitialCash)
 	}
 }
 
@@ -275,7 +275,7 @@ func TestRunAppliesPositionLeverageAndReportsActualLeverage(t *testing.T) {
 	}
 }
 
-func TestRunDoesNotApplyPositionLeverageToFixedAddition(t *testing.T) {
+func TestRunDoesNotReapplyPositionLeverageToFixedAddition(t *testing.T) {
 	definition := baseDefinition()
 	definition.Account.ExchangeLeverage = 10
 	definition.Behavior.AllowPyramiding = true
@@ -309,18 +309,18 @@ func TestRunDoesNotApplyPositionLeverageToFixedAddition(t *testing.T) {
 		t.Fatalf("first notional=%f, want 10000", firstNotional)
 	}
 	if math.Abs(secondNotional-1_000) > 1e-9 {
-		t.Fatalf("fixed addition notional=%f, want 1000 without leverage multiplier", secondNotional)
+		t.Fatalf("fixed addition notional=%f, want 1000 without reapplying position leverage", secondNotional)
 	}
 }
 
-func TestRunMultiplierAdditionUsesFirstEntryNotionalWithoutPositionLeverageCap(t *testing.T) {
+func TestRunMultiplierAdditionInheritsPositionLeverageFromFirstEntry(t *testing.T) {
 	definition := baseDefinition()
 	definition.Account.ExchangeLeverage = 10
 	definition.Behavior.AllowPyramiding = true
 	definition.Execution.Fee.TakerRate = 0
 	definition.Position = strategy.PositionSpec{
 		InitialSizePct:    0.2,
-		PositionLeverage:  1,
+		PositionLeverage:  2,
 		MaxAdditions:      2,
 		AddSizeMultiplier: 2,
 	}
@@ -341,7 +341,7 @@ func TestRunMultiplierAdditionUsesFirstEntryNotionalWithoutPositionLeverageCap(t
 	if len(result.Fills) != 3 {
 		t.Fatalf("len(result.Fills)=%d, want initial entry and two additions", len(result.Fills))
 	}
-	wants := []float64{2_000, 4_000, 8_000}
+	wants := []float64{4_000, 8_000, 16_000}
 	for index, fill := range result.Fills {
 		notional := math.Abs(fill.Quantity) * fill.Price
 		if math.Abs(notional-wants[index]) > 1e-9 {
@@ -351,10 +351,99 @@ func TestRunMultiplierAdditionUsesFirstEntryNotionalWithoutPositionLeverageCap(t
 	finalPoint := result.EquityCurve[len(result.EquityCurve)-1]
 	if finalPoint.PositionLeverage <= definition.Position.PositionLeverage {
 		t.Fatalf(
-			"actual leverage=%f, want above first-entry leverage=%f after additions",
+			"actual leverage=%f, want above configured position leverage=%f after additions",
 			finalPoint.PositionLeverage,
 			definition.Position.PositionLeverage,
 		)
+	}
+}
+
+func TestResolveOpenNotionalPctAppliesDirectionalCapitalDecay(t *testing.T) {
+	position := strategy.PositionSpec{
+		InitialSizePct:         0.5,
+		PositionLeverage:       1,
+		LongCapitalDecayPower:  0.5,
+		ShortCapitalDecayPower: 1,
+	}
+	tests := []struct {
+		name          string
+		side          strategy.TradeSide
+		currentEquity float64
+		want          float64
+	}{
+		{name: "long profit uses long power", side: strategy.TradeSideLong, currentEquity: 20_000, want: 0.5 * math.Sqrt(0.5)},
+		{name: "short profit uses short power", side: strategy.TradeSideShort, currentEquity: 20_000, want: 0.25},
+		{name: "loss does not enlarge position", side: strategy.TradeSideLong, currentEquity: 5_000, want: 0.5},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			portfolio := newPortfolio(strategy.MarketTypePerpetual, test.currentEquity)
+			got, ok := resolveOpenNotionalPct(
+				portfolio,
+				strategy.ActionSpec{Type: strategy.ActionOpen, Side: test.side},
+				position,
+				10_000,
+				10,
+				100,
+			)
+			if !ok {
+				t.Fatal("expected position sizing to succeed")
+			}
+			if math.Abs(got-test.want) > 1e-12 {
+				t.Fatalf("notional pct=%f, want %f", got, test.want)
+			}
+		})
+	}
+}
+
+func TestResolveOpenNotionalPctAppliesDecayAfterInitialSafetyCap(t *testing.T) {
+	portfolio := newPortfolio(strategy.MarketTypePerpetual, 20_000)
+	position := strategy.PositionSpec{
+		InitialSizePct:        1,
+		PositionLeverage:      2,
+		LongCapitalDecayPower: 0.5,
+	}
+	got, ok := resolveOpenNotionalPct(
+		portfolio,
+		strategy.ActionSpec{Type: strategy.ActionOpen, Side: strategy.TradeSideLong},
+		position,
+		10_000,
+		10,
+		100,
+	)
+	if !ok {
+		t.Fatal("expected position sizing to succeed")
+	}
+	want := math.Sqrt(0.5)
+	if math.Abs(got-want) > 1e-12 {
+		t.Fatalf("notional pct=%f, want capped base times decay %f", got, want)
+	}
+}
+
+func TestMultiplierAdditionInheritsDecayedFirstEntryNotional(t *testing.T) {
+	portfolio := newPortfolio(strategy.MarketTypePerpetual, 20_000)
+	position := strategy.PositionSpec{
+		InitialSizePct:        0.2,
+		PositionLeverage:      2,
+		LongCapitalDecayPower: 0.5,
+		AddSizeMultiplier:     2,
+	}
+	action := strategy.ActionSpec{Type: strategy.ActionOpen, Side: strategy.TradeSideLong}
+	firstPct, ok := resolveOpenNotionalPct(portfolio, action, position, 10_000, 10, 100)
+	if !ok {
+		t.Fatal("expected first position sizing to succeed")
+	}
+	if _, _, opened := portfolio.open(action.Side, 100, firstPct, 0, true); !opened {
+		t.Fatal("expected first position to open")
+	}
+
+	addPct, ok := resolveOpenNotionalPct(portfolio, action, position, 10_000, 10, 100)
+	if !ok {
+		t.Fatal("expected addition sizing to succeed")
+	}
+	want := portfolio.firstNotional * 2 / portfolio.equity(100)
+	if math.Abs(addPct-want) > 1e-12 {
+		t.Fatalf("addition notional pct=%f, want inherited decayed first entry %f", addPct, want)
 	}
 }
 

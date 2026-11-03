@@ -295,6 +295,8 @@ and(position.flat(), ema_fast_15m.gte(ema_slow_1h))
   "position": {
     "initial_size_pct": 0.0025,
     "position_leverage": 5,
+    "long_capital_decay_power": 0.5,
+    "short_capital_decay_power": 0.5,
     "max_additions": 2,
     "add_size_multiplier": 2
   }
@@ -303,8 +305,12 @@ and(position.flat(), ema_fast_15m.gte(ema_slow_1h))
 
 规则级 `action.size_pct` 可以覆盖策略默认仓位；不填写时由 `PositionSpec` 计算。
 比例字段没有 5% 的业务下限；`0.0025` 表示分配权益的 `0.25%`。
-首次开仓名义金额为 `equity * size_pct * position_leverage`。固定比例加仓不再乘
-`position_leverage`；倍增加仓以本轮首次订单的实际名义金额为基数。
+首仓基础名义金额为 `min(equity, equity * size_pct * position_leverage)`。
+随后按方向选择 `long_capital_decay_power` 或 `short_capital_decay_power`，计算
+`decay = min(1, (initial_cash / equity) ^ power)`，实际首仓为基础名义金额乘以
+`decay`。因此盈利后新首仓逐步缩小，亏损时不会反向放大；未配置时幂次默认
+为 `0.5`。固定比例加仓直接按当前权益比例计算；倍增加仓以本轮实际首仓名义
+金额为基数，因此会继承仓位杠杆和资金衰减的结果。
 总名义仓位只受 `account.exchange_leverage` 限制，实际杠杆仅作为回测结果展示。
 
 当前持仓状态字段：

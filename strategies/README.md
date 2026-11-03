@@ -107,6 +107,8 @@ go run ./cmd/backtest -strategy-id ema-boll-rsi -run \
   "position": {
     "initial_size_pct": 0.0025,
     "position_leverage": 5,
+    "long_capital_decay_power": 0.5,
+    "short_capital_decay_power": 0.5,
     "max_additions": 2,
     "add_size_multiplier": 2
   }
@@ -115,8 +117,12 @@ go run ./cmd/backtest -strategy-id ema-boll-rsi -run \
 
 `behavior.allow_pyramiding` 是是否允许同向加仓的唯一权威开关。旧策略中的
 `position.allow_pyramiding` 仍可读取，但会在编译前迁移到 `behavior`。
-`position_leverage` 只放大首次开仓仓位；总仓位只受
-`account.exchange_leverage` 限制，实际杠杆由报告动态计算。
+`position_leverage` 用于首仓规模计算，首仓名义金额不超过当前权益；倍增加仓
+通过首仓实际名义金额继承该缩放，固定比例加仓不重复应用。总仓位只受
+`account.exchange_leverage` 限制，动态杠杆由报告按持仓名义金额与权益计算。
+`long_capital_decay_power` 和 `short_capital_decay_power` 分别控制多空首仓的
+盈利衰减，计算式为 `min(1, (initial_cash / current_equity) ^ power)`；默认值
+均为 `0.5`，权益低于初始资金时不会放大仓位。
 
 当前内置指标参数：
 

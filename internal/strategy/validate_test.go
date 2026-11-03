@@ -2,6 +2,7 @@ package strategy
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
 
 	"github.com/YuanJey/crypto-backtest/internal/indicator"
@@ -76,6 +77,30 @@ func TestValidateRejectsExpressionTypeMismatch(t *testing.T) {
 	}}
 	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
 		t.Fatal("expected boolean operand in numeric comparison to fail")
+	}
+}
+
+func TestValidateAcceptsMarketPriceComparedWithAverageEntryPrice(t *testing.T) {
+	definition := validDefinition()
+	definition.Rules = []RuleSpec{{
+		ID:     "close_above_average_entry",
+		When:   Market("close").GTE(Position("avg_entry_price")),
+		Action: ActionSpec{Type: ActionClose, Side: TradeSideLong, SizePct: 1},
+	}}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err != nil {
+		t.Fatalf("expected market price and average entry price comparison to pass: %v", err)
+	}
+}
+
+func TestValidateRejectsMarketPriceComparedWithPositionRatio(t *testing.T) {
+	definition := validDefinition()
+	definition.Rules = []RuleSpec{{
+		ID:     "invalid_price_ratio_comparison",
+		When:   Market("close").GTE(Position("unrealized_pnl_pct")),
+		Action: ActionSpec{Type: ActionClose, Side: TradeSideLong, SizePct: 1},
+	}}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected price and position ratio comparison to fail")
 	}
 }
 
@@ -307,6 +332,32 @@ func TestNormalizeDefaultsLeverageToOne(t *testing.T) {
 			normalized.Account.ExchangeLeverage,
 			normalized.Position.PositionLeverage,
 		)
+	}
+}
+
+func TestNormalizeDefaultsCapitalDecayPower(t *testing.T) {
+	definition := validDefinition()
+	normalized, err := Normalize(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if normalized.Position.LongCapitalDecayPower != DefaultCapitalDecayPower ||
+		normalized.Position.ShortCapitalDecayPower != DefaultCapitalDecayPower {
+		t.Fatalf("unexpected capital decay defaults: %+v", normalized.Position)
+	}
+}
+
+func TestValidateRejectsInvalidCapitalDecayPower(t *testing.T) {
+	definition := validDefinition()
+	definition.Position.LongCapitalDecayPower = -0.1
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected negative long capital decay power to fail")
+	}
+
+	definition = validDefinition()
+	definition.Position.ShortCapitalDecayPower = math.Inf(1)
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected infinite short capital decay power to fail")
 	}
 }
 

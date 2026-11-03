@@ -81,7 +81,14 @@ class StrategyWorkbench {
               </div>
 
               <div class="visual-section">
-                <h3 class="section-heading">杠杆与仓位 (LEVERAGE & POSITION)</h3>
+                <h3 class="section-heading">杠杆管理 (LEVERAGE)</h3>
+                <div class="visual-grid-cards visual-grid-cards--compact" id="leverageCards">
+                  <!-- 动态插入 -->
+                </div>
+              </div>
+
+              <div class="visual-section">
+                <h3 class="section-heading">仓位管理 (POSITION)</h3>
                 <div class="visual-grid-cards" id="positionCards">
                   <!-- 动态插入 -->
                 </div>
@@ -328,6 +335,16 @@ class StrategyWorkbench {
     if (position.position_leverage === undefined || position.position_leverage === null) {
       position.position_leverage = position.target_leverage ?? 1;
     }
+    if (position.long_capital_decay_power === undefined ||
+        position.long_capital_decay_power === null ||
+        position.long_capital_decay_power === 0) {
+      position.long_capital_decay_power = 0.5;
+    }
+    if (position.short_capital_decay_power === undefined ||
+        position.short_capital_decay_power === null ||
+        position.short_capital_decay_power === 0) {
+      position.short_capital_decay_power = 0.5;
+    }
     if (account.market_type === 'spot') {
       account.exchange_leverage = 1;
       position.position_leverage = 1;
@@ -348,6 +365,7 @@ class StrategyWorkbench {
     document.getElementById('viewStrategyDesc').textContent = def.description || '无策略描述说明';
 
     const overview = document.getElementById('overviewCards');
+    const leverageCards = document.getElementById('leverageCards');
     const positionCards = document.getElementById('positionCards');
     const acc = def.account || (def.account = {});
     const data = def.data || {};
@@ -383,7 +401,7 @@ class StrategyWorkbench {
         <input type="text" class="form-control" id="formSymbols" value="${(data.symbols || ['BTC-USDT']).join(', ')}">
       </div>
     `;
-    positionCards.innerHTML = `
+    leverageCards.innerHTML = `
       <div class="visual-card">
         <label class="vcard-label">交易所配置杠杆</label>
         <div class="input-with-unit">
@@ -393,13 +411,15 @@ class StrategyWorkbench {
         </div>
       </div>
       <div class="visual-card">
-        <label class="vcard-label">首次开仓杠杆</label>
+        <label class="vcard-label">实际仓位杠杆</label>
         <div class="input-with-unit">
           <input type="number" class="form-control" id="formPositionLeverage"
             value="${positionLeverage}" min="1" max="${exchangeLeverage}" step="0.1" ${isSpot ? 'disabled' : ''}>
           <span class="input-unit">x</span>
         </div>
       </div>
+    `;
+    positionCards.innerHTML = `
       <div class="visual-card">
         <label class="vcard-label">初始仓位分配</label>
         <div class="input-with-unit">
@@ -407,6 +427,16 @@ class StrategyWorkbench {
             value="${((position.initial_size_pct || 0) * 100).toFixed(6)}" min="0" max="100" step="any">
           <span class="input-unit">%</span>
         </div>
+      </div>
+      <div class="visual-card">
+        <label class="vcard-label">做多资金衰减系数</label>
+        <input type="number" class="form-control" id="formLongCapitalDecayPower"
+          value="${position.long_capital_decay_power}" min="0.01" step="0.05">
+      </div>
+      <div class="visual-card">
+        <label class="vcard-label">做空资金衰减系数</label>
+        <input type="number" class="form-control" id="formShortCapitalDecayPower"
+          value="${position.short_capital_decay_power}" min="0.01" step="0.05">
       </div>
       <div class="visual-card">
         <label class="vcard-label">允许同向加仓</label>
@@ -474,7 +504,6 @@ class StrategyWorkbench {
     document.getElementById('formExchangeLeverage').addEventListener('change', () => {
       const value = Math.max(1, parseNumber('formExchangeLeverage', 1));
       def.account.exchange_leverage = value;
-      def.position.position_leverage = Math.min(def.position.position_leverage || 1, value);
       this.renderOverviewForm(def);
       this.syncToJson();
     });
@@ -490,6 +519,20 @@ class StrategyWorkbench {
         100,
         Math.max(0, parseNumber('formInitialSizePct', 0)),
       ) / 100;
+      this.syncToJson();
+    });
+    document.getElementById('formLongCapitalDecayPower').addEventListener('change', () => {
+      def.position.long_capital_decay_power = Math.max(
+        0.01,
+        parseNumber('formLongCapitalDecayPower', 0.5),
+      );
+      this.syncToJson();
+    });
+    document.getElementById('formShortCapitalDecayPower').addEventListener('change', () => {
+      def.position.short_capital_decay_power = Math.max(
+        0.01,
+        parseNumber('formShortCapitalDecayPower', 0.5),
+      );
       this.syncToJson();
     });
     document.getElementById('formAllowPyramiding').addEventListener('change', (e) => {
@@ -750,6 +793,11 @@ class StrategyWorkbench {
       { label: '行情: 最高价 (high)', value: 'market:high', semantic: 'price_series', domain: 'price' },
       { label: '行情: 最低价 (low)', value: 'market:low', semantic: 'price_series', domain: 'price' },
       { label: '行情: 成交量 (volume)', value: 'market:volume', semantic: 'volume_series', domain: 'volume' },
+      { label: '持仓: 持仓均价', value: 'position:avg_entry_price', semantic: 'position_price', domain: 'price' },
+      { label: '持仓: 最新开仓/加仓价', value: 'position:last_entry_price', semantic: 'position_price', domain: 'price' },
+      { label: '持仓: 未实现盈亏率 (0.02 = 2%)', value: 'position:unrealized_pnl_pct', semantic: 'position_ratio', domain: 'ratio' },
+      { label: '持仓: 开仓次数', value: 'position:entry_count', semantic: 'position_count', domain: 'count' },
+      { label: '持仓: 当前实际杠杆', value: 'position:actual_leverage', semantic: 'position_leverage', domain: 'leverage' },
     ];
     const indicators = (this.currentStrategy && this.currentStrategy.indicators) || [];
     for (const ind of indicators) {
@@ -999,8 +1047,8 @@ class StrategyWorkbench {
             </select>
           `}
           ${isCross ? '<span class="operand-kind-label">同类指标</span>' : isSemantic ? '' : `
-            <button class="btn-toggle-operand" data-ridx="${rIdx}" data-cidx="${cIdx}" title="切换右操作数模式 (常数/序列)">
-              ${isNum ? '常数' : '序列'}
+            <button class="btn-toggle-operand" data-ridx="${rIdx}" data-cidx="${cIdx}" title="切换右操作数模式 (常数/变量)">
+              ${isNum ? '常数' : '变量'}
             </button>
           `}
         </div>
@@ -1338,6 +1386,7 @@ class StrategyWorkbench {
     if (!node) return '';
     if (node.kind === 'reference' && node.ref) {
       if (node.ref.scope === 'market') return `market:${node.ref.field || 'close'}`;
+      if (node.ref.scope === 'position') return `position:${node.ref.field || 'avg_entry_price'}`;
       return `indicator:${node.ref.name || node.ref.id}:${node.ref.field || 'value'}`;
     }
     return '';
@@ -1393,6 +1442,12 @@ class StrategyWorkbench {
       return { kind: 'reference', ref: { scope: 'market', name: 'bar', field: field } };
     }
     const parts = str.split(':');
+    if (parts[0] === 'position') {
+      return {
+        kind: 'reference',
+        ref: { scope: 'position', name: 'current', field: parts[1] || 'avg_entry_price' }
+      };
+    }
     return {
       kind: 'reference',
       ref: {
@@ -1509,7 +1564,9 @@ class StrategyWorkbench {
       position: {
         initial_size_pct: 0.25,
         max_additions: 0,
-        position_leverage: 1
+        position_leverage: 1,
+        long_capital_decay_power: 0.5,
+        short_capital_decay_power: 0.5
       },
       execution: {
         signal_time: 'bar_close',

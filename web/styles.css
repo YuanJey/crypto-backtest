@@ -1300,6 +1300,10 @@ kbd {
   gap: 12px;
 }
 
+.visual-grid-cards--compact {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 380px));
+}
+
 .visual-card {
   padding: 12px 14px;
   background: var(--bg-card);

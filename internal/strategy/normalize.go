@@ -13,6 +13,12 @@ func Normalize(definition Definition) (Definition, error) {
 			definition.Position.PositionLeverage = 1
 		}
 	}
+	if definition.Position.LongCapitalDecayPower == 0 {
+		definition.Position.LongCapitalDecayPower = DefaultCapitalDecayPower
+	}
+	if definition.Position.ShortCapitalDecayPower == 0 {
+		definition.Position.ShortCapitalDecayPower = DefaultCapitalDecayPower
+	}
 	definition.Position.TargetLeverage = 0
 	definition.Position.MaxPositionPct = 0
 	// Exposure caps are legacy configuration. The exchange leverage is the

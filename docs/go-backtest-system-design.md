@@ -203,6 +203,8 @@ type PositionSpec struct {
 	AddSizePct        float64 `json:"add_size_pct,omitempty"`
 	AddSizeMultiplier float64 `json:"add_size_multiplier,omitempty"`
 	PositionLeverage  float64 `json:"position_leverage,omitempty"`
+	LongCapitalDecayPower  float64 `json:"long_capital_decay_power,omitempty"`
+	ShortCapitalDecayPower float64 `json:"short_capital_decay_power,omitempty"`
 }
 
 type ExecutionSpec struct {
@@ -596,11 +598,16 @@ type ActionSpec struct {
 - 若未配置 `add_size_pct` 且配置 `add_size_multiplier`，使用
   `first_entry_notional * add_size_multiplier^entry_count`。
 - `max_additions` 限制当前持仓轮次内的加仓次数，不包含首次开仓。
-- 首次开仓名义金额为 `equity * size_pct * position_leverage`。
-- 规则级或 `add_size_pct` 固定加仓只按当前权益比例计算，不乘
+- 首仓基础名义金额为 `min(equity, equity * size_pct * position_leverage)`。
+- 根据开仓方向使用 `long_capital_decay_power` 或 `short_capital_decay_power`：
+  `decay = min(1, (initial_cash / equity) ^ power)`，实际首仓名义金额为基础值乘以
+  `decay`。默认幂次为 `0.5`；盈利后缩仓，亏损时不放大。
+- 规则级或 `add_size_pct` 固定加仓只按当前权益比例计算，不重复应用
   `position_leverage`。
+- 倍增加仓以本轮首次订单的实际名义金额为基数，因此自动继承
+  `position_leverage` 和资金衰减的缩放结果。
 - `exchange_leverage` 是总名义仓位的唯一杠杆上限；`position_leverage`
-  只用于首次开仓仓位计算，二者未配置时均按 `1x` 兼容。
+  用于首仓规模计算，二者未配置时均按 `1x` 兼容。
 - 达到 `risk.max_drawdown_halt_pct` 后禁止新开仓，但仍允许平仓。
 - 每个资金曲线点返回 `position_leverage = abs(position_notional) / equity`，并提供
   `max_position_leverage` 报告指标。该实际杠杆是动态结果，不是策略配置参数。

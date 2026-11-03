@@ -5,7 +5,10 @@ import (
 	"time"
 )
 
-const SchemaVersion = 1
+const (
+	SchemaVersion            = 1
+	DefaultCapitalDecayPower = 0.5
+)
 
 type Definition struct {
 	SchemaVersion int             `json:"schema_version"`
@@ -58,8 +61,13 @@ type PositionSpec struct {
 	MaxAdditions      int     `json:"max_additions,omitempty"`
 	AddSizePct        float64 `json:"add_size_pct,omitempty"`
 	AddSizeMultiplier float64 `json:"add_size_multiplier,omitempty"`
-	// PositionLeverage only scales the first entry allocation.
+	// PositionLeverage scales the initial allocation. Multiplier additions
+	// inherit it through the actual first-entry notional.
 	PositionLeverage float64 `json:"position_leverage,omitempty"`
+	// Capital decay reduces new initial positions as equity grows. It never
+	// enlarges positions when equity is below the initial account balance.
+	LongCapitalDecayPower  float64 `json:"long_capital_decay_power,omitempty"`
+	ShortCapitalDecayPower float64 `json:"short_capital_decay_power,omitempty"`
 	// MaxPositionPct and TargetLeverage are legacy aliases retained for
 	// decoding old revisions. Normalize clears both fields.
 	MaxPositionPct float64 `json:"max_position_pct,omitempty"`

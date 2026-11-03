@@ -189,6 +189,7 @@ func fillOrder(portfolio *portfolio, result *Result, orderIndex int, bar market.
 			*portfolio,
 			order.Action,
 			plan.Strategy.Position,
+			plan.Strategy.Account.InitialCash,
 			plan.Strategy.Account.ExchangeLeverage,
 			price,
 		)
@@ -281,6 +282,7 @@ func resolveOpenNotionalPct(
 	portfolio portfolio,
 	action strategy.ActionSpec,
 	position strategy.PositionSpec,
+	initialCash float64,
 	exchangeLeverage float64,
 	price float64,
 ) (float64, bool) {
@@ -296,6 +298,16 @@ func resolveOpenNotionalPct(
 			allocationPct = position.InitialSizePct
 		}
 		notionalPct = allocationPct * position.PositionLeverage
+		// Keep the same safety cap as the martingale position sizing model:
+		// a single initial entry cannot exceed the current account equity.
+		if notionalPct > 1 {
+			notionalPct = 1
+		}
+		decayPower := position.LongCapitalDecayPower
+		if action.Side == strategy.TradeSideShort {
+			decayPower = position.ShortCapitalDecayPower
+		}
+		notionalPct *= capitalDecayFactor(initialCash, equity, decayPower)
 	} else {
 		switch {
 		case action.SizePct > 0:
@@ -323,6 +335,16 @@ func resolveOpenNotionalPct(
 		notionalPct = availableNotional / equity
 	}
 	return notionalPct, notionalPct > 0
+}
+
+func capitalDecayFactor(initialEquity, currentEquity, power float64) float64 {
+	if initialEquity <= 0 || currentEquity <= 0 {
+		return 1
+	}
+	if power <= 0 {
+		power = strategy.DefaultCapitalDecayPower
+	}
+	return math.Min(1, math.Pow(initialEquity/currentEquity, power))
 }
 
 func drawdownHalted(equity, peak, limit float64) bool {

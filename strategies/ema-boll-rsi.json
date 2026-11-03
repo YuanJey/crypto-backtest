@@ -24,7 +24,9 @@
   "position": {
     "initial_size_pct": 0.2,
     "max_additions": 0,
-    "position_leverage": 1
+    "position_leverage": 1,
+    "long_capital_decay_power": 0.5,
+    "short_capital_decay_power": 0.5
   },
   "execution": {
     "signal_time": "bar_close",
