@@ -285,19 +285,27 @@ and(position.flat(), ema_fast_15m.gte(ema_slow_1h))
 
 ```json
 {
+  "account": {
+    "market_type": "perpetual",
+    "exchange_leverage": 10
+  },
   "behavior": {
     "allow_pyramiding": true
   },
   "position": {
-    "initial_size_pct": 0.2,
+    "initial_size_pct": 0.0025,
+    "position_leverage": 5,
     "max_additions": 2,
-    "add_size_multiplier": 2,
-    "max_position_pct": 1
+    "add_size_multiplier": 2
   }
 }
 ```
 
 规则级 `action.size_pct` 可以覆盖策略默认仓位；不填写时由 `PositionSpec` 计算。
+比例字段没有 5% 的业务下限；`0.0025` 表示分配权益的 `0.25%`。
+首次开仓名义金额为 `equity * size_pct * position_leverage`。固定比例加仓不再乘
+`position_leverage`；倍增加仓以本轮首次订单的实际名义金额为基数。
+总名义仓位只受 `account.exchange_leverage` 限制，实际杠杆仅作为回测结果展示。
 
 当前持仓状态字段：
 
@@ -308,6 +316,7 @@ and(position.flat(), ema_fast_15m.gte(ema_slow_1h))
 - `position.entry_count`
 - `position.unrealized_pnl_pct`
 - `position.side`
+- `position.actual_leverage`
 
 通用的分层加仓条件可以表达为：
 

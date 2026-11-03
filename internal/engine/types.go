@@ -44,11 +44,12 @@ type Fill struct {
 }
 
 type EquityPoint struct {
-	TimeMS      int64   `json:"time_ms"`
-	Equity      float64 `json:"equity"`
-	Cash        float64 `json:"cash"`
-	PositionQty float64 `json:"position_qty"`
-	Close       float64 `json:"close"`
+	TimeMS           int64   `json:"time_ms"`
+	Equity           float64 `json:"equity"`
+	Cash             float64 `json:"cash"`
+	PositionQty      float64 `json:"position_qty"`
+	PositionLeverage float64 `json:"position_leverage"`
+	Close            float64 `json:"close"`
 }
 
 type RunRequest struct {
@@ -69,11 +70,12 @@ type ReportSpec struct {
 type MetricType string
 
 const (
-	MetricFinalEquity    MetricType = "final_equity"
-	MetricTotalReturnPct MetricType = "total_return_pct"
-	MetricMaxDrawdownPct MetricType = "max_drawdown_pct"
-	MetricOrderCount     MetricType = "order_count"
-	MetricFillCount      MetricType = "fill_count"
+	MetricFinalEquity         MetricType = "final_equity"
+	MetricTotalReturnPct      MetricType = "total_return_pct"
+	MetricMaxDrawdownPct      MetricType = "max_drawdown_pct"
+	MetricOrderCount          MetricType = "order_count"
+	MetricFillCount           MetricType = "fill_count"
+	MetricMaxPositionLeverage MetricType = "max_position_leverage"
 )
 
 type IndicatorOverlay struct {
@@ -96,6 +98,7 @@ func DefaultReportSpec() ReportSpec {
 			MetricMaxDrawdownPct,
 			MetricOrderCount,
 			MetricFillCount,
+			MetricMaxPositionLeverage,
 		},
 	}
 }

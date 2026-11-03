@@ -31,9 +31,10 @@ type DataSelection struct {
 }
 
 type AccountSpec struct {
-	MarketType    MarketType `json:"market_type"`
-	InitialCash   float64    `json:"initial_cash"`
-	QuoteCurrency string     `json:"quote_currency"`
+	MarketType       MarketType `json:"market_type"`
+	InitialCash      float64    `json:"initial_cash"`
+	QuoteCurrency    string     `json:"quote_currency"`
+	ExchangeLeverage float64    `json:"exchange_leverage,omitempty"`
 }
 
 type MarketType string
@@ -57,7 +58,12 @@ type PositionSpec struct {
 	MaxAdditions      int     `json:"max_additions,omitempty"`
 	AddSizePct        float64 `json:"add_size_pct,omitempty"`
 	AddSizeMultiplier float64 `json:"add_size_multiplier,omitempty"`
-	MaxPositionPct    float64 `json:"max_position_pct,omitempty"`
+	// PositionLeverage only scales the first entry allocation.
+	PositionLeverage float64 `json:"position_leverage,omitempty"`
+	// MaxPositionPct and TargetLeverage are legacy aliases retained for
+	// decoding old revisions. Normalize clears both fields.
+	MaxPositionPct float64 `json:"max_position_pct,omitempty"`
+	TargetLeverage float64 `json:"target_leverage,omitempty"`
 }
 
 type ExecutionSpec struct {

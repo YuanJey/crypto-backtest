@@ -93,6 +93,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const liveReturn = document.getElementById('liveReturn');
   const liveDrawdown = document.getElementById('liveDrawdown');
   const livePosition = document.getElementById('livePosition');
+  const liveLeverage = document.getElementById('liveLeverage');
 
   // 4. 事件绑定：回放控制
   btnPlayPause.addEventListener('click', () => replay.togglePlay());
@@ -265,7 +266,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     equityEmptyState.textContent = '暂无资金数据';
     equityStatus.textContent = message;
     equityStatus.className = 'equity-status';
-    for (const element of [liveEquity, liveReturn, liveDrawdown, livePosition]) {
+    for (const element of [liveEquity, liveReturn, liveDrawdown, livePosition, liveLeverage]) {
       element.textContent = '--';
       element.className = 'equity-live-value';
     }
@@ -424,6 +425,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     liveDrawdown.textContent = `-${Math.max(0, drawdown).toFixed(2)}%`;
     liveDrawdown.className = `equity-live-value ${drawdown > 0 ? 'negative' : ''}`;
     livePosition.textContent = Number(current.position_qty || 0).toFixed(4);
+    liveLeverage.textContent = `${Number(current.position_leverage || 0).toFixed(2)}x`;
     equityStatus.textContent = `${visibleCount} / ${points.length} 点`;
     equityStatus.className = 'equity-status ready';
   }
@@ -588,6 +590,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               'final_equity',
               'total_return_pct',
               'max_drawdown_pct',
+              'max_position_leverage',
               'order_count',
               'fill_count'
             ],
@@ -628,7 +631,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
           const bmReturn = document.getElementById('bmReturn');
           const bmMaxDD = document.getElementById('bmMaxDD');
-          const bmWinRate = document.getElementById('bmWinRate');
+          const bmMaxLeverage = document.getElementById('bmMaxLeverage');
           const bmTrades = document.getElementById('bmTrades');
           const bmEquity = document.getElementById('bmEquity');
 
@@ -640,10 +643,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const maxDD = metrics.max_drawdown_pct || 0;
             bmMaxDD.textContent = `-${Math.abs(maxDD * 100).toFixed(2)}%`;
           }
-          if (bmWinRate) {
-            bmWinRate.textContent = metrics.win_rate !== undefined
-              ? `${(metrics.win_rate * 100).toFixed(1)}%`
-              : '--';
+          if (bmMaxLeverage) {
+            bmMaxLeverage.textContent = `${Number(metrics.max_position_leverage || 0).toFixed(2)}x`;
           }
           if (bmTrades) {
             const trades = resp.fill_count ?? resp.order_count ?? 0;

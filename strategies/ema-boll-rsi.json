@@ -13,7 +13,8 @@
   "account": {
     "market_type": "perpetual",
     "initial_cash": 10000,
-    "quote_currency": "USDT"
+    "quote_currency": "USDT",
+    "exchange_leverage": 1
   },
   "behavior": {
     "allow_pyramiding": false,
@@ -23,7 +24,7 @@
   "position": {
     "initial_size_pct": 0.2,
     "max_additions": 0,
-    "max_position_pct": 1
+    "position_leverage": 1
   },
   "execution": {
     "signal_time": "bar_close",
@@ -39,8 +40,6 @@
     }
   },
   "risk": {
-    "max_symbol_equity_pct": 1,
-    "max_total_exposure_pct": 1,
     "max_open_positions": 1,
     "max_drawdown_halt_pct": 0.25
   },

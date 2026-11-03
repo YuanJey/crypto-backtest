@@ -97,20 +97,26 @@ go run ./cmd/backtest -strategy-id ema-boll-rsi -run \
 
 ```json
 {
+  "account": {
+    "market_type": "perpetual",
+    "exchange_leverage": 10
+  },
   "behavior": {
     "allow_pyramiding": true
   },
   "position": {
-    "initial_size_pct": 0.2,
+    "initial_size_pct": 0.0025,
+    "position_leverage": 5,
     "max_additions": 2,
-    "add_size_multiplier": 2,
-    "max_position_pct": 1
+    "add_size_multiplier": 2
   }
 }
 ```
 
 `behavior.allow_pyramiding` 是是否允许同向加仓的唯一权威开关。旧策略中的
 `position.allow_pyramiding` 仍可读取，但会在编译前迁移到 `behavior`。
+`position_leverage` 只放大首次开仓仓位；总仓位只受
+`account.exchange_leverage` 限制，实际杠杆由报告动态计算。
 
 当前内置指标参数：
 

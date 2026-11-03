@@ -185,9 +185,10 @@ type DataSelection struct {
 }
 
 type AccountSpec struct {
-	MarketType    MarketType `json:"market_type"`
-	InitialCash   float64    `json:"initial_cash"`
-	QuoteCurrency string     `json:"quote_currency"`
+	MarketType      MarketType `json:"market_type"`
+	InitialCash     float64    `json:"initial_cash"`
+	QuoteCurrency   string     `json:"quote_currency"`
+	ExchangeLeverage float64   `json:"exchange_leverage,omitempty"`
 }
 
 type BehaviorSpec struct {
@@ -201,7 +202,7 @@ type PositionSpec struct {
 	MaxAdditions      int     `json:"max_additions,omitempty"`
 	AddSizePct        float64 `json:"add_size_pct,omitempty"`
 	AddSizeMultiplier float64 `json:"add_size_multiplier,omitempty"`
-	MaxPositionPct    float64 `json:"max_position_pct,omitempty"`
+	PositionLeverage  float64 `json:"position_leverage,omitempty"`
 }
 
 type ExecutionSpec struct {
@@ -223,16 +224,17 @@ type SlippageSpec struct {
 }
 
 type RiskSpec struct {
-	MaxSymbolEquityPct  float64 `json:"max_symbol_equity_pct"`
-	MaxTotalExposurePct float64 `json:"max_total_exposure_pct"`
-	MaxOpenPositions    int     `json:"max_open_positions"`
-	MaxDrawdownHaltPct  float64 `json:"max_drawdown_halt_pct"`
+	MaxOpenPositions   int     `json:"max_open_positions"`
+	MaxDrawdownHaltPct float64 `json:"max_drawdown_halt_pct"`
 }
 ```
 
 `BehaviorSpec.AllowPyramiding` 是是否允许同向加仓的唯一权威来源。为兼容已保存的
 schema v1 策略，后端仍接受旧的 `position.allow_pyramiding`，但会在规范化阶段迁移
 到 `behavior.allow_pyramiding`，编译计划中不保留第二份开关。
+旧的 `position.target_leverage` 会迁移为 `position.position_leverage`；
+`position.max_position_pct`、`risk.max_symbol_equity_pct` 和
+`risk.max_total_exposure_pct` 只用于解码历史版本，不再形成独立运行时上限。
 
 `Start` 包含在回测区间内，`End` 不包含在回测区间内，统一采用 `[start, end)` 语义。
 
@@ -591,12 +593,17 @@ type ActionSpec struct {
 
 - 首次开仓用 `initial_size_pct`。
 - 加仓优先用 `add_size_pct`。
-- 若未配置 `add_size_pct` 且配置 `add_size_multiplier`，使用 `initial_size_pct * add_size_multiplier^entry_count`。
+- 若未配置 `add_size_pct` 且配置 `add_size_multiplier`，使用
+  `first_entry_notional * add_size_multiplier^entry_count`。
 - `max_additions` 限制当前持仓轮次内的加仓次数，不包含首次开仓。
-- `max_position_pct` 限制当前标的总仓位占权益比例。
-- 最终仓位上限取 `position.max_position_pct`、`risk.max_symbol_equity_pct` 和
-  `risk.max_total_exposure_pct` 中的最小有效值。
+- 首次开仓名义金额为 `equity * size_pct * position_leverage`。
+- 规则级或 `add_size_pct` 固定加仓只按当前权益比例计算，不乘
+  `position_leverage`。
+- `exchange_leverage` 是总名义仓位的唯一杠杆上限；`position_leverage`
+  只用于首次开仓仓位计算，二者未配置时均按 `1x` 兼容。
 - 达到 `risk.max_drawdown_halt_pct` 后禁止新开仓，但仍允许平仓。
+- 每个资金曲线点返回 `position_leverage = abs(position_notional) / equity`，并提供
+  `max_position_leverage` 报告指标。该实际杠杆是动态结果，不是策略配置参数。
 
 规则条件可以直接保存为 AST，也可以保存为公共链式表达式字符串，由后端统一解析为 AST：
 
@@ -689,8 +696,6 @@ type ActionSpec struct {
     }
   },
   "risk": {
-    "max_symbol_equity_pct": 0.3,
-    "max_total_exposure_pct": 1,
     "max_open_positions": 1,
     "max_drawdown_halt_pct": 0.25
   },

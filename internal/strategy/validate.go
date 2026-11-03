@@ -2,6 +2,7 @@ package strategy
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/YuanJey/crypto-backtest/internal/indicator"
@@ -36,7 +37,7 @@ func Validate(definition Definition, registry *indicator.Registry) error {
 	if err := validateBehavior(definition.Behavior); err != nil {
 		return err
 	}
-	if err := validatePosition(definition.Position, definition.Behavior); err != nil {
+	if err := validatePosition(definition.Position, definition.Behavior, definition.Account); err != nil {
 		return err
 	}
 	if err := validateExecution(definition.Execution); err != nil {
@@ -89,11 +90,19 @@ func validateAccount(account AccountSpec) error {
 	default:
 		return fmt.Errorf("account.market_type is invalid")
 	}
-	if account.InitialCash <= 0 {
+	if !isFinite(account.InitialCash) || account.InitialCash <= 0 {
 		return fmt.Errorf("account.initial_cash must be > 0")
 	}
 	if strings.TrimSpace(account.QuoteCurrency) == "" {
 		return fmt.Errorf("account.quote_currency is required")
+	}
+	if math.IsNaN(account.ExchangeLeverage) ||
+		math.IsInf(account.ExchangeLeverage, 0) ||
+		account.ExchangeLeverage < 1 {
+		return fmt.Errorf("account.exchange_leverage must be finite and >= 1")
+	}
+	if account.MarketType == MarketTypeSpot && account.ExchangeLeverage != 1 {
+		return fmt.Errorf("spot account.exchange_leverage must be 1")
 	}
 	return nil
 }
@@ -108,7 +117,17 @@ func validateBehavior(behavior BehaviorSpec) error {
 	return nil
 }
 
-func validatePosition(position PositionSpec, behavior BehaviorSpec) error {
+func validatePosition(position PositionSpec, behavior BehaviorSpec, account AccountSpec) error {
+	for field, value := range map[string]float64{
+		"initial_size_pct":    position.InitialSizePct,
+		"add_size_pct":        position.AddSizePct,
+		"add_size_multiplier": position.AddSizeMultiplier,
+		"position_leverage":   position.PositionLeverage,
+	} {
+		if !isFinite(value) {
+			return fmt.Errorf("position.%s must be finite", field)
+		}
+	}
 	if position.InitialSizePct < 0 || position.InitialSizePct > 1 {
 		return fmt.Errorf("position.initial_size_pct must be in [0, 1]")
 	}
@@ -121,8 +140,11 @@ func validatePosition(position PositionSpec, behavior BehaviorSpec) error {
 	if position.AddSizeMultiplier < 0 {
 		return fmt.Errorf("position.add_size_multiplier must be >= 0")
 	}
-	if position.MaxPositionPct < 0 || position.MaxPositionPct > 1 {
-		return fmt.Errorf("position.max_position_pct must be in [0, 1]")
+	if position.PositionLeverage < 1 ||
+		position.PositionLeverage > account.ExchangeLeverage {
+		return fmt.Errorf(
+			"position.position_leverage must be finite and in [1, account.exchange_leverage]",
+		)
 	}
 	if position.MaxAdditions > 0 && !behavior.AllowPyramiding {
 		return fmt.Errorf("position.max_additions requires behavior.allow_pyramiding=true")
@@ -161,11 +183,8 @@ func validateExecution(execution ExecutionSpec) error {
 }
 
 func validateRisk(risk RiskSpec) error {
-	if risk.MaxSymbolEquityPct <= 0 || risk.MaxSymbolEquityPct > 1 {
-		return fmt.Errorf("risk.max_symbol_equity_pct must be in (0, 1]")
-	}
-	if risk.MaxTotalExposurePct <= 0 || risk.MaxTotalExposurePct > 1 {
-		return fmt.Errorf("risk.max_total_exposure_pct must be in (0, 1]")
+	if !isFinite(risk.MaxDrawdownHaltPct) {
+		return fmt.Errorf("risk.max_drawdown_halt_pct must be finite")
 	}
 	if risk.MaxOpenPositions != 1 {
 		return fmt.Errorf("risk.max_open_positions must be 1 for the single-symbol engine")
@@ -174,6 +193,10 @@ func validateRisk(risk RiskSpec) error {
 		return fmt.Errorf("risk.max_drawdown_halt_pct must be in [0, 1]")
 	}
 	return nil
+}
+
+func isFinite(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
 type indicatorOutputs map[string]map[string]indicator.OutputDefinition
@@ -539,7 +562,7 @@ func validateValueRef(ref ValueRef, indicatorOutputs indicatorOutputs) error {
 			return fmt.Errorf("position ref name must be current")
 		}
 		switch ref.Field {
-		case "quantity", "abs_quantity", "entry_price", "avg_entry_price", "last_entry_price", "entry_count", "unrealized_pnl_pct", "side":
+		case "quantity", "abs_quantity", "entry_price", "avg_entry_price", "last_entry_price", "entry_count", "unrealized_pnl_pct", "side", "actual_leverage":
 			return nil
 		default:
 			return fmt.Errorf("unknown position field %q", ref.Field)

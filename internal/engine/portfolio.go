@@ -13,6 +13,7 @@ type portfolio struct {
 	avgPrice       float64
 	entryCount     int
 	lastEntryPrice float64
+	firstNotional  float64
 }
 
 func newPortfolio(marketType strategy.MarketType, initialCash float64) portfolio {
@@ -42,13 +43,13 @@ func (p portfolio) currentSide() strategy.TradeSide {
 	return ""
 }
 
-func (p *portfolio) open(side strategy.TradeSide, price float64, sizePct float64, feeRate float64, allowPyramiding bool) (float64, float64, bool) {
+func (p *portfolio) open(side strategy.TradeSide, price float64, notionalPct float64, feeRate float64, allowPyramiding bool) (float64, float64, bool) {
 	if p.quantity != 0 {
 		if p.currentSide() != side || !allowPyramiding {
 			return 0, 0, false
 		}
 	}
-	notional := p.equity(price) * sizePct
+	notional := p.equity(price) * notionalPct
 	if notional <= 0 {
 		return 0, 0, false
 	}
@@ -71,6 +72,9 @@ func (p *portfolio) open(side strategy.TradeSide, price float64, sizePct float64
 	} else {
 		p.cash -= fee
 	}
+	if p.entryCount == 0 {
+		p.firstNotional = notional
+	}
 	p.addQuantity(quantity, price)
 	p.entryCount++
 	p.lastEntryPrice = price
@@ -79,6 +83,14 @@ func (p *portfolio) open(side strategy.TradeSide, price float64, sizePct float64
 
 func (p portfolio) positionNotional(markPrice float64) float64 {
 	return math.Abs(p.quantity) * markPrice
+}
+
+func (p portfolio) positionLeverage(markPrice float64) float64 {
+	equity := p.equity(markPrice)
+	if equity <= 0 {
+		return 0
+	}
+	return p.positionNotional(markPrice) / equity
 }
 
 func (p *portfolio) close(side strategy.TradeSide, price float64, sizePct float64, feeRate float64) (float64, float64, float64, bool) {
@@ -131,4 +143,5 @@ func (p *portfolio) resetPosition() {
 	p.avgPrice = 0
 	p.entryCount = 0
 	p.lastEntryPrice = 0
+	p.firstNotional = 0
 }

@@ -295,6 +295,69 @@ func TestNormalizeMigratesLegacyPyramidingFlag(t *testing.T) {
 	}
 }
 
+func TestNormalizeDefaultsLeverageToOne(t *testing.T) {
+	definition := validDefinition()
+	normalized, err := Normalize(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if normalized.Account.ExchangeLeverage != 1 ||
+		normalized.Position.PositionLeverage != 1 {
+		t.Fatalf("unexpected leverage defaults: account=%f position=%f",
+			normalized.Account.ExchangeLeverage,
+			normalized.Position.PositionLeverage,
+		)
+	}
+}
+
+func TestNormalizeMigratesLegacyLeverageFields(t *testing.T) {
+	definition := validDefinition()
+	definition.Account.MarketType = MarketTypePerpetual
+	definition.Account.ExchangeLeverage = 10
+	definition.Position.TargetLeverage = 5
+	definition.Position.MaxPositionPct = 4
+	definition.Risk.MaxSymbolEquityPct = 0.25
+	definition.Risk.MaxTotalExposurePct = 0.5
+
+	normalized, err := Normalize(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if normalized.Position.PositionLeverage != 5 {
+		t.Fatalf("position leverage=%f, want migrated 5", normalized.Position.PositionLeverage)
+	}
+	if normalized.Position.TargetLeverage != 0 || normalized.Position.MaxPositionPct != 0 {
+		t.Fatalf("legacy position fields were not cleared: %+v", normalized.Position)
+	}
+	if normalized.Risk.MaxSymbolEquityPct != 10 ||
+		normalized.Risk.MaxTotalExposurePct != 10 {
+		t.Fatalf("legacy exposure caps were not aligned to exchange leverage: %+v", normalized.Risk)
+	}
+}
+
+func TestValidatePerpetualLeverageConfiguration(t *testing.T) {
+	definition := validDefinition()
+	definition.Account.MarketType = MarketTypePerpetual
+	definition.Account.ExchangeLeverage = 10
+	definition.Position.PositionLeverage = 5
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err != nil {
+		t.Fatalf("expected perpetual leverage configuration to pass: %v", err)
+	}
+
+	definition.Position.PositionLeverage = 11
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected position leverage above exchange leverage to fail")
+	}
+}
+
+func TestValidateRejectsSpotLeverage(t *testing.T) {
+	definition := validDefinition()
+	definition.Position.PositionLeverage = 2
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected spot leverage above 1 to fail")
+	}
+}
+
 func TestValidateMultiTimeframeLongShortRules(t *testing.T) {
 	definition := validDefinition()
 	definition.Account.MarketType = MarketTypePerpetual

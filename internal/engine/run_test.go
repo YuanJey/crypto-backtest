@@ -86,7 +86,6 @@ func TestRunSupportsStateDrivenPyramiding(t *testing.T) {
 		AllowPyramiding:   true,
 		MaxAdditions:      2,
 		AddSizeMultiplier: 2,
-		MaxPositionPct:    1,
 	}
 	definition.Rules = []strategy.RuleSpec{{
 		ID:        "add_long",
@@ -113,14 +112,13 @@ func TestRunSupportsStateDrivenPyramiding(t *testing.T) {
 	}
 }
 
-func TestRunCapsPyramidingSizeByMaxPositionPct(t *testing.T) {
+func TestRunCapsPyramidingSizeByExchangeLeverage(t *testing.T) {
 	definition := baseDefinition()
 	definition.Position = strategy.PositionSpec{
 		InitialSizePct:    0.6,
 		AllowPyramiding:   true,
 		MaxAdditions:      5,
 		AddSizeMultiplier: 2,
-		MaxPositionPct:    0.7,
 	}
 	definition.Rules = []strategy.RuleSpec{{
 		ID:        "add_long",
@@ -155,7 +153,6 @@ func TestRunDoesNotPyramidWhenMaxAdditionsIsZero(t *testing.T) {
 	definition.Position = strategy.PositionSpec{
 		InitialSizePct: 0.2,
 		MaxAdditions:   0,
-		MaxPositionPct: 1,
 	}
 	definition.Rules = []strategy.RuleSpec{{
 		ID:     "open_long",
@@ -184,7 +181,6 @@ func TestRunAppliesCooldownAfterFill(t *testing.T) {
 		InitialSizePct: 0.1,
 		MaxAdditions:   4,
 		AddSizePct:     0.1,
-		MaxPositionPct: 1,
 	}
 	definition.Rules = []strategy.RuleSpec{{
 		ID:     "open_long",
@@ -208,9 +204,12 @@ func TestRunAppliesCooldownAfterFill(t *testing.T) {
 	}
 }
 
-func TestRunCapsOpenByRiskExposure(t *testing.T) {
+func TestRunUsesExchangeLeverageAsOnlyExposureCap(t *testing.T) {
 	definition := baseDefinition()
+	definition.Account.ExchangeLeverage = 2
+	definition.Position.PositionLeverage = 2
 	definition.Risk.MaxSymbolEquityPct = 0.25
+	definition.Risk.MaxTotalExposurePct = 0.25
 	definition.Rules = []strategy.RuleSpec{{
 		ID:     "open_long",
 		When:   strategy.Bool(true),
@@ -229,8 +228,133 @@ func TestRunCapsOpenByRiskExposure(t *testing.T) {
 		t.Fatalf("len(result.Fills)=%d, want 1", len(result.Fills))
 	}
 	notional := math.Abs(result.Fills[0].Quantity) * result.Fills[0].Price
-	if notional > definition.Account.InitialCash*0.25+1e-9 {
-		t.Fatalf("fill notional=%f exceeds risk cap", notional)
+	if math.Abs(notional-definition.Account.InitialCash*2) > 1e-9 {
+		t.Fatalf("fill notional=%f, want exchange leverage cap %f", notional, definition.Account.InitialCash*2)
+	}
+}
+
+func TestRunAppliesPositionLeverageAndReportsActualLeverage(t *testing.T) {
+	definition := baseDefinition()
+	definition.Account.ExchangeLeverage = 10
+	definition.Position = strategy.PositionSpec{
+		PositionLeverage: 5,
+	}
+	definition.Rules = []strategy.RuleSpec{{
+		ID:     "open_long",
+		When:   strategy.Bool(true),
+		Action: strategy.ActionSpec{Type: strategy.ActionOpen, Side: strategy.TradeSideLong, SizePct: 0.2},
+	}}
+	plan, err := compiler.Compile(definition, indicator.MustBuiltinRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Run(context.Background(), plan, RunRequest{
+		Bars: testBars(3),
+		Report: ReportSpec{
+			EquityCurve: true,
+			Metrics:     []MetricType{MetricMaxPositionLeverage},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Fills) != 0 {
+		t.Fatalf("fills should be omitted by report spec: %+v", result.Fills)
+	}
+	if result.TotalFills != 1 {
+		t.Fatalf("TotalFills=%d, want 1", result.TotalFills)
+	}
+	maxLeverage := result.Metrics[MetricMaxPositionLeverage]
+	if maxLeverage < 0.9 || maxLeverage > 1.1 {
+		t.Fatalf("max actual leverage=%f, want approximately 1x", maxLeverage)
+	}
+	if len(result.EquityCurve) == 0 ||
+		result.EquityCurve[len(result.EquityCurve)-1].PositionLeverage <= 0 {
+		t.Fatalf("expected equity curve to report actual leverage: %+v", result.EquityCurve)
+	}
+}
+
+func TestRunDoesNotApplyPositionLeverageToFixedAddition(t *testing.T) {
+	definition := baseDefinition()
+	definition.Account.ExchangeLeverage = 10
+	definition.Behavior.AllowPyramiding = true
+	definition.Execution.Fee.TakerRate = 0
+	definition.Position = strategy.PositionSpec{
+		InitialSizePct:   0.2,
+		PositionLeverage: 5,
+		MaxAdditions:     1,
+		AddSizePct:       0.1,
+	}
+	definition.Rules = []strategy.RuleSpec{{
+		ID:     "open_long",
+		When:   strategy.Bool(true),
+		Action: strategy.ActionSpec{Type: strategy.ActionOpen, Side: strategy.TradeSideLong},
+	}}
+	plan, err := compiler.Compile(definition, indicator.MustBuiltinRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Run(context.Background(), plan, RunRequest{Bars: constantPriceBars(4, 100)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Fills) != 2 {
+		t.Fatalf("len(result.Fills)=%d, want initial entry and one addition", len(result.Fills))
+	}
+	firstNotional := math.Abs(result.Fills[0].Quantity) * result.Fills[0].Price
+	secondNotional := math.Abs(result.Fills[1].Quantity) * result.Fills[1].Price
+	if math.Abs(firstNotional-10_000) > 1e-9 {
+		t.Fatalf("first notional=%f, want 10000", firstNotional)
+	}
+	if math.Abs(secondNotional-1_000) > 1e-9 {
+		t.Fatalf("fixed addition notional=%f, want 1000 without leverage multiplier", secondNotional)
+	}
+}
+
+func TestRunMultiplierAdditionUsesFirstEntryNotionalWithoutPositionLeverageCap(t *testing.T) {
+	definition := baseDefinition()
+	definition.Account.ExchangeLeverage = 10
+	definition.Behavior.AllowPyramiding = true
+	definition.Execution.Fee.TakerRate = 0
+	definition.Position = strategy.PositionSpec{
+		InitialSizePct:    0.2,
+		PositionLeverage:  1,
+		MaxAdditions:      2,
+		AddSizeMultiplier: 2,
+	}
+	definition.Rules = []strategy.RuleSpec{{
+		ID:     "open_long",
+		When:   strategy.Bool(true),
+		Action: strategy.ActionSpec{Type: strategy.ActionOpen, Side: strategy.TradeSideLong},
+	}}
+	plan, err := compiler.Compile(definition, indicator.MustBuiltinRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Run(context.Background(), plan, RunRequest{Bars: constantPriceBars(5, 100)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Fills) != 3 {
+		t.Fatalf("len(result.Fills)=%d, want initial entry and two additions", len(result.Fills))
+	}
+	wants := []float64{2_000, 4_000, 8_000}
+	for index, fill := range result.Fills {
+		notional := math.Abs(fill.Quantity) * fill.Price
+		if math.Abs(notional-wants[index]) > 1e-9 {
+			t.Fatalf("fill %d notional=%f, want %f", index, notional, wants[index])
+		}
+	}
+	finalPoint := result.EquityCurve[len(result.EquityCurve)-1]
+	if finalPoint.PositionLeverage <= definition.Position.PositionLeverage {
+		t.Fatalf(
+			"actual leverage=%f, want above first-entry leverage=%f after additions",
+			finalPoint.PositionLeverage,
+			definition.Position.PositionLeverage,
+		)
 	}
 }
 
@@ -241,7 +365,6 @@ func TestRunHaltsNewEntriesAtMaxDrawdown(t *testing.T) {
 		InitialSizePct: 0.5,
 		MaxAdditions:   4,
 		AddSizePct:     0.1,
-		MaxPositionPct: 1,
 	}
 	definition.Risk.MaxDrawdownHaltPct = 0.001
 	definition.Rules = []strategy.RuleSpec{{
@@ -552,6 +675,17 @@ func testBars(count int) []market.Bar {
 			TradeCount:  1,
 			State:       market.BarStateClosed,
 		})
+	}
+	return bars
+}
+
+func constantPriceBars(count int, price float64) []market.Bar {
+	bars := testBars(count)
+	for index := range bars {
+		bars[index].Open = price
+		bars[index].High = price
+		bars[index].Low = price
+		bars[index].Close = price
 	}
 	return bars
 }

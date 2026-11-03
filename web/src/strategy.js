@@ -80,6 +80,13 @@ class StrategyWorkbench {
                 </div>
               </div>
 
+              <div class="visual-section">
+                <h3 class="section-heading">杠杆与仓位 (LEVERAGE & POSITION)</h3>
+                <div class="visual-grid-cards" id="positionCards">
+                  <!-- 动态插入 -->
+                </div>
+              </div>
+
               <!-- 指标配置卡片组 -->
               <div class="visual-section">
                 <div class="section-heading-row">
@@ -310,15 +317,51 @@ class StrategyWorkbench {
     }
   }
 
+  migrateLeverageConfig(def) {
+    const account = def.account || (def.account = {});
+    const position = def.position || (def.position = {});
+    const risk = def.risk || (def.risk = {});
+
+    if (account.exchange_leverage === undefined || account.exchange_leverage === null) {
+      account.exchange_leverage = 1;
+    }
+    if (position.position_leverage === undefined || position.position_leverage === null) {
+      position.position_leverage = position.target_leverage ?? 1;
+    }
+    if (account.market_type === 'spot') {
+      account.exchange_leverage = 1;
+      position.position_leverage = 1;
+    }
+
+    delete position.target_leverage;
+    delete position.max_position_pct;
+    delete risk.max_symbol_equity_pct;
+    delete risk.max_total_exposure_pct;
+    return def;
+  }
+
   renderOverviewForm(def) {
+    this.migrateLeverageConfig(def);
     document.getElementById('viewStrategyName').textContent = def.name || def.id;
     document.getElementById('viewStrategyId').textContent = def.id;
     document.getElementById('viewMarketType').textContent = (def.account && def.account.market_type) || 'spot';
     document.getElementById('viewStrategyDesc').textContent = def.description || '无策略描述说明';
 
     const overview = document.getElementById('overviewCards');
-    const acc = def.account || {};
+    const positionCards = document.getElementById('positionCards');
+    const acc = def.account || (def.account = {});
     const data = def.data || {};
+    const position = def.position || (def.position = {});
+    const behavior = def.behavior || (def.behavior = {});
+    const exchangeLeverage = acc.exchange_leverage || 1;
+    const positionLeverage = position.position_leverage || 1;
+    const isSpot = acc.market_type === 'spot';
+    const addMode = position.add_size_multiplier > 0
+      ? 'multiplier'
+      : (position.add_size_pct > 0 ? 'fixed' : 'initial');
+    const addValue = addMode === 'multiplier'
+      ? position.add_size_multiplier
+      : ((position.add_size_pct || position.initial_size_pct || 0) * 100);
     overview.innerHTML = `
       <div class="visual-card">
         <label class="vcard-label">策略显示名称</label>
@@ -340,6 +383,62 @@ class StrategyWorkbench {
         <input type="text" class="form-control" id="formSymbols" value="${(data.symbols || ['BTC-USDT']).join(', ')}">
       </div>
     `;
+    positionCards.innerHTML = `
+      <div class="visual-card">
+        <label class="vcard-label">交易所配置杠杆</label>
+        <div class="input-with-unit">
+          <input type="number" class="form-control" id="formExchangeLeverage"
+            value="${exchangeLeverage}" min="1" step="0.1" ${isSpot ? 'disabled' : ''}>
+          <span class="input-unit">x</span>
+        </div>
+      </div>
+      <div class="visual-card">
+        <label class="vcard-label">首次开仓杠杆</label>
+        <div class="input-with-unit">
+          <input type="number" class="form-control" id="formPositionLeverage"
+            value="${positionLeverage}" min="1" max="${exchangeLeverage}" step="0.1" ${isSpot ? 'disabled' : ''}>
+          <span class="input-unit">x</span>
+        </div>
+      </div>
+      <div class="visual-card">
+        <label class="vcard-label">初始仓位分配</label>
+        <div class="input-with-unit">
+          <input type="number" class="form-control" id="formInitialSizePct"
+            value="${((position.initial_size_pct || 0) * 100).toFixed(6)}" min="0" max="100" step="any">
+          <span class="input-unit">%</span>
+        </div>
+      </div>
+      <div class="visual-card">
+        <label class="vcard-label">允许同向加仓</label>
+        <label class="binary-control">
+          <input type="checkbox" id="formAllowPyramiding" ${behavior.allow_pyramiding ? 'checked' : ''}>
+          <span>${behavior.allow_pyramiding ? '已启用' : '已关闭'}</span>
+        </label>
+      </div>
+      <div class="visual-card">
+        <label class="vcard-label">最大加仓次数</label>
+        <input type="number" class="form-control" id="formMaxAdditions"
+          value="${position.max_additions || 0}" min="0" step="1" ${behavior.allow_pyramiding ? '' : 'disabled'}>
+      </div>
+      <div class="visual-card">
+        <label class="vcard-label">加仓计算模式</label>
+        <select class="form-select" id="formAddMode" ${behavior.allow_pyramiding && position.max_additions > 0 ? '' : 'disabled'}>
+          <option value="initial" ${addMode === 'initial' ? 'selected' : ''}>沿用首次名义仓位</option>
+          <option value="fixed" ${addMode === 'fixed' ? 'selected' : ''}>固定比例</option>
+          <option value="multiplier" ${addMode === 'multiplier' ? 'selected' : ''}>倍增模式</option>
+        </select>
+      </div>
+      <div class="visual-card">
+        <label class="vcard-label">${addMode === 'multiplier' ? '加仓倍数' : '固定加仓比例'}</label>
+        <div class="input-with-unit">
+          <input type="number" class="form-control" id="formAddValue"
+            value="${Number(addValue).toFixed(addMode === 'multiplier' ? 2 : 4)}"
+            min="0" step="${addMode === 'multiplier' ? '0.1' : 'any'}"
+            ${behavior.allow_pyramiding && position.max_additions > 0 && addMode !== 'initial' ? '' : 'disabled'}>
+          <span class="input-unit">${addMode === 'multiplier' ? 'x' : '%'}</span>
+        </div>
+      </div>
+    `;
 
     document.getElementById('formStratName').addEventListener('input', (e) => {
       def.name = e.target.value;
@@ -354,12 +453,91 @@ class StrategyWorkbench {
     document.getElementById('formMarketType').addEventListener('change', (e) => {
       if (!def.account) def.account = {};
       def.account.market_type = e.target.value;
+      if (e.target.value === 'spot') {
+        def.account.exchange_leverage = 1;
+        def.position.position_leverage = 1;
+      }
       document.getElementById('viewMarketType').textContent = e.target.value;
+      this.renderOverviewForm(def);
       this.syncToJson();
     });
     document.getElementById('formSymbols').addEventListener('change', (e) => {
       if (!def.data) def.data = {};
       def.data.symbols = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+      this.syncToJson();
+    });
+
+    const parseNumber = (id, fallback) => {
+      const value = parseFloat(document.getElementById(id).value);
+      return Number.isFinite(value) ? value : fallback;
+    };
+    document.getElementById('formExchangeLeverage').addEventListener('change', () => {
+      const value = Math.max(1, parseNumber('formExchangeLeverage', 1));
+      def.account.exchange_leverage = value;
+      def.position.position_leverage = Math.min(def.position.position_leverage || 1, value);
+      this.renderOverviewForm(def);
+      this.syncToJson();
+    });
+    document.getElementById('formPositionLeverage').addEventListener('change', () => {
+      def.position.position_leverage = Math.min(
+        exchangeLeverage,
+        Math.max(1, parseNumber('formPositionLeverage', 1)),
+      );
+      this.syncToJson();
+    });
+    document.getElementById('formInitialSizePct').addEventListener('change', () => {
+      def.position.initial_size_pct = Math.min(
+        100,
+        Math.max(0, parseNumber('formInitialSizePct', 0)),
+      ) / 100;
+      this.syncToJson();
+    });
+    document.getElementById('formAllowPyramiding').addEventListener('change', (e) => {
+      def.behavior.allow_pyramiding = e.target.checked;
+      if (!e.target.checked) {
+        def.position.max_additions = 0;
+        def.position.add_size_pct = 0;
+        def.position.add_size_multiplier = 0;
+      }
+      this.renderOverviewForm(def);
+      this.syncToJson();
+    });
+    document.getElementById('formMaxAdditions').addEventListener('change', () => {
+      def.position.max_additions = Math.max(
+        0,
+        Math.trunc(parseNumber('formMaxAdditions', 0)),
+      );
+      if (def.position.max_additions === 0) {
+        def.position.add_size_pct = 0;
+        def.position.add_size_multiplier = 0;
+      }
+      this.renderOverviewForm(def);
+      this.syncToJson();
+    });
+    document.getElementById('formAddMode').addEventListener('change', (e) => {
+      if (e.target.value === 'fixed') {
+        def.position.add_size_pct = def.position.initial_size_pct || 0;
+        def.position.add_size_multiplier = 0;
+      } else if (e.target.value === 'multiplier') {
+        def.position.add_size_pct = 0;
+        def.position.add_size_multiplier = 2;
+      } else {
+        def.position.add_size_pct = 0;
+        def.position.add_size_multiplier = 0;
+      }
+      this.renderOverviewForm(def);
+      this.syncToJson();
+    });
+    document.getElementById('formAddValue').addEventListener('change', () => {
+      const mode = document.getElementById('formAddMode').value;
+      const value = Math.max(0, parseNumber('formAddValue', 0));
+      if (mode === 'multiplier') {
+        def.position.add_size_multiplier = value;
+        def.position.add_size_pct = 0;
+      } else if (mode === 'fixed') {
+        def.position.add_size_pct = Math.min(100, value) / 100;
+        def.position.add_size_multiplier = 0;
+      }
       this.syncToJson();
     });
   }
@@ -724,7 +902,7 @@ class StrategyWorkbench {
       parsedWhen.items.forEach(item => this.normalizeConditionItem(item, operands));
       rule.when = this.compileAstWhen(parsedWhen.gate, parsedWhen.items);
       const action = rule.action || { type: 'open', side: 'long', size_pct: 0.25 };
-      const sizePct = Math.round((action.size_pct || 0.25) * 100);
+      const sizePct = Number((((action.size_pct ?? 0.25) * 100).toFixed(4)));
 
       return `
         <div class="rule-card-editor" data-ridx="${rIdx}">
@@ -750,8 +928,12 @@ class StrategyWorkbench {
             </div>
             <div class="slider-wrapper">
               <span class="panel-sub-label">仓位:</span>
-              <input type="range" class="pct-slider rule-size-slider" data-ridx="${rIdx}" min="5" max="100" step="5" value="${sizePct}">
-              <span class="pct-val-display" id="sizeDisplay-${rIdx}">${sizePct}%</span>
+              <input type="range" class="pct-slider rule-size-slider" data-ridx="${rIdx}" min="0" max="100" step="0.1" value="${sizePct}">
+              <div class="rule-size-number-wrap">
+                <input type="number" class="form-control rule-size-input" data-ridx="${rIdx}"
+                  min="0" max="100" step="any" value="${sizePct}">
+                <span>%</span>
+              </div>
             </div>
           </div>
 
@@ -858,14 +1040,27 @@ class StrategyWorkbench {
       });
     });
 
+    const updateRuleSize = (rIdx, value) => {
+      const normalized = Math.min(100, Math.max(0, Number(value) || 0));
+      const slider = container.querySelector(`.rule-size-slider[data-ridx="${rIdx}"]`);
+      const input = container.querySelector(`.rule-size-input[data-ridx="${rIdx}"]`);
+      if (slider) slider.value = normalized;
+      if (input) input.value = normalized;
+      def.rules[rIdx].action.size_pct = normalized / 100;
+      this.syncToJson();
+    };
+
     // 仓位滑块
     container.querySelectorAll('.rule-size-slider').forEach(slider => {
       slider.addEventListener('input', (e) => {
         const rIdx = parseInt(e.target.dataset.ridx, 10);
-        const val = parseInt(e.target.value, 10);
-        document.getElementById(`sizeDisplay-${rIdx}`).textContent = `${val}%`;
-        def.rules[rIdx].action.size_pct = val / 100;
-        this.syncToJson();
+        updateRuleSize(rIdx, e.target.value);
+      });
+    });
+    container.querySelectorAll('.rule-size-input').forEach(input => {
+      input.addEventListener('change', (e) => {
+        const rIdx = parseInt(e.target.dataset.ridx, 10);
+        updateRuleSize(rIdx, e.target.value);
       });
     });
 
@@ -1255,6 +1450,7 @@ class StrategyWorkbench {
     } else {
       content = this.currentStrategy;
     }
+    this.migrateLeverageConfig(content);
 
     try {
       this.showAlert('正在向 Go 后端提交静态校验与持久化...', 'info');
@@ -1302,7 +1498,8 @@ class StrategyWorkbench {
       account: {
         market_type: 'spot',
         initial_cash: 10000,
-        quote_currency: 'USDT'
+        quote_currency: 'USDT',
+        exchange_leverage: 1
       },
       behavior: {
         allow_pyramiding: false,
@@ -1312,7 +1509,7 @@ class StrategyWorkbench {
       position: {
         initial_size_pct: 0.25,
         max_additions: 0,
-        max_position_pct: 1
+        position_leverage: 1
       },
       execution: {
         signal_time: 'bar_close',
@@ -1322,8 +1519,6 @@ class StrategyWorkbench {
         slippage: { type: 'bps', value: 2 }
       },
       risk: {
-        max_symbol_equity_pct: 1,
-        max_total_exposure_pct: 1,
         max_open_positions: 1,
         max_drawdown_halt_pct: 0.2
       },

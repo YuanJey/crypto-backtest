@@ -211,6 +211,8 @@ func positionField(portfolio portfolio, field string, markPrice float64) (float6
 		default:
 			return 0, true, nil
 		}
+	case "actual_leverage":
+		return portfolio.positionLeverage(markPrice), true, nil
 	default:
 		return 0, false, fmt.Errorf("unknown position field %q", field)
 	}

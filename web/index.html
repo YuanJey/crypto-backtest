@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261103-6">
+  <link rel="stylesheet" href="styles.css?v=20261103-8">
 </head>
 <body class="theme-dark">
   <div class="terminal-container">
@@ -90,8 +90,8 @@
               <strong class="m-val m-danger" id="bmMaxDD">--</strong>
             </div>
             <div class="mini-metric">
-              <span class="m-label">胜率</span>
-              <strong class="m-val" id="bmWinRate">--</strong>
+              <span class="m-label">最大杠杆</span>
+              <strong class="m-val" id="bmMaxLeverage">--</strong>
             </div>
             <div class="mini-metric">
               <span class="m-label">成交笔数</span>
@@ -219,6 +219,10 @@
             <span class="equity-live-label">持仓数量</span>
             <strong class="equity-live-value" id="livePosition">--</strong>
           </div>
+          <div class="equity-live-item">
+            <span class="equity-live-label">实际杠杆</span>
+            <strong class="equity-live-value" id="liveLeverage">--</strong>
+          </div>
         </div>
       </div>
       <div class="equity-canvas-wrapper">
@@ -292,11 +296,11 @@
   </div><!-- /.terminal-container -->
   <div id="modalContainer"></div>
 
-  <script src="src/chart.js?v=20261103-6"></script>
-  <script src="src/replay.js?v=20261103-6"></script>
-  <script src="src/api.js?v=20261103-6"></script>
-  <script src="src/strategy.js?v=20261103-6"></script>
-  <script src="src/data.js?v=20261103-6"></script>
-  <script src="src/app.js?v=20261103-6"></script>
+  <script src="src/chart.js?v=20261103-8"></script>
+  <script src="src/replay.js?v=20261103-8"></script>
+  <script src="src/api.js?v=20261103-8"></script>
+  <script src="src/strategy.js?v=20261103-8"></script>
+  <script src="src/data.js?v=20261103-8"></script>
+  <script src="src/app.js?v=20261103-8"></script>
 </body>
 </html>

@@ -154,11 +154,12 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 		}
 
 		result.EquityCurve = append(result.EquityCurve, EquityPoint{
-			TimeMS:      bar.OpenTimeMS + plan.BaseTimeframeMS,
-			Equity:      currentEquity,
-			Cash:        portfolio.cash,
-			PositionQty: portfolio.quantity,
-			Close:       bar.Close,
+			TimeMS:           bar.OpenTimeMS + plan.BaseTimeframeMS,
+			Equity:           currentEquity,
+			Cash:             portfolio.cash,
+			PositionQty:      portfolio.quantity,
+			PositionLeverage: portfolio.positionLeverage(bar.Close),
+			Close:            bar.Close,
 		})
 	}
 
@@ -184,11 +185,11 @@ func fillOrder(portfolio *portfolio, result *Result, orderIndex int, bar market.
 		if riskHalted {
 			break
 		}
-		sizePct, sizeOK := resolveOpenSizePct(
+		notionalPct, sizeOK := resolveOpenNotionalPct(
 			*portfolio,
 			order.Action,
 			plan.Strategy.Position,
-			plan.Strategy.Risk,
+			plan.Strategy.Account.ExchangeLeverage,
 			price,
 		)
 		if !sizeOK {
@@ -198,7 +199,7 @@ func fillOrder(portfolio *portfolio, result *Result, orderIndex int, bar market.
 		quantity, fee, ok = portfolio.open(
 			order.Action.Side,
 			price,
-			sizePct,
+			notionalPct,
 			feeRate,
 			plan.Strategy.Behavior.AllowPyramiding,
 		)
@@ -276,63 +277,52 @@ func eligible(
 	}
 }
 
-func resolveOpenSizePct(
+func resolveOpenNotionalPct(
 	portfolio portfolio,
 	action strategy.ActionSpec,
 	position strategy.PositionSpec,
-	risk strategy.RiskSpec,
+	exchangeLeverage float64,
 	price float64,
 ) (float64, bool) {
-	sizePct := action.SizePct
-	if sizePct == 0 {
-		if portfolio.entryCount == 0 {
-			sizePct = position.InitialSizePct
-		} else if position.AddSizePct > 0 {
-			sizePct = position.AddSizePct
-		} else if position.AddSizeMultiplier > 0 {
-			sizePct = position.InitialSizePct * math.Pow(position.AddSizeMultiplier, float64(portfolio.entryCount))
-		} else {
-			sizePct = position.InitialSizePct
-		}
-	}
-	if sizePct <= 0 {
+	equity := portfolio.equity(price)
+	if equity <= 0 {
 		return 0, false
 	}
-	maxPositionPct := minPositive(
-		position.MaxPositionPct,
-		risk.MaxSymbolEquityPct,
-		risk.MaxTotalExposurePct,
-	)
-	if maxPositionPct > 0 {
-		equity := portfolio.equity(price)
-		if equity <= 0 {
-			return 0, false
-		}
-		currentNotional := portfolio.positionNotional(price)
-		maxNotional := equity * maxPositionPct
-		availableNotional := maxNotional - currentNotional
-		if availableNotional <= 0 {
-			return 0, false
-		}
-		requestedNotional := equity * sizePct
-		if requestedNotional > availableNotional {
-			sizePct = availableNotional / equity
-		}
-	}
-	return sizePct, sizePct > 0
-}
 
-func minPositive(values ...float64) float64 {
-	var result float64
-	for _, value := range values {
-		if value <= 0 {
-			continue
+	var notionalPct float64
+	if portfolio.entryCount == 0 {
+		allocationPct := action.SizePct
+		if allocationPct == 0 {
+			allocationPct = position.InitialSizePct
 		}
-		if result == 0 || value < result {
-			result = value
+		notionalPct = allocationPct * position.PositionLeverage
+	} else {
+		switch {
+		case action.SizePct > 0:
+			notionalPct = action.SizePct
+		case position.AddSizePct > 0:
+			notionalPct = position.AddSizePct
+		case position.AddSizeMultiplier > 0:
+			notionalPct = portfolio.firstNotional *
+				math.Pow(position.AddSizeMultiplier, float64(portfolio.entryCount)) /
+				equity
+		default:
+			notionalPct = portfolio.firstNotional / equity
 		}
 	}
-	return result
+	if notionalPct <= 0 {
+		return 0, false
+	}
+
+	availableNotional := equity*exchangeLeverage - portfolio.positionNotional(price)
+	if availableNotional <= 0 {
+		return 0, false
+	}
+	requestedNotional := equity * notionalPct
+	if requestedNotional > availableNotional {
+		notionalPct = availableNotional / equity
+	}
+	return notionalPct, notionalPct > 0
 }
 
 func drawdownHalted(equity, peak, limit float64) bool {

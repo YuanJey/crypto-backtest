@@ -3,6 +3,22 @@ package strategy
 import "strings"
 
 func Normalize(definition Definition) (Definition, error) {
+	if definition.Account.ExchangeLeverage == 0 {
+		definition.Account.ExchangeLeverage = 1
+	}
+	if definition.Position.PositionLeverage == 0 {
+		if definition.Position.TargetLeverage != 0 {
+			definition.Position.PositionLeverage = definition.Position.TargetLeverage
+		} else {
+			definition.Position.PositionLeverage = 1
+		}
+	}
+	definition.Position.TargetLeverage = 0
+	definition.Position.MaxPositionPct = 0
+	// Exposure caps are legacy configuration. The exchange leverage is the
+	// single runtime ceiling for total position notional.
+	definition.Risk.MaxSymbolEquityPct = definition.Account.ExchangeLeverage
+	definition.Risk.MaxTotalExposurePct = definition.Account.ExchangeLeverage
 	if definition.Position.AllowPyramiding {
 		definition.Behavior.AllowPyramiding = true
 	}

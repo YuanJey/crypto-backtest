@@ -16,11 +16,12 @@ func normalizeReportSpec(spec ReportSpec) ReportSpec {
 
 func validateReportSpec(spec ReportSpec, plan compiler.Plan) error {
 	validMetrics := map[MetricType]struct{}{
-		MetricFinalEquity:    {},
-		MetricTotalReturnPct: {},
-		MetricMaxDrawdownPct: {},
-		MetricOrderCount:     {},
-		MetricFillCount:      {},
+		MetricFinalEquity:         {},
+		MetricTotalReturnPct:      {},
+		MetricMaxDrawdownPct:      {},
+		MetricOrderCount:          {},
+		MetricFillCount:           {},
+		MetricMaxPositionLeverage: {},
 	}
 	for _, metric := range spec.Metrics {
 		if _, ok := validMetrics[metric]; !ok {
@@ -90,9 +91,21 @@ func buildMetrics(result Result, requested []MetricType, initialCash float64) ma
 			metrics[metric] = float64(len(result.Orders))
 		case MetricFillCount:
 			metrics[metric] = float64(len(result.Fills))
+		case MetricMaxPositionLeverage:
+			metrics[metric] = maxPositionLeverage(result.EquityCurve)
 		}
 	}
 	return metrics
+}
+
+func maxPositionLeverage(points []EquityPoint) float64 {
+	var maximum float64
+	for _, point := range points {
+		if point.PositionLeverage > maximum {
+			maximum = point.PositionLeverage
+		}
+	}
+	return maximum
 }
 
 func maxDrawdown(points []EquityPoint) float64 {
