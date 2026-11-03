@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+  "exchange": "binance",
+  "market_type": "perpetual",
+  "symbols": [
+    "ETH-USDT"
+  ],
+  "timeframes": [
+    "15m"
+  ],
+  "start_ms": 1785938400000,
+  "end_ms": 1793714400000,
+  "row_count": 8640,
+  "missing_bars": 0,
+  "generated_at": "2026-11-03T14:01:43Z",
+  "market_rules": {
+    "ETH-USDT": {}
+  },
+  "files": [
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=08/part-000.parquet",
+      "sha256": "b0e0882fecef562d424c168e90353aba0802f46ecb2a2853001ee97a29ab0e2e",
+      "row_count": 2536,
+      "start_ms": 1785938400000,
+      "end_ms": 1788220800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=09/part-000.parquet",
+      "sha256": "edb771e0a6d82f42ac2fc7ee3f8f8628498495c586a402e1b1e7a7ef33bc8b46",
+      "row_count": 2880,
+      "start_ms": 1788220800000,
+      "end_ms": 1790812800000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=10/part-000.parquet",
+      "sha256": "887b26a63b53f0e6bce073e9bd52fafe18aad1f8d653f28797ce6f2798f8299c",
+      "row_count": 2976,
+      "start_ms": 1790812800000,
+      "end_ms": 1793491200000
+    },
+    {
+      "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=11/part-000.parquet",
+      "sha256": "9497e54d579c8246292ef227f6dc7ed12408ab55b052da7fda8f00dcd8be8caf",
+      "row_count": 248,
+      "start_ms": 1793491200000,
+      "end_ms": 1793714400000
+    }
+  ]
+}

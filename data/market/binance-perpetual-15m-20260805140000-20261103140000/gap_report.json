@@ -1,0 +1,13 @@
+{
+  "reports": [
+    {
+      "symbol": "ETH-USDT",
+      "timeframe": "15m",
+      "row_count": 8640,
+      "duplicate_rows": 0,
+      "missing_bars": 0,
+      "gaps": [],
+      "issues": null
+    }
+  ]
+}

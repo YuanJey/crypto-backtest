@@ -407,13 +407,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function updateLiveEquity(points, visibleCount) {
     if (visibleCount <= 0) return;
-    const visible = points.slice(0, visibleCount);
-    const current = visible[visible.length - 1];
+    const current = points[visibleCount - 1];
     const initialCash = activeBacktest.initialCash;
     const returnPct = initialCash > 0
       ? ((current.equity - initialCash) / initialCash) * 100
       : 0;
-    const peak = visible.reduce((value, point) => Math.max(value, point.equity), initialCash);
+    const peak = activeBacktest.peakEquity[visibleCount - 1] ?? initialCash;
     const drawdown = peak > 0 ? ((peak - current.equity) / peak) * 100 : 0;
 
     liveEquity.textContent = current.equity.toLocaleString(undefined, {
@@ -610,16 +609,28 @@ document.addEventListener('DOMContentLoaded', async () => {
           marketTypeTag.textContent = resp.strategy.market_type.toUpperCase();
         }
         const equityPoints = resp.report?.equity_curve || [];
+        const initialCash = resp.strategy?.initial_cash || 0;
+        // 预计算累计峰值权益，回放时按下标 O(1) 读取回撤
+        const peakEquity = new Float64Array(equityPoints.length);
+        let runningPeak = initialCash;
+        for (let i = 0; i < equityPoints.length; i++) {
+          const equity = equityPoints[i].equity;
+          if (Number.isFinite(equity) && equity > runningPeak) runningPeak = equity;
+          peakEquity[i] = runningPeak;
+        }
         activeBacktest = {
           response: resp,
           indicators: strategyIndicators,
-          initialCash: resp.strategy?.initial_cash || 0,
+          initialCash,
+          peakEquity,
           baseIndexByTime: new Map(
             replay.baseBars.map((bar, index) => [bar.open_time_ms, index]),
           ),
         };
         equityChart.setPoints(equityPoints, 0);
-        replay.emitTick();
+        // 回测完成后跳转至回放末尾，展示完整资金曲线（游标默认停在第 81 根，策略预热期内曲线恒为初始资金）
+        replay.pause();
+        replay.seek(replay.baseBars.length - 1);
 
         // 渲染回测指标看板
         if (metricsBar && resp && resp.report) {
