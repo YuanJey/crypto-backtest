@@ -7,13 +7,16 @@ import (
 )
 
 type portfolio struct {
-	marketType     strategy.MarketType
-	cash           float64
-	quantity       float64
-	avgPrice       float64
-	entryCount     int
-	lastEntryPrice float64
-	firstNotional  float64
+	marketType        strategy.MarketType
+	cash              float64
+	quantity          float64
+	avgPrice          float64
+	entryCount        int
+	lastEntryPrice    float64
+	firstNotional     float64
+	firstEntryPrice   float64
+	highestSinceEntry float64
+	lowestSinceEntry  float64
 }
 
 func newPortfolio(marketType strategy.MarketType, initialCash float64) portfolio {
@@ -74,11 +77,26 @@ func (p *portfolio) open(side strategy.TradeSide, price float64, notionalPct flo
 	}
 	if p.entryCount == 0 {
 		p.firstNotional = notional
+		p.firstEntryPrice = price
+		p.highestSinceEntry = price
+		p.lowestSinceEntry = price
 	}
 	p.addQuantity(quantity, price)
 	p.entryCount++
 	p.lastEntryPrice = price
 	return quantity, fee, true
+}
+
+func (p *portfolio) updateExtremes(high, low float64) {
+	if p.quantity == 0 {
+		return
+	}
+	if p.highestSinceEntry == 0 || high > p.highestSinceEntry {
+		p.highestSinceEntry = high
+	}
+	if p.lowestSinceEntry == 0 || low < p.lowestSinceEntry {
+		p.lowestSinceEntry = low
+	}
 }
 
 func (p portfolio) positionNotional(markPrice float64) float64 {
@@ -144,4 +162,7 @@ func (p *portfolio) resetPosition() {
 	p.entryCount = 0
 	p.lastEntryPrice = 0
 	p.firstNotional = 0
+	p.firstEntryPrice = 0
+	p.highestSinceEntry = 0
+	p.lowestSinceEntry = 0
 }

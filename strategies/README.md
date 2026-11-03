@@ -124,6 +124,11 @@ go run ./cmd/backtest -strategy-id ema-boll-rsi -run \
 盈利衰减，计算式为 `min(1, (initial_cash / current_equity) ^ power)`；默认值
 均为 `0.5`，权益低于初始资金时不会放大仓位。
 
+止盈止损建议使用顶层 `exit_policies`。它支持持仓均价、首次价、最后加仓价和
+入场后高低点锚点，支持百分比、固定价差与 ATR 倍数距离。ATR 可以在首次开仓
+冻结、每次加仓刷新或随最新闭合 K 线更新（下一根 K 线生效）；`close_pct` 可用于分批退出，
+`execution` 可选下一根开盘或触发价/跳空价成交。
+
 当前内置指标参数：
 
 | type | params | outputs |

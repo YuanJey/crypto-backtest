@@ -88,12 +88,23 @@ func Compile(definition strategy.Definition, registry *indicator.Registry) (Plan
 		}
 		return rules[i].Priority > rules[j].Priority
 	})
+	exitPolicies := append([]strategy.ExitPolicySpec(nil), definition.ExitPolicies...)
+	sort.SliceStable(exitPolicies, func(i, j int) bool {
+		if exitPolicies[i].Priority != exitPolicies[j].Priority {
+			return exitPolicies[i].Priority > exitPolicies[j].Priority
+		}
+		if exitPolicies[i].Purpose != exitPolicies[j].Purpose {
+			return exitPolicies[i].Purpose == strategy.ExitPurposeStopLoss
+		}
+		return exitPolicies[i].ID < exitPolicies[j].ID
+	})
 
 	return Plan{
 		Strategy:        definition,
 		BaseTimeframeMS: baseTimeframeMS,
 		Indicators:      indicators,
 		Rules:           rules,
+		ExitPolicies:    exitPolicies,
 	}, nil
 }
 

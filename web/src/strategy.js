@@ -94,6 +94,17 @@ class StrategyWorkbench {
                 </div>
               </div>
 
+              <div class="visual-section">
+                <div class="section-heading-row">
+                  <h3 class="section-heading">止盈止损策略 (EXIT POLICIES)</h3>
+                  <span class="section-badge" id="exitPolicyCountBadge">0 个</span>
+                  <button class="btn btn-primary-sm" id="btnAddExitPolicy" style="margin-left: auto;">+ 添加退出策略</button>
+                </div>
+                <div class="exit-policies-container" id="exitPoliciesCards">
+                  <!-- 动态插入 -->
+                </div>
+              </div>
+
               <!-- 指标配置卡片组 -->
               <div class="visual-section">
                 <div class="section-heading-row">
@@ -145,10 +156,12 @@ class StrategyWorkbench {
     const btnFormat = document.getElementById('btnFormatJson');
     const btnAddIndicator = document.getElementById('btnAddIndicator');
     const btnAddRule = document.getElementById('btnAddRule');
+    const btnAddExitPolicy = document.getElementById('btnAddExitPolicy');
 
     btnNew.addEventListener('click', () => this.createNewStrategy());
     if (btnAddIndicator) btnAddIndicator.addEventListener('click', () => this.showIndicatorModal());
     if (btnAddRule) btnAddRule.addEventListener('click', () => this.addNewRule());
+    if (btnAddExitPolicy) btnAddExitPolicy.addEventListener('click', () => this.addExitPolicy());
 
     btnModeVisual.addEventListener('click', () => this.switchMode('visual'));
     btnModeJson.addEventListener('click', () => this.switchMode('json'));
@@ -313,6 +326,7 @@ class StrategyWorkbench {
   renderVisualDetail(def) {
     if (!def) return;
     this.renderOverviewForm(def);
+    this.renderExitPoliciesSection(def);
     this.renderIndicatorsSection(def);
     this.renderRulesEditor(def);
   }
@@ -583,6 +597,254 @@ class StrategyWorkbench {
       }
       this.syncToJson();
     });
+  }
+
+  getVolatilityOperands() {
+    const items = [];
+    const indicators = (this.currentStrategy && this.currentStrategy.indicators) || [];
+    for (const ind of indicators) {
+      const definition = this.catalog.find(item => item.type === ind.type);
+      const outputs = definition?.outputs || (ind.type === 'atr' ? [{ name: 'value', semantic: 'volatility_series' }] : []);
+      for (const output of outputs) {
+        if (output.semantic !== 'volatility_series') continue;
+        items.push({
+          value: `${ind.id}:${output.name}`,
+          label: `${definition?.label || ind.type.toUpperCase()}: ${ind.id}.${output.name}`,
+          indicator: ind.id,
+          field: output.name,
+        });
+      }
+    }
+    return items;
+  }
+
+  defaultExitTrigger(side, purpose) {
+    return (side === 'long' && purpose === 'take_profit') ||
+      (side === 'short' && purpose === 'stop_loss') ? 'high' : 'low';
+  }
+
+  normalizeExitPolicy(policy) {
+    policy.anchor = policy.anchor || { type: 'avg_entry_price' };
+    policy.anchor.type = policy.anchor.type || 'avg_entry_price';
+    policy.distance = policy.distance || { type: 'percent', value: 0.03 };
+    policy.distance.type = policy.distance.type || 'percent';
+    policy.distance.value = Number(policy.distance.value) || (policy.distance.type === 'percent' ? 0.03 : 2);
+    policy.side = policy.side || 'long';
+    policy.purpose = policy.purpose || 'take_profit';
+    policy.trigger_price = policy.trigger_price || this.defaultExitTrigger(policy.side, policy.purpose);
+    policy.close_pct = Number(policy.close_pct) || 1;
+    policy.execution = policy.execution || 'next_open';
+    policy.priority = Number(policy.priority) || 0;
+    if (policy.distance.type === 'atr_multiple') {
+      policy.distance.field = policy.distance.field || 'value';
+      policy.distance.sampling = policy.distance.sampling || 'live';
+    } else {
+      delete policy.distance.indicator;
+      delete policy.distance.field;
+      delete policy.distance.sampling;
+    }
+    return policy;
+  }
+
+  renderExitPoliciesSection(def) {
+    const container = document.getElementById('exitPoliciesCards');
+    if (!container) return;
+    const policies = def.exit_policies || (def.exit_policies = []);
+    const volatilityOperands = this.getVolatilityOperands();
+    document.getElementById('exitPolicyCountBadge').textContent = `${policies.length} 个`;
+
+    if (policies.length === 0) {
+      container.innerHTML = '<div class="empty-state-hint">暂无退出策略，可添加 ATR、百分比或固定价差止盈止损。</div>';
+      return;
+    }
+
+    container.innerHTML = policies.map((rawPolicy, index) => {
+      const policy = this.normalizeExitPolicy(rawPolicy);
+      const isATR = policy.distance.type === 'atr_multiple';
+      const selectedIndicator = `${policy.distance.indicator || ''}:${policy.distance.field || 'value'}`;
+      const indicatorExists = volatilityOperands.some(item => item.value === selectedIndicator);
+      const indicatorOptions = [
+        ...(!indicatorExists && policy.distance.indicator ? [{
+          value: selectedIndicator,
+          label: `缺失指标: ${policy.distance.indicator}.${policy.distance.field || 'value'}`,
+        }] : []),
+        ...volatilityOperands,
+      ];
+      return `
+        <div class="rule-card-editor exit-policy-card" data-exit-idx="${index}">
+          <div class="rule-top-bar">
+            <div class="rule-top-inputs">
+              <span class="panel-sub-label">策略ID:</span>
+              <input type="text" class="form-control exit-policy-field" data-exit-idx="${index}" data-exit-field="id" value="${policy.id || ''}">
+              <label class="binary-control exit-enabled-control">
+                <input type="checkbox" class="exit-policy-field" data-exit-idx="${index}" data-exit-field="enabled" ${policy.disabled ? '' : 'checked'}>
+                <span>${policy.disabled ? '已停用' : '已启用'}</span>
+              </label>
+            </div>
+            <button class="btn-xs btn-danger btn-del-exit-policy" data-exit-idx="${index}">✕ 删除策略</button>
+          </div>
+          <div class="exit-policy-grid">
+            <div class="form-group">
+              <label class="form-label">持仓方向</label>
+              <select class="form-select exit-policy-field" data-exit-idx="${index}" data-exit-field="side">
+                <option value="long" ${policy.side === 'long' ? 'selected' : ''}>多头</option>
+                <option value="short" ${policy.side === 'short' ? 'selected' : ''}>空头</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">用途</label>
+              <select class="form-select exit-policy-field" data-exit-idx="${index}" data-exit-field="purpose">
+                <option value="take_profit" ${policy.purpose === 'take_profit' ? 'selected' : ''}>止盈</option>
+                <option value="stop_loss" ${policy.purpose === 'stop_loss' ? 'selected' : ''}>止损</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">价格锚点</label>
+              <select class="form-select exit-policy-field" data-exit-idx="${index}" data-exit-field="anchor">
+                <option value="avg_entry_price" ${policy.anchor.type === 'avg_entry_price' ? 'selected' : ''}>持仓均价</option>
+                <option value="first_entry_price" ${policy.anchor.type === 'first_entry_price' ? 'selected' : ''}>首次开仓价</option>
+                <option value="last_entry_price" ${policy.anchor.type === 'last_entry_price' ? 'selected' : ''}>最后加仓价</option>
+                <option value="highest_since_entry" ${policy.anchor.type === 'highest_since_entry' ? 'selected' : ''}>入场后最高价</option>
+                <option value="lowest_since_entry" ${policy.anchor.type === 'lowest_since_entry' ? 'selected' : ''}>入场后最低价</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">距离类型</label>
+              <select class="form-select exit-policy-field" data-exit-idx="${index}" data-exit-field="distance_type">
+                <option value="percent" ${policy.distance.type === 'percent' ? 'selected' : ''}>百分比</option>
+                <option value="atr_multiple" ${isATR ? 'selected' : ''}>ATR 倍数</option>
+                <option value="fixed_amount" ${policy.distance.type === 'fixed_amount' ? 'selected' : ''}>固定价差</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">${policy.distance.type === 'percent' ? '距离（0.03 = 3%）' : isATR ? 'ATR 倍数' : '价格距离'}</label>
+              <input type="number" class="form-control exit-policy-field" data-exit-idx="${index}" data-exit-field="distance_value"
+                value="${policy.distance.value}" min="0.000001" step="any">
+            </div>
+            <div class="form-group">
+              <label class="form-label">波动率指标</label>
+              <select class="form-select exit-policy-field" data-exit-idx="${index}" data-exit-field="indicator" ${isATR ? '' : 'disabled'}>
+                ${indicatorOptions.length > 0
+                  ? indicatorOptions.map(item => `<option value="${item.value}" ${item.value === selectedIndicator ? 'selected' : ''}>${item.label}</option>`).join('')
+                  : '<option value=":value">请先添加 ATR 指标</option>'}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">ATR 采样方式</label>
+              <select class="form-select exit-policy-field" data-exit-idx="${index}" data-exit-field="sampling" ${isATR ? '' : 'disabled'}>
+                <option value="entry" ${policy.distance.sampling === 'entry' ? 'selected' : ''}>首次开仓时冻结</option>
+                <option value="each_entry" ${policy.distance.sampling === 'each_entry' ? 'selected' : ''}>每次加仓后刷新</option>
+                <option value="live" ${policy.distance.sampling === 'live' ? 'selected' : ''}>逐 K 更新（下一根生效）</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">触发价格</label>
+              <select class="form-select exit-policy-field" data-exit-idx="${index}" data-exit-field="trigger_price">
+                <option value="high" ${policy.trigger_price === 'high' ? 'selected' : ''}>最高价</option>
+                <option value="low" ${policy.trigger_price === 'low' ? 'selected' : ''}>最低价</option>
+                <option value="close" ${policy.trigger_price === 'close' ? 'selected' : ''}>收盘价</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">成交方式</label>
+              <select class="form-select exit-policy-field" data-exit-idx="${index}" data-exit-field="execution">
+                <option value="next_open" ${policy.execution === 'next_open' ? 'selected' : ''}>下一根开盘</option>
+                <option value="trigger_price" ${policy.execution === 'trigger_price' ? 'selected' : ''}>触发价 / 跳空价</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">平仓比例（%）</label>
+              <input type="number" class="form-control exit-policy-field" data-exit-idx="${index}" data-exit-field="close_pct"
+                value="${Number(policy.close_pct * 100).toFixed(4)}" min="0.0001" max="100" step="any">
+            </div>
+            <div class="form-group">
+              <label class="form-label">优先级</label>
+              <input type="number" class="form-control exit-policy-field" data-exit-idx="${index}" data-exit-field="priority"
+                value="${policy.priority}" step="1">
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    container.querySelectorAll('.exit-policy-field').forEach(field => {
+      field.addEventListener('change', () => {
+        const index = parseInt(field.dataset.exitIdx, 10);
+        const policy = policies[index];
+        const key = field.dataset.exitField;
+        if (!policy) return;
+        switch (key) {
+          case 'id': policy.id = field.value.trim(); break;
+          case 'enabled': policy.disabled = !field.checked; break;
+          case 'side':
+          case 'purpose':
+            policy[key] = field.value;
+            policy.trigger_price = this.defaultExitTrigger(policy.side, policy.purpose);
+            break;
+          case 'anchor': policy.anchor.type = field.value; break;
+          case 'distance_type': {
+            policy.distance.type = field.value;
+            policy.distance.value = field.value === 'percent' ? 0.03 : field.value === 'atr_multiple' ? 2 : 100;
+            if (field.value === 'atr_multiple') {
+              const first = volatilityOperands[0];
+              policy.distance.indicator = first?.indicator || '';
+              policy.distance.field = first?.field || 'value';
+              policy.distance.sampling = 'live';
+            } else {
+              delete policy.distance.indicator;
+              delete policy.distance.field;
+              delete policy.distance.sampling;
+            }
+            break;
+          }
+          case 'distance_value': policy.distance.value = Math.max(0.000001, Number(field.value) || 0); break;
+          case 'indicator': {
+            const [indicator, outputField] = field.value.split(':');
+            policy.distance.indicator = indicator;
+            policy.distance.field = outputField || 'value';
+            break;
+          }
+          case 'sampling': policy.distance.sampling = field.value; break;
+          case 'trigger_price': policy.trigger_price = field.value; break;
+          case 'execution': policy.execution = field.value; break;
+          case 'close_pct': policy.close_pct = Math.min(100, Math.max(0.0001, Number(field.value) || 0)) / 100; break;
+          case 'priority': policy.priority = Math.trunc(Number(field.value) || 0); break;
+        }
+        this.renderExitPoliciesSection(def);
+        this.syncToJson();
+      });
+    });
+    container.querySelectorAll('.btn-del-exit-policy').forEach(button => {
+      button.addEventListener('click', () => {
+        const index = parseInt(button.dataset.exitIdx, 10);
+        policies.splice(index, 1);
+        this.renderExitPoliciesSection(def);
+        this.syncToJson();
+      });
+    });
+  }
+
+  addExitPolicy() {
+    if (!this.currentStrategy) return;
+    const policies = this.currentStrategy.exit_policies || (this.currentStrategy.exit_policies = []);
+    const volatility = this.getVolatilityOperands()[0];
+    const useATR = Boolean(volatility);
+    const sequence = policies.length + 1;
+    policies.push({
+      id: `exit_${sequence}`,
+      side: 'long',
+      purpose: 'take_profit',
+      anchor: { type: 'avg_entry_price' },
+      distance: useATR
+        ? { type: 'atr_multiple', value: 2, indicator: volatility.indicator, field: volatility.field, sampling: 'live' }
+        : { type: 'percent', value: 0.03 },
+      trigger_price: 'high',
+      close_pct: 1,
+      priority: 0,
+      execution: 'next_open',
+    });
+    this.renderExitPoliciesSection(this.currentStrategy);
+    this.syncToJson();
   }
 
   renderIndicatorsSection(def) {
@@ -1568,6 +1830,7 @@ class StrategyWorkbench {
         long_capital_decay_power: 0.5,
         short_capital_decay_power: 0.5
       },
+      exit_policies: [],
       execution: {
         signal_time: 'bar_close',
         market_fill_time: 'next_bar_open',

@@ -104,6 +104,58 @@ func TestValidateRejectsMarketPriceComparedWithPositionRatio(t *testing.T) {
 	}
 }
 
+func TestValidateAcceptsATRExitPolicy(t *testing.T) {
+	definition := validDefinition()
+	definition.Indicators = append(definition.Indicators, IndicatorSpec{
+		ID:     "atr_15m",
+		Type:   "atr",
+		Inputs: []ValueRef{{Scope: ValueScopeMarket, Name: "bar", Field: "high"}, {Scope: ValueScopeMarket, Name: "bar", Field: "low"}, {Scope: ValueScopeMarket, Name: "bar", Field: "close"}},
+		Params: json.RawMessage(`{"period":14}`),
+	})
+	definition.ExitPolicies = []ExitPolicySpec{{
+		ID:      "long_tp_atr",
+		Side:    TradeSideLong,
+		Purpose: ExitPurposeTakeProfit,
+		Anchor:  ExitAnchorSpec{Type: ExitAnchorAverageEntry},
+		Distance: ExitDistanceSpec{
+			Type:      ExitDistanceATRMultiple,
+			Value:     2,
+			Indicator: "atr_15m",
+			Field:     "value",
+			Sampling:  ExitSamplingEntry,
+		},
+		TriggerPrice: ExitTriggerHigh,
+		ClosePct:     1,
+		Execution:    ExitExecutionTriggerPrice,
+	}}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err != nil {
+		t.Fatalf("expected ATR exit policy to pass: %v", err)
+	}
+}
+
+func TestValidateRejectsATRExitPolicyWithNonVolatilityIndicator(t *testing.T) {
+	definition := validDefinition()
+	definition.ExitPolicies = []ExitPolicySpec{{
+		ID:      "invalid_atr_source",
+		Side:    TradeSideLong,
+		Purpose: ExitPurposeTakeProfit,
+		Anchor:  ExitAnchorSpec{Type: ExitAnchorAverageEntry},
+		Distance: ExitDistanceSpec{
+			Type:      ExitDistanceATRMultiple,
+			Value:     2,
+			Indicator: "ema_fast",
+			Field:     "value",
+			Sampling:  ExitSamplingLive,
+		},
+		TriggerPrice: ExitTriggerHigh,
+		ClosePct:     1,
+		Execution:    ExitExecutionNextOpen,
+	}}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected non-volatility ATR source to fail")
+	}
+}
+
 func TestValidateRejectsCrossWithNonIndicatorOperand(t *testing.T) {
 	definition := validDefinition()
 	definition.Indicators = append(definition.Indicators, IndicatorSpec{
@@ -344,6 +396,27 @@ func TestNormalizeDefaultsCapitalDecayPower(t *testing.T) {
 	if normalized.Position.LongCapitalDecayPower != DefaultCapitalDecayPower ||
 		normalized.Position.ShortCapitalDecayPower != DefaultCapitalDecayPower {
 		t.Fatalf("unexpected capital decay defaults: %+v", normalized.Position)
+	}
+}
+
+func TestNormalizeDefaultsExitPolicy(t *testing.T) {
+	definition := validDefinition()
+	definition.ExitPolicies = []ExitPolicySpec{{
+		ID:       "long_tp",
+		Side:     TradeSideLong,
+		Purpose:  ExitPurposeTakeProfit,
+		Distance: ExitDistanceSpec{Type: ExitDistancePercent, Value: 0.03},
+	}}
+	normalized, err := Normalize(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := normalized.ExitPolicies[0]
+	if policy.Anchor.Type != ExitAnchorAverageEntry ||
+		policy.TriggerPrice != ExitTriggerHigh ||
+		policy.ClosePct != 1 ||
+		policy.Execution != ExitExecutionNextOpen {
+		t.Fatalf("unexpected exit policy defaults: %+v", policy)
 	}
 }
 

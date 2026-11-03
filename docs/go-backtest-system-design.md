@@ -207,6 +207,18 @@ type PositionSpec struct {
 	ShortCapitalDecayPower float64 `json:"short_capital_decay_power,omitempty"`
 }
 
+type ExitPolicySpec struct {
+	ID           string           `json:"id"`
+	Side         TradeSide        `json:"side"`
+	Purpose      ExitPurpose      `json:"purpose"`
+	Anchor       ExitAnchorSpec   `json:"anchor"`
+	Distance     ExitDistanceSpec `json:"distance"`
+	TriggerPrice ExitTriggerPrice `json:"trigger_price,omitempty"`
+	ClosePct     float64          `json:"close_pct,omitempty"`
+	Priority     int              `json:"priority,omitempty"`
+	Execution    ExitExecution    `json:"execution,omitempty"`
+}
+
 type ExecutionSpec struct {
 	SignalTime       SignalTime       `json:"signal_time"`
 	MarketFillTime   MarketFillTime   `json:"market_fill_time"`
@@ -611,6 +623,13 @@ type ActionSpec struct {
 - 达到 `risk.max_drawdown_halt_pct` 后禁止新开仓，但仍允许平仓。
 - 每个资金曲线点返回 `position_leverage = abs(position_notional) / equity`，并提供
   `max_position_leverage` 报告指标。该实际杠杆是动态结果，不是策略配置参数。
+- `exit_policies` 是独立的持仓退出层。价格锚点、距离、指标采样、触发字段与执行
+  方式正交组合，避免为每一种止盈止损新增动作类型。
+- ATR 采样 `entry` 使用首次开仓前最新的已闭合指标值；`each_entry` 在每次成交
+  加仓后刷新；`live` 每根闭合 K 线刷新并从下一根 K 线起生效，不使用未来数据。
+- `trigger_price` 执行在 K 线触及目标时成交；发生跳空时使用该根 K 线开盘价。
+- 同根 K 线有多个退出策略命中时，按 `priority` 从高到低选择一个；同优先级采用
+  保守原则让止损优先。
 
 规则条件可以直接保存为 AST，也可以保存为公共链式表达式字符串，由后端统一解析为 AST：
 

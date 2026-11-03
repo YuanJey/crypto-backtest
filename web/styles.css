@@ -1437,6 +1437,30 @@ kbd {
   gap: 12px;
 }
 
+.exit-policies-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.exit-policy-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 12px;
+}
+
+.exit-enabled-control {
+  min-height: auto;
+}
+
+.empty-state-hint {
+  padding: 18px;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 6px;
+  color: var(--color-text-dim);
+  text-align: center;
+}
+
 .rule-block-card {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);

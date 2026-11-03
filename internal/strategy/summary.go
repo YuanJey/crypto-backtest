@@ -15,6 +15,7 @@ type Summary struct {
 	PositionLeverage       float64            `json:"position_leverage"`
 	LongCapitalDecayPower  float64            `json:"long_capital_decay_power"`
 	ShortCapitalDecayPower float64            `json:"short_capital_decay_power"`
+	ExitPolicyCount        int                `json:"exit_policy_count"`
 	IndicatorCount         int                `json:"indicator_count"`
 	Indicators             []IndicatorSummary `json:"indicators"`
 	RuleCount              int                `json:"rule_count"`
@@ -88,6 +89,7 @@ func Summarize(definition Definition) Summary {
 		PositionLeverage:       positionLeverage,
 		LongCapitalDecayPower:  longCapitalDecayPower,
 		ShortCapitalDecayPower: shortCapitalDecayPower,
+		ExitPolicyCount:        len(definition.ExitPolicies),
 		IndicatorCount:         len(definition.Indicators),
 		Indicators:             indicators,
 		RuleCount:              len(definition.Rules),

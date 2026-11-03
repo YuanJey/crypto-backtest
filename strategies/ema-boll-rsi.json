@@ -28,6 +28,7 @@
     "long_capital_decay_power": 0.5,
     "short_capital_decay_power": 0.5
   },
+  "exit_policies": [],
   "execution": {
     "signal_time": "bar_close",
     "market_fill_time": "next_bar_open",
