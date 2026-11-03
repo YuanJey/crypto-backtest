@@ -17,6 +17,17 @@ type Repository interface {
 	ListIDs(ctx context.Context) ([]string, error)
 }
 
+type RevisionMetadata struct {
+	Revision         int    `json:"revision"`
+	DefinitionSHA256 string `json:"definition_sha256"`
+}
+
+type RevisionRepository interface {
+	Repository
+	LoadRevision(ctx context.Context, id string, revision int) (Definition, RevisionMetadata, error)
+	LatestRevision(ctx context.Context, id string) (RevisionMetadata, error)
+}
+
 type FileRepository struct {
 	Dir string
 }
@@ -43,11 +54,37 @@ func (r FileRepository) LoadByID(ctx context.Context, id string) (Definition, er
 	return definition, nil
 }
 
+func (r FileRepository) LoadRevision(ctx context.Context, id string, revision int) (Definition, RevisionMetadata, error) {
+	if revision != 1 {
+		return Definition{}, RevisionMetadata{}, fmt.Errorf("file strategy %q only has revision 1", id)
+	}
+	definition, err := r.LoadByID(ctx, id)
+	if err != nil {
+		return Definition{}, RevisionMetadata{}, err
+	}
+	metadata, err := revisionMetadata(definition, 1)
+	if err != nil {
+		return Definition{}, RevisionMetadata{}, err
+	}
+	return definition, metadata, nil
+}
+
+func (r FileRepository) LatestRevision(ctx context.Context, id string) (RevisionMetadata, error) {
+	definition, err := r.LoadByID(ctx, id)
+	if err != nil {
+		return RevisionMetadata{}, err
+	}
+	return revisionMetadata(definition, 1)
+}
+
 func (r FileRepository) Save(ctx context.Context, definition Definition, raw []byte) error {
 	if !safeStrategyID.MatchString(definition.ID) {
 		return fmt.Errorf("invalid strategy id %q", definition.ID)
 	}
 	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := validateRawDefinition(definition, raw); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(r.Dir, 0o755); err != nil {
@@ -79,4 +116,15 @@ func (r FileRepository) ListIDs(ctx context.Context) ([]string, error) {
 	}
 	sort.Strings(ids)
 	return ids, nil
+}
+
+func revisionMetadata(definition Definition, revision int) (RevisionMetadata, error) {
+	hash, err := DefinitionSHA256(definition)
+	if err != nil {
+		return RevisionMetadata{}, err
+	}
+	return RevisionMetadata{
+		Revision:         revision,
+		DefinitionSHA256: hash,
+	}, nil
 }

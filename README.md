@@ -86,7 +86,7 @@ go run ./cmd/backtest -strategy-id ema-boll-rsi -run -data-root data/market
 - **纯鼠标可视化策略构建器 (Visual Strategy Builder)**：
   - 账户与标的可视化表单改造（策略名、资金、市场类型、标的实时双向绑定）。
   - 指标可视化管理器：联动服务端 `/api/v1/catalog` 模态弹窗增删改，动态适配 EMA/SMA/RSI/ATR/BOLL 参数与输入源。
-  - 规则条件树交互编排器：条件行选择左操作数、算子（金叉/死叉/大于/小于）、右操作数模式切换（常数/指标）、AND/OR 逻辑门切换、仓位滑块。
+  - 规则条件树交互编排器：金叉/死叉强制选择两个不同指标输出；普通比较支持常数/序列切换，并提供 AND/OR 逻辑门与仓位滑块。
   - 前端 AST 编解码器：实现 UI 状态与 Go 强类型 AST 双向即时编译，无需编写任何 JSON 即可完成策略构建与保存。
 - **影响范围**：
   - `cmd/api/main.go`
@@ -134,13 +134,13 @@ go run ./cmd/backtest -strategy-id ema-boll-rsi -run -data-root data/market
 - **全局模块路径重命名 (Go Module Path Refactor)**：
   - 将根模块定义从 `github.com/bytedance/crypto-backtest` 全量重构为 `github.com/YuanJey/crypto-backtest`。
   - 同步原子更新 `cmd/` 下 3 个入口（`api`, `backtest`, `market-data`）及 `internal/` 下全部 23 个核心子包文件，全库 13 个包编译与单测 100% 通过。
-- **回测数据源智能解析与仿真演示降级 (Backtest Dataset Resolution & Sample Fallback)**：
+- **回测数据源解析与显式仿真演示 (Backtest Dataset Resolution)**：
   - 公共仿真 K 线生成下沉（`internal/market/bar.go`）：
     - 提炼公开的 `market.GenerateSampleBars(symbol, startMS, endMS)` 函数，基于多谐波与趋势漂移算法提供 672 根 15m 逼真仿真 K 线，兼顾时间窗口与起止边界容错。
     - `internal/api/server.go` 统一接入该标准生成器。
   - 回测执行器智能自适应（`internal/backtest/service.go`）：
     - 显式支持 `dataset_id == "__sample__"` 仿真数据集回测。
-    - 针对策略默认配置但本地磁盘未下载的历史静态数据集，支持平滑降级到仿真数据集，消除 `no such file or directory` 阻断异常。
+    - 真实数据集读取失败时直接返回错误，禁止静默切换数据源；仿真数据仅在显式选择 `__sample__` 时使用。
   - 前端回测调度交互规范化（`web/src/app.js`）：
     - 数据集下拉框精确绑定 `data-start` 与 `data-end`；回测发起时显式传递 `__sample__` 或目标本地数据集 ID 与对应起止时间。
 - **影响范围**：
@@ -150,5 +150,13 @@ go run ./cmd/backtest -strategy-id ema-boll-rsi -run -data-root data/market
   - `internal/backtest/service_test.go`
   - `web/src/app.js`
   - `README.md`
-
-
+- **架构约束修正**：
+  - 指标按依赖 DAG 拓扑编译并拒绝循环依赖，规则 AST 执行前完成布尔/数值类型检查。
+  - 风险暴露、最大回撤停机、加仓次数、成交冷却和现货现金约束进入实际执行路径。
+  - SQLite 策略保存改为不可变 revision，回测响应记录策略定义哈希与数据 manifest 哈希。
+  - 真实数据读取失败不再静默降级到仿真数据；仿真回测必须显式选择 `__sample__`。
+- **回测可视化增强**：
+  - 多周期 K 线按指标所属周期叠加策略线，EMA/SMA/BOLL 使用价格区，RSI/ATR 使用副图区。
+  - 新增回放同步资金曲线，当前权益、收益、回撤和持仓随 15m 驱动时钟逐点更新。
+  - 指标和资金数据严格截断到当前回放 Bar，高周期形成中阶段只读取最近已完成周期值。
+  - 界面统一为中性深色量化终端风格，压缩结果卡片层级并优化 1080px 与窄屏布局。

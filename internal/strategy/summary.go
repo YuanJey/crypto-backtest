@@ -8,6 +8,9 @@ type Summary struct {
 	DatasetID      string             `json:"dataset_id"`
 	Symbols        []string           `json:"symbols"`
 	Timeframe      string             `json:"timeframe"`
+	MarketType     MarketType         `json:"market_type"`
+	InitialCash    float64            `json:"initial_cash"`
+	QuoteCurrency  string             `json:"quote_currency"`
 	IndicatorCount int                `json:"indicator_count"`
 	Indicators     []IndicatorSummary `json:"indicators"`
 	RuleCount      int                `json:"rule_count"`
@@ -55,6 +58,9 @@ func Summarize(definition Definition) Summary {
 		DatasetID:      definition.Data.DatasetID,
 		Symbols:        definition.Data.Symbols,
 		Timeframe:      definition.Data.Timeframe,
+		MarketType:     definition.Account.MarketType,
+		InitialCash:    definition.Account.InitialCash,
+		QuoteCurrency:  definition.Account.QuoteCurrency,
 		IndicatorCount: len(definition.Indicators),
 		Indicators:     indicators,
 		RuleCount:      len(definition.Rules),

@@ -23,8 +23,12 @@ func Compile(definition strategy.Definition, registry *indicator.Registry) (Plan
 		return Plan{}, err
 	}
 
-	indicators := make([]IndicatorPlan, 0, len(definition.Indicators))
-	for _, spec := range definition.Indicators {
+	orderedSpecs, err := orderIndicators(definition.Indicators)
+	if err != nil {
+		return Plan{}, err
+	}
+	indicators := make([]IndicatorPlan, 0, len(orderedSpecs))
+	for _, spec := range orderedSpecs {
 		indicatorDefinition, ok := registry.Definition(spec.Type)
 		if !ok {
 			return Plan{}, fmt.Errorf("unknown indicator type %q", spec.Type)
@@ -91,4 +95,49 @@ func Compile(definition strategy.Definition, registry *indicator.Registry) (Plan
 		Indicators:      indicators,
 		Rules:           rules,
 	}, nil
+}
+
+func orderIndicators(specs []strategy.IndicatorSpec) ([]strategy.IndicatorSpec, error) {
+	byID := make(map[string]strategy.IndicatorSpec, len(specs))
+	indegree := make(map[string]int, len(specs))
+	dependents := make(map[string][]string, len(specs))
+	for _, spec := range specs {
+		byID[spec.ID] = spec
+		indegree[spec.ID] = 0
+	}
+	for _, spec := range specs {
+		seen := map[string]struct{}{}
+		for _, input := range spec.Inputs {
+			if input.Scope != strategy.ValueScopeIndicator {
+				continue
+			}
+			if _, ok := seen[input.Name]; ok {
+				continue
+			}
+			seen[input.Name] = struct{}{}
+			indegree[spec.ID]++
+			dependents[input.Name] = append(dependents[input.Name], spec.ID)
+		}
+	}
+
+	ordered := make([]strategy.IndicatorSpec, 0, len(specs))
+	emitted := make(map[string]bool, len(specs))
+	for len(ordered) < len(specs) {
+		progress := false
+		for _, spec := range specs {
+			if emitted[spec.ID] || indegree[spec.ID] != 0 {
+				continue
+			}
+			emitted[spec.ID] = true
+			ordered = append(ordered, byID[spec.ID])
+			for _, dependent := range dependents[spec.ID] {
+				indegree[dependent]--
+			}
+			progress = true
+		}
+		if !progress {
+			return nil, fmt.Errorf("indicator dependency graph contains a cycle")
+		}
+	}
+	return ordered, nil
 }

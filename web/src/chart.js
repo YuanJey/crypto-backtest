@@ -16,6 +16,7 @@ class CandleChart {
 
     // 数据状态
     this.bars = [];
+    this.indicatorSeries = [];
     this.visibleBarsCount = options.initialVisibleBars || 60;
     this.barSpacing = 8;
     this.rightOffsetBars = 5; // 右侧预留空隙
@@ -29,18 +30,18 @@ class CandleChart {
 
     // 视觉配色
     this.colors = {
-      bg: '#0f121a',
+      bg: '#0b0f13',
       grid: 'rgba(255, 255, 255, 0.04)',
-      axisText: '#848e9c',
+      axisText: '#7f8b98',
       crosshair: 'rgba(255, 255, 255, 0.28)',
-      crosshairBadgeBg: '#2563eb',
+      crosshairBadgeBg: '#537df5',
       crosshairBadgeText: '#ffffff',
-      bull: '#00c087',
-      bullDim: 'rgba(0, 192, 135, 0.25)',
-      bear: '#f6465d',
-      bearDim: 'rgba(246, 70, 93, 0.25)',
-      formingOutline: '#f59e0b',
-      priceLine: 'rgba(59, 130, 246, 0.7)',
+      bull: '#2ad3a3',
+      bullDim: 'rgba(42, 211, 163, 0.2)',
+      bear: '#ff6278',
+      bearDim: 'rgba(255, 98, 120, 0.2)',
+      formingOutline: '#f5b84b',
+      priceLine: 'rgba(83, 125, 245, 0.7)',
     };
 
     // 事件分发
@@ -77,6 +78,11 @@ class CandleChart {
 
   setBars(bars) {
     this.bars = bars || [];
+    this.render();
+  }
+
+  setIndicators(series) {
+    this.indicatorSeries = Array.isArray(series) ? series : [];
     this.render();
   }
 
@@ -223,6 +229,15 @@ class CandleChart {
       if (b.high > maxPrice) maxPrice = b.high;
       if (b.volume > maxVol) maxVol = b.volume;
     }
+    for (const series of this.indicatorSeries) {
+      if (series.pane !== 'price') continue;
+      for (let index = startIndex; index < endIndex; index++) {
+        const value = series.values[index];
+        if (!Number.isFinite(value)) continue;
+        if (value < minPrice) minPrice = value;
+        if (value > maxPrice) maxPrice = value;
+      }
+    }
 
     if (!isFinite(minPrice) || !isFinite(maxPrice)) {
       minPrice = 90000;
@@ -247,6 +262,8 @@ class CandleChart {
 
       this.drawBar(ctx, bar, barX, barWidth);
     }
+
+    this.drawIndicators(ctx, startIndex, endIndex, spacing);
 
     // 绘制最新价格基准线
     const lastBar = this.bars[this.bars.length - 1];
@@ -343,6 +360,107 @@ class CandleChart {
     const volHeight = this.chartAreaHeight - volY;
     ctx.fillStyle = isBull ? this.colors.bullDim : this.colors.bearDim;
     ctx.fillRect(rectX, Math.round(volY), rectW, Math.round(volHeight));
+  }
+
+  drawIndicators(ctx, startIndex, endIndex, spacing) {
+    const priceSeries = this.indicatorSeries.filter(series => series.pane === 'price');
+    const oscillatorSeries = this.indicatorSeries.filter(series => series.pane === 'oscillator');
+
+    for (const series of priceSeries) {
+      this.drawSeriesLine(
+        ctx,
+        series,
+        startIndex,
+        endIndex,
+        spacing,
+        value => this.priceToY(value),
+        1.45,
+      );
+    }
+
+    if (oscillatorSeries.length === 0) return;
+    const oscillatorTop = this.priceAreaHeight + 5;
+    const oscillatorBottom = this.chartAreaHeight - 4;
+    const oscillatorHeight = Math.max(1, oscillatorBottom - oscillatorTop);
+
+    for (const series of oscillatorSeries) {
+      const visibleValues = series.values
+        .slice(startIndex, endIndex)
+        .filter(Number.isFinite);
+      if (visibleValues.length === 0) continue;
+
+      let minValue = Number.isFinite(series.min) ? series.min : Math.min(...visibleValues);
+      let maxValue = Number.isFinite(series.max) ? series.max : Math.max(...visibleValues);
+      if (maxValue === minValue) {
+        minValue -= 1;
+        maxValue += 1;
+      } else if (!Number.isFinite(series.min) && !Number.isFinite(series.max)) {
+        const padding = (maxValue - minValue) * 0.12;
+        minValue -= padding;
+        maxValue += padding;
+      }
+
+      if (series.kind === 'rsi') {
+        ctx.save();
+        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.16)';
+        for (const threshold of [30, 70]) {
+          const y = oscillatorBottom - ((threshold - minValue) / (maxValue - minValue)) * oscillatorHeight;
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(this.chartAreaWidth, y);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      this.drawSeriesLine(
+        ctx,
+        series,
+        startIndex,
+        endIndex,
+        spacing,
+        value => oscillatorBottom - ((value - minValue) / (maxValue - minValue)) * oscillatorHeight,
+        1.25,
+      );
+    }
+  }
+
+  drawSeriesLine(ctx, series, startIndex, endIndex, spacing, valueToY, lineWidth) {
+    ctx.save();
+    ctx.lineWidth = lineWidth;
+    ctx.strokeStyle = series.color || '#f59e0b';
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    if (series.dashed) {
+      ctx.setLineDash([4, 3]);
+    }
+
+    let drawing = false;
+    ctx.beginPath();
+    for (let index = startIndex; index < endIndex; index++) {
+      const value = series.values[index];
+      if (!Number.isFinite(value)) {
+        drawing = false;
+        continue;
+      }
+      const x = this.chartAreaWidth -
+        ((this.bars.length - 1 - index + this.rightOffsetBars) * spacing) -
+        spacing * 0.5;
+      const y = valueToY(value);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        drawing = false;
+        continue;
+      }
+      if (!drawing) {
+        ctx.moveTo(x, y);
+        drawing = true;
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
   }
 
   drawLatestPriceLine(ctx, lastBar) {
@@ -475,3 +593,130 @@ class CandleChart {
 }
 
 window.CandleChart = CandleChart;
+
+class EquityCurveChart {
+  constructor(canvasId) {
+    this.canvas = document.getElementById(canvasId);
+    if (!this.canvas) {
+      throw new Error(`Canvas #${canvasId} not found`);
+    }
+    this.ctx = this.canvas.getContext('2d');
+    this.points = [];
+    this.visibleCount = 0;
+    window.addEventListener('resize', () => this.resize());
+    this.resize();
+  }
+
+  resize() {
+    const rect = this.canvas.parentElement.getBoundingClientRect();
+    this.width = rect.width;
+    this.height = rect.height;
+    this.dpr = window.devicePixelRatio || 1;
+    this.canvas.width = this.width * this.dpr;
+    this.canvas.height = this.height * this.dpr;
+    this.canvas.style.width = `${this.width}px`;
+    this.canvas.style.height = `${this.height}px`;
+    this.ctx.resetTransform();
+    this.ctx.scale(this.dpr, this.dpr);
+    this.render();
+  }
+
+  setPoints(points, visibleCount = null) {
+    this.points = Array.isArray(points) ? points : [];
+    this.visibleCount = visibleCount === null
+      ? this.points.length
+      : Math.max(0, Math.min(this.points.length, visibleCount));
+    this.render();
+  }
+
+  setVisibleCount(visibleCount) {
+    this.visibleCount = Math.max(0, Math.min(this.points.length, visibleCount));
+    this.render();
+  }
+
+  render() {
+    if (!this.ctx || !this.width) return;
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, this.width, this.height);
+
+    const points = this.points.slice(0, this.visibleCount);
+    if (points.length === 0) return;
+
+    const padding = { top: 10, right: 82, bottom: 20, left: 10 };
+    const plotWidth = Math.max(1, this.width - padding.left - padding.right);
+    const plotHeight = Math.max(1, this.height - padding.top - padding.bottom);
+    const equities = points.map(point => point.equity).filter(Number.isFinite);
+    if (equities.length === 0) return;
+
+    let minEquity = Math.min(...equities);
+    let maxEquity = Math.max(...equities);
+    const range = maxEquity - minEquity || Math.max(1, Math.abs(maxEquity) * 0.01);
+    minEquity -= range * 0.12;
+    maxEquity += range * 0.12;
+    const xFor = index => padding.left + (index / Math.max(1, points.length - 1)) * plotWidth;
+    const yFor = value => padding.top + (1 - (value - minEquity) / (maxEquity - minEquity)) * plotHeight;
+
+    ctx.save();
+    ctx.font = '9px JetBrains Mono, monospace';
+    ctx.fillStyle = '#64748b';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    ctx.textBaseline = 'middle';
+    for (let step = 0; step <= 3; step++) {
+      const value = minEquity + (step / 3) * (maxEquity - minEquity);
+      const y = yFor(value);
+      ctx.beginPath();
+      ctx.moveTo(padding.left, y);
+      ctx.lineTo(this.width - padding.right, y);
+      ctx.stroke();
+      ctx.fillText(value.toFixed(2), this.width - padding.right + 7, y);
+    }
+
+    const initialEquity = points[0].equity;
+    const finalEquity = points[points.length - 1].equity;
+    const positive = finalEquity >= initialEquity;
+    const lineColor = positive ? '#2ad3a3' : '#ff6278';
+
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      const x = xFor(index);
+      const y = yFor(point.equity);
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.lineTo(xFor(points.length - 1), padding.top + plotHeight);
+    ctx.lineTo(xFor(0), padding.top + plotHeight);
+    ctx.closePath();
+    ctx.fillStyle = positive ? 'rgba(42, 211, 163, 0.09)' : 'rgba(255, 98, 120, 0.09)';
+    ctx.fill();
+
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      const x = xFor(index);
+      const y = yFor(point.equity);
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 1.6;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    const lastX = xFor(points.length - 1);
+    const lastY = yFor(finalEquity);
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, 3, 0, Math.PI * 2);
+    ctx.fillStyle = lineColor;
+    ctx.fill();
+
+    const lastPoint = points[points.length - 1];
+    const timeLabel = new Date(lastPoint.time_ms).toISOString().substring(5, 16).replace('T', ' ');
+    ctx.fillStyle = '#64748b';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(timeLabel, this.width - padding.right, this.height - 3);
+    ctx.restore();
+  }
+}
+
+window.EquityCurveChart = EquityCurveChart;

@@ -19,10 +19,21 @@ type indicatorState struct {
 
 func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, error) {
 	reportSpec := normalizeReportSpec(request.Report)
+	if err := validateReportSpec(reportSpec, plan); err != nil {
+		return Result{}, err
+	}
 	bars := append([]market.Bar(nil), request.Bars...)
 	sort.Slice(bars, func(i, j int) bool { return bars[i].OpenTimeMS < bars[j].OpenTimeMS })
 	if len(bars) == 0 {
 		return Result{}, fmt.Errorf("bars must not be empty")
+	}
+	for index, bar := range bars {
+		if index > 0 && bars[index-1].OpenTimeMS == bar.OpenTimeMS {
+			return Result{}, fmt.Errorf("duplicate bar at open_time_ms=%d", bar.OpenTimeMS)
+		}
+		if bar.OpenTimeMS%plan.BaseTimeframeMS != 0 {
+			return Result{}, fmt.Errorf("bar at open_time_ms=%d is not aligned to base timeframe", bar.OpenTimeMS)
+		}
 	}
 
 	states := make([]indicatorState, 0, len(plan.Indicators))
@@ -46,6 +57,9 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 	result := Result{}
 	pendingOrderIndexes := make([]int, 0)
 	orderSequence := 0
+	peakEquity := plan.Strategy.Account.InitialCash
+	riskHalted := false
+	lastFillBarIndex := -1
 
 	for index, bar := range bars {
 		if err := ctx.Err(); err != nil {
@@ -54,9 +68,16 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 		if !bar.IsClosed() {
 			return Result{}, fmt.Errorf("bar at open_time_ms=%d is not closed", bar.OpenTimeMS)
 		}
+		riskHalted = riskHalted || drawdownHalted(
+			portfolio.equity(bar.Open),
+			peakEquity,
+			plan.Strategy.Risk.MaxDrawdownHaltPct,
+		)
 		if len(pendingOrderIndexes) > 0 {
 			for _, orderIndex := range pendingOrderIndexes {
-				fillOrder(&portfolio, &result, orderIndex, bar, plan)
+				if fillOrder(&portfolio, &result, orderIndex, bar, plan, riskHalted) {
+					lastFillBarIndex = index
+				}
 			}
 			pendingOrderIndexes = pendingOrderIndexes[:0]
 		}
@@ -99,13 +120,25 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 			}
 		}
 
+		currentEquity := portfolio.equity(bar.Close)
+		if currentEquity > peakEquity {
+			peakEquity = currentEquity
+		}
+		riskHalted = riskHalted || drawdownHalted(
+			currentEquity,
+			peakEquity,
+			plan.Strategy.Risk.MaxDrawdownHaltPct,
+		)
+
 		evalCtx := evalContext{bars: bars, barIndex: index, indicators: indicatorSeries, portfolio: portfolio}
+		cooldownActive := lastFillBarIndex >= 0 &&
+			index-lastFillBarIndex < plan.Strategy.Behavior.CooldownBars
 		for _, rule := range plan.Rules {
 			matched, err := evalBool(rule.When, evalCtx)
 			if err != nil {
 				return Result{}, fmt.Errorf("rule %q: %w", rule.ID, err)
 			}
-			if !matched || !eligible(portfolio, rule.Action, plan.Strategy) {
+			if !matched || !eligible(portfolio, rule.Action, plan.Strategy, riskHalted, cooldownActive) {
 				continue
 			}
 			orderSequence++
@@ -122,7 +155,7 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 
 		result.EquityCurve = append(result.EquityCurve, EquityPoint{
 			TimeMS:      bar.OpenTimeMS + plan.BaseTimeframeMS,
-			Equity:      portfolio.equity(bar.Close),
+			Equity:      currentEquity,
 			Cash:        portfolio.cash,
 			PositionQty: portfolio.quantity,
 			Close:       bar.Close,
@@ -132,13 +165,15 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 	if len(result.EquityCurve) > 0 {
 		result.FinalEquity = result.EquityCurve[len(result.EquityCurve)-1].Equity
 	}
+	result.TotalOrders = len(result.Orders)
+	result.TotalFills = len(result.Fills)
 	if err := applyReportSpec(&result, reportSpec, indicatorSeries, plan.Strategy.Account.InitialCash); err != nil {
 		return Result{}, err
 	}
 	return result, nil
 }
 
-func fillOrder(portfolio *portfolio, result *Result, orderIndex int, bar market.Bar, plan compiler.Plan) {
+func fillOrder(portfolio *portfolio, result *Result, orderIndex int, bar market.Bar, plan compiler.Plan, riskHalted bool) bool {
 	order := &result.Orders[orderIndex]
 	price := fillPrice(bar.Open, order.Action, plan.Strategy.Execution.Slippage)
 	feeRate := plan.Strategy.Execution.Fee.TakerRate
@@ -146,12 +181,27 @@ func fillOrder(portfolio *portfolio, result *Result, orderIndex int, bar market.
 	var ok bool
 	switch order.Action.Type {
 	case strategy.ActionOpen:
-		sizePct, sizeOK := resolveOpenSizePct(*portfolio, order.Action, plan.Strategy.Position, price)
+		if riskHalted {
+			break
+		}
+		sizePct, sizeOK := resolveOpenSizePct(
+			*portfolio,
+			order.Action,
+			plan.Strategy.Position,
+			plan.Strategy.Risk,
+			price,
+		)
 		if !sizeOK {
 			ok = false
 			break
 		}
-		quantity, fee, ok = portfolio.open(order.Action.Side, price, sizePct, feeRate, allowPyramiding(plan.Strategy))
+		quantity, fee, ok = portfolio.open(
+			order.Action.Side,
+			price,
+			sizePct,
+			feeRate,
+			plan.Strategy.Behavior.AllowPyramiding,
+		)
 	case strategy.ActionClose:
 		sizePct := order.Action.SizePct
 		if sizePct == 0 {
@@ -161,7 +211,7 @@ func fillOrder(portfolio *portfolio, result *Result, orderIndex int, bar market.
 	}
 	if !ok {
 		order.Status = OrderStatusSkipped
-		return
+		return false
 	}
 	order.Status = OrderStatusFilled
 	result.Fills = append(result.Fills, Fill{
@@ -174,6 +224,7 @@ func fillOrder(portfolio *portfolio, result *Result, orderIndex int, bar market.
 		RealizedPNL: realized,
 		Side:        order.Action.Side,
 	})
+	return true
 }
 
 func fillPrice(open float64, action strategy.ActionSpec, slippage strategy.SlippageSpec) float64 {
@@ -197,18 +248,27 @@ func fillPrice(open float64, action strategy.ActionSpec, slippage strategy.Slipp
 	}
 }
 
-func eligible(portfolio portfolio, action strategy.ActionSpec, strategyDef strategy.Definition) bool {
+func eligible(
+	portfolio portfolio,
+	action strategy.ActionSpec,
+	strategyDef strategy.Definition,
+	riskHalted bool,
+	cooldownActive bool,
+) bool {
 	currentSide := portfolio.currentSide()
 	switch action.Type {
 	case strategy.ActionOpen:
+		if riskHalted || cooldownActive {
+			return false
+		}
 		if currentSide == "" {
 			return true
 		}
-		if currentSide != action.Side || !allowPyramiding(strategyDef) {
+		if currentSide != action.Side || !strategyDef.Behavior.AllowPyramiding {
 			return false
 		}
 		maxEntries := 1 + strategyDef.Position.MaxAdditions
-		return maxEntries <= 1 || portfolio.entryCount < maxEntries
+		return portfolio.entryCount < maxEntries
 	case strategy.ActionClose:
 		return currentSide == action.Side
 	default:
@@ -216,11 +276,13 @@ func eligible(portfolio portfolio, action strategy.ActionSpec, strategyDef strat
 	}
 }
 
-func allowPyramiding(strategyDef strategy.Definition) bool {
-	return strategyDef.Position.AllowPyramiding || strategyDef.Behavior.AllowPyramiding
-}
-
-func resolveOpenSizePct(portfolio portfolio, action strategy.ActionSpec, position strategy.PositionSpec, price float64) (float64, bool) {
+func resolveOpenSizePct(
+	portfolio portfolio,
+	action strategy.ActionSpec,
+	position strategy.PositionSpec,
+	risk strategy.RiskSpec,
+	price float64,
+) (float64, bool) {
 	sizePct := action.SizePct
 	if sizePct == 0 {
 		if portfolio.entryCount == 0 {
@@ -236,13 +298,18 @@ func resolveOpenSizePct(portfolio portfolio, action strategy.ActionSpec, positio
 	if sizePct <= 0 {
 		return 0, false
 	}
-	if position.MaxPositionPct > 0 {
+	maxPositionPct := minPositive(
+		position.MaxPositionPct,
+		risk.MaxSymbolEquityPct,
+		risk.MaxTotalExposurePct,
+	)
+	if maxPositionPct > 0 {
 		equity := portfolio.equity(price)
 		if equity <= 0 {
 			return 0, false
 		}
 		currentNotional := portfolio.positionNotional(price)
-		maxNotional := equity * position.MaxPositionPct
+		maxNotional := equity * maxPositionPct
 		availableNotional := maxNotional - currentNotional
 		if availableNotional <= 0 {
 			return 0, false
@@ -253,4 +320,24 @@ func resolveOpenSizePct(portfolio portfolio, action strategy.ActionSpec, positio
 		}
 	}
 	return sizePct, sizePct > 0
+}
+
+func minPositive(values ...float64) float64 {
+	var result float64
+	for _, value := range values {
+		if value <= 0 {
+			continue
+		}
+		if result == 0 || value < result {
+			result = value
+		}
+	}
+	return result
+}
+
+func drawdownHalted(equity, peak, limit float64) bool {
+	if limit <= 0 || peak <= 0 {
+		return false
+	}
+	return (peak-equity)/peak >= limit
 }

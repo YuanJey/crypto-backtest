@@ -198,7 +198,6 @@ type BehaviorSpec struct {
 
 type PositionSpec struct {
 	InitialSizePct     float64 `json:"initial_size_pct,omitempty"`
-	AllowPyramiding   bool    `json:"allow_pyramiding,omitempty"`
 	MaxAdditions      int     `json:"max_additions,omitempty"`
 	AddSizePct        float64 `json:"add_size_pct,omitempty"`
 	AddSizeMultiplier float64 `json:"add_size_multiplier,omitempty"`
@@ -230,6 +229,10 @@ type RiskSpec struct {
 	MaxDrawdownHaltPct  float64 `json:"max_drawdown_halt_pct"`
 }
 ```
+
+`BehaviorSpec.AllowPyramiding` 是是否允许同向加仓的唯一权威来源。为兼容已保存的
+schema v1 策略，后端仍接受旧的 `position.allow_pyramiding`，但会在规范化阶段迁移
+到 `behavior.allow_pyramiding`，编译计划中不保留第二份开关。
 
 `Start` 包含在回测区间内，`End` 不包含在回测区间内，统一采用 `[start, end)` 语义。
 
@@ -334,6 +337,7 @@ POST /api/v1/backtests
 ```json
 {
   "strategy_id": "ema-boll-rsi",
+  "strategy_revision": 2,
   "report": {
     "equity_curve": true,
     "orders": true,
@@ -347,11 +351,16 @@ POST /api/v1/backtests
 }
 ```
 
+`strategy_revision` 可选；省略时读取最新 revision。SQLite 每次保存语义发生变化的
+同 ID 策略时追加不可变 revision，并记录规范化定义的 SHA256；重复保存相同定义
+不会制造新 revision。
+
 CLI 入口保留为开发调试工具。默认只完成解码、校验和编译：
 
 ```bash
 go run ./cmd/backtest -strategy-id ema-boll-rsi
 go run ./cmd/backtest -db data/app.db -strategy-id ema-boll-rsi
+go run ./cmd/backtest -db data/app.db -strategy-id ema-boll-rsi -strategy-revision 2
 ```
 
 执行回测时增加 `-run`，Go 会按策略里的 `dataset_id`、标的、时间范围从 `data/market` 读取 Parquet K 线：
@@ -383,6 +392,32 @@ type IndicatorOverlay struct {
 }
 ```
 
+服务层响应必须同时返回本次实际使用的数据来源：
+
+```go
+type DataProvenance struct {
+	DatasetID      string `json:"dataset_id"`
+	Symbol         string `json:"symbol"`
+	Timeframe      string `json:"timeframe"`
+	StartMS        int64  `json:"start_ms"`
+	EndMS          int64  `json:"end_ms"`
+	ManifestSHA256 string `json:"manifest_sha256,omitempty"`
+	Synthetic      bool   `json:"synthetic"`
+}
+```
+
+真实数据集读取失败必须终止回测，不能静默降级为仿真数据。只有请求显式指定
+`dataset_id="__sample__"` 时才允许使用确定性合成 K 线。
+
+回测响应还必须包含：
+
+```go
+type RevisionMetadata struct {
+	Revision         int    `json:"revision"`
+	DefinitionSHA256 string `json:"definition_sha256"`
+}
+```
+
 CLI 可用 `-report` 选择输出段，`-report-indicator` 选择具体指标曲线：
 
 ```bash
@@ -404,8 +439,11 @@ strategy_id -> FileRepository.LoadByID -> strategy.Decode -> strategy.Validate -
 - 指标类型存在性校验。
 - 指标 `params` 严格解码和参数范围校验。
 - 指标 `timeframe` 必须是 15m 基准周期的整数倍。
+- 指标依赖必须组成无环 DAG，并按拓扑顺序生成执行计划。
 - `ValueRef.Offset <= 0`，禁止正向未来偏移。
 - 规则引用的指标 ID 和输出字段必须存在。
+- 规则根节点必须是布尔类型，逻辑和数值操作符的参数类型必须匹配。
+- MVP 数据选择必须且只能包含一个标的，`max_open_positions` 必须为 `1`。
 - 现货账户禁止配置 `short` 方向动作，开空需要 `perpetual` 市场类型。
 
 ### 4.4 表达式 AST
@@ -528,6 +566,9 @@ type ActionSpec struct {
 - 若未配置 `add_size_pct` 且配置 `add_size_multiplier`，使用 `initial_size_pct * add_size_multiplier^entry_count`。
 - `max_additions` 限制当前持仓轮次内的加仓次数，不包含首次开仓。
 - `max_position_pct` 限制当前标的总仓位占权益比例。
+- 最终仓位上限取 `position.max_position_pct`、`risk.max_symbol_equity_pct` 和
+  `risk.max_total_exposure_pct` 中的最小有效值。
+- 达到 `risk.max_drawdown_halt_pct` 后禁止新开仓，但仍允许平仓。
 
 规则条件可以直接保存为 AST，也可以保存为公共链式表达式字符串，由后端统一解析为 AST：
 
@@ -547,7 +588,8 @@ type ActionSpec struct {
 
 - `ema_15m.gte(2000)` 等价于引用 `indicator.ema_15m.value >= 2000`。
 - `boll_15m.upper.gte(market.close)` 可引用指定指标输出字段。
-- `market.close.cross_up(boll_15m.middle)` 可引用市场字段和指标字段。
+- `ema_fast_15m.cross_up(ema_slow_1h)` 表示两个不同指标输出形成金叉。
+- `cross_up`、`cross_down` 的两个参数必须都是指标引用，不能与常数或自身交叉。
 - `position.flat()`、`position.long()`、`position.short()` 可在指标条件前显式判断当前持仓状态。
 - `position.quantity.gte(1)`、`position.abs_quantity.gt(0)` 可引用当前持仓数量状态。
 - `position.entry_count.lt(3)` 可限制当前持仓轮次内的加仓次数。
@@ -555,7 +597,7 @@ type ActionSpec struct {
 - 顶层支持 `and(...)`、`or(...)`、`not(...)`。
 - 若同时提交 `condition` 和 `when`，服务端拒绝，避免一条规则有两套条件来源。
 
-当前 engine 还保留执行层安全门控：当 `allow_pyramiding=false` 且当前已有同向持仓时，即使规则信号再次满足也不会继续开仓。策略层推荐显式写状态条件，例如：
+当前 engine 还保留执行层安全门控：当 `behavior.allow_pyramiding=false` 且当前已有同向持仓时，即使规则信号再次满足也不会继续开仓。策略层推荐显式写状态条件，例如：
 
 ```json
 {
@@ -565,13 +607,17 @@ type ActionSpec struct {
 }
 ```
 
-后续马丁或加仓逻辑可以在同一状态模型上扩展，例如增加 `position.entry_count`、`position.last_entry_price`、`position.unrealized_pnl_pct` 等字段。
+`behavior.cooldown_bars` 从最近一次成交所在的基础 K 线开始计数，冷却窗口内禁止
+新开仓但不阻止平仓。当前 next-bar-open 引擎不支持同 Bar 反转，因此
+`behavior.allow_same_bar_reversal=true` 会在校验阶段被拒绝，而不是静默忽略。
 
-马丁式加仓示例：
+分层加仓逻辑使用同一状态模型，包括 `position.entry_count`、`position.last_entry_price`、`position.unrealized_pnl_pct` 等字段。它不代表系统内置了某种特定资金管理策略。
+
+分层加仓示例：
 
 ```json
 {
-  "id": "martingale_long",
+  "id": "add_long",
   "condition": "or(position.flat(), and(position.long(), position.entry_count.lt(3), position.avg_entry_price.gte(market.close)))",
   "action": {"type": "open", "side": "long"}
 }
@@ -617,7 +663,7 @@ type ActionSpec struct {
   "risk": {
     "max_symbol_equity_pct": 0.3,
     "max_total_exposure_pct": 1,
-    "max_open_positions": 5,
+    "max_open_positions": 1,
     "max_drawdown_halt_pct": 0.25
   },
   "indicators": [
@@ -807,7 +853,7 @@ GET /api/v1/catalog
   "operators": [
     {
 	      "type": "cross_up",
-      "args": ["number_series", "number_series"],
+      "args": ["indicator_series", "indicator_series"],
       "returns": "boolean"
     }
   ],
@@ -1056,7 +1102,7 @@ MVP 可以让 API 和 worker 在同一进程运行，但代码边界需要从第
 
 ## 10. 持久化与可复现性
 
-策略版本保存：
+策略版本保存（当前 SQLite 仓储已实现）：
 
 - 原始 JSON。
 - 规范化 JSON。

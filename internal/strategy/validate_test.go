@@ -30,6 +30,152 @@ func TestValidateRejectsDuplicateIndicatorID(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsIndicatorDependencyCycle(t *testing.T) {
+	definition := validDefinition()
+	definition.Indicators = []IndicatorSpec{
+		{
+			ID:     "first",
+			Type:   "ema",
+			Inputs: []ValueRef{{Scope: ValueScopeIndicator, Name: "second", Field: "value"}},
+			Params: json.RawMessage(`{"period":1}`),
+		},
+		{
+			ID:     "second",
+			Type:   "sma",
+			Inputs: []ValueRef{{Scope: ValueScopeIndicator, Name: "first", Field: "value"}},
+			Params: json.RawMessage(`{"period":1}`),
+		},
+	}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected indicator dependency cycle to fail")
+	}
+}
+
+func TestValidateRejectsPositionInputForIndicator(t *testing.T) {
+	definition := validDefinition()
+	definition.Indicators[0].Inputs = []ValueRef{{
+		Scope: ValueScopePosition,
+		Name:  "current",
+		Field: "quantity",
+	}}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected position-dependent indicator to fail")
+	}
+}
+
+func TestValidateRejectsExpressionTypeMismatch(t *testing.T) {
+	definition := validDefinition()
+	definition.Rules = []RuleSpec{{
+		ID: "invalid",
+		When: Expression{
+			Kind: ExprOperator,
+			Op:   OperatorGT,
+			Args: []Expression{Bool(true), Number(0)},
+		},
+		Action: ActionSpec{Type: ActionOpen, Side: TradeSideLong, SizePct: 0.2},
+	}}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected boolean operand in numeric comparison to fail")
+	}
+}
+
+func TestValidateRejectsCrossWithNonIndicatorOperand(t *testing.T) {
+	definition := validDefinition()
+	definition.Indicators = append(definition.Indicators, IndicatorSpec{
+		ID:     "ema_slow",
+		Type:   "ema",
+		Inputs: []ValueRef{{Scope: ValueScopeMarket, Name: "bar", Field: "close"}},
+		Params: json.RawMessage(`{"period":50}`),
+	})
+	definition.Rules = []RuleSpec{{
+		ID: "invalid_cross",
+		When: Market("close").CrossUp(
+			Indicator("ema_slow"),
+		),
+		Action: ActionSpec{Type: ActionOpen, Side: TradeSideLong, SizePct: 0.2},
+	}}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected cross with market operand to fail")
+	}
+}
+
+func TestValidateAcceptsCrossBetweenDifferentIndicators(t *testing.T) {
+	definition := validDefinition()
+	definition.Indicators = append(definition.Indicators, IndicatorSpec{
+		ID:     "ema_slow",
+		Type:   "ema",
+		Inputs: []ValueRef{{Scope: ValueScopeMarket, Name: "bar", Field: "close"}},
+		Params: json.RawMessage(`{"period":50}`),
+	})
+	definition.Rules = []RuleSpec{{
+		ID:   "golden_cross",
+		When: Indicator("ema_fast").CrossUp(Indicator("ema_slow")),
+		Action: ActionSpec{
+			Type: ActionOpen, Side: TradeSideLong, SizePct: 0.2,
+		},
+	}}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err != nil {
+		t.Fatalf("expected indicator cross to pass: %v", err)
+	}
+}
+
+func TestValidateRejectsCrossAgainstSameIndicator(t *testing.T) {
+	definition := validDefinition()
+	definition.Rules = []RuleSpec{{
+		ID:   "same_cross",
+		When: Indicator("ema_fast").CrossDown(Indicator("ema_fast")),
+		Action: ActionSpec{
+			Type: ActionOpen, Side: TradeSideLong, SizePct: 0.2,
+		},
+	}}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected crossing an indicator with itself to fail")
+	}
+}
+
+func TestValidateRejectsNumericRuleRoot(t *testing.T) {
+	definition := validDefinition()
+	definition.Rules = []RuleSpec{{
+		ID:     "invalid",
+		When:   Number(1),
+		Action: ActionSpec{Type: ActionOpen, Side: TradeSideLong, SizePct: 0.2},
+	}}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected numeric rule root to fail")
+	}
+}
+
+func TestValidateRejectsUnsupportedSameBarReversal(t *testing.T) {
+	definition := validDefinition()
+	definition.Behavior.AllowSameBarReversal = true
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected unsupported same-bar reversal to fail")
+	}
+}
+
+func TestValidateRejectsInactivePyramidingConfiguration(t *testing.T) {
+	definition := validDefinition()
+	definition.Position.MaxAdditions = 2
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected additions without pyramiding behavior to fail")
+	}
+}
+
+func TestNormalizeMigratesLegacyPyramidingFlag(t *testing.T) {
+	definition := validDefinition()
+	definition.Position.AllowPyramiding = true
+	normalized, err := Normalize(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !normalized.Behavior.AllowPyramiding {
+		t.Fatal("expected legacy position flag to migrate to behavior")
+	}
+	if normalized.Position.AllowPyramiding {
+		t.Fatal("expected normalized position flag to be cleared")
+	}
+}
+
 func TestValidateMultiTimeframeLongShortRules(t *testing.T) {
 	definition := validDefinition()
 	definition.Account.MarketType = MarketTypePerpetual
@@ -166,4 +312,3 @@ func TestValidateStrategyWithEmptyInputsAutoInferred(t *testing.T) {
 		t.Fatalf("expected auto inferred inputs to pass validate, got: %v", err)
 	}
 }
-

@@ -28,41 +28,102 @@ func NewService(repository strategy.Repository, registry *indicator.Registry, da
 }
 
 type Request struct {
-	StrategyID string            `json:"strategy_id"`
-	DatasetID  string            `json:"dataset_id"`
-	Symbol     string            `json:"symbol"`
-	StartMS    int64             `json:"start_ms"`
-	EndMS      int64             `json:"end_ms"`
-	Report     engine.ReportSpec `json:"report"`
+	StrategyID       string            `json:"strategy_id"`
+	StrategyRevision int               `json:"strategy_revision,omitempty"`
+	DatasetID        string            `json:"dataset_id"`
+	Symbol           string            `json:"symbol"`
+	StartMS          int64             `json:"start_ms"`
+	EndMS            int64             `json:"end_ms"`
+	Report           engine.ReportSpec `json:"report"`
 }
 
 type Response struct {
-	Status      string           `json:"status"`
-	Strategy    strategy.Summary `json:"strategy"`
-	BarCount    int              `json:"bar_count"`
-	OrderCount  int              `json:"order_count"`
-	FillCount   int              `json:"fill_count"`
-	FinalEquity float64          `json:"final_equity"`
-	Report      engine.Result    `json:"report"`
+	Status          string                    `json:"status"`
+	Strategy        strategy.Summary          `json:"strategy"`
+	StrategyVersion strategy.RevisionMetadata `json:"strategy_version"`
+	Data            DataProvenance            `json:"data"`
+	BarCount        int                       `json:"bar_count"`
+	OrderCount      int                       `json:"order_count"`
+	FillCount       int                       `json:"fill_count"`
+	FinalEquity     float64                   `json:"final_equity"`
+	Report          engine.Result             `json:"report"`
+}
+
+type DataProvenance struct {
+	DatasetID      string `json:"dataset_id"`
+	Symbol         string `json:"symbol"`
+	Timeframe      string `json:"timeframe"`
+	StartMS        int64  `json:"start_ms"`
+	EndMS          int64  `json:"end_ms"`
+	ManifestSHA256 string `json:"manifest_sha256,omitempty"`
+	Synthetic      bool   `json:"synthetic"`
 }
 
 func (s *Service) CompileStrategy(ctx context.Context, strategyID string) (strategy.Definition, compiler.Plan, error) {
+	definition, plan, _, err := s.compileStrategyRevision(ctx, strategyID, 0)
+	return definition, plan, err
+}
+
+func (s *Service) CompileStrategyRevision(
+	ctx context.Context,
+	strategyID string,
+	revision int,
+) (strategy.Definition, compiler.Plan, strategy.RevisionMetadata, error) {
+	return s.compileStrategyRevision(ctx, strategyID, revision)
+}
+
+func (s *Service) compileStrategyRevision(
+	ctx context.Context,
+	strategyID string,
+	revision int,
+) (strategy.Definition, compiler.Plan, strategy.RevisionMetadata, error) {
 	if strings.TrimSpace(strategyID) == "" {
-		return strategy.Definition{}, compiler.Plan{}, fmt.Errorf("strategy_id is required")
+		return strategy.Definition{}, compiler.Plan{}, strategy.RevisionMetadata{}, fmt.Errorf("strategy_id is required")
 	}
-	definition, err := s.repository.LoadByID(ctx, strategyID)
+	if revision < 0 {
+		return strategy.Definition{}, compiler.Plan{}, strategy.RevisionMetadata{}, fmt.Errorf("strategy_revision must be >= 1 when provided")
+	}
+	var definition strategy.Definition
+	var version strategy.RevisionMetadata
+	var err error
+	if repository, ok := s.repository.(strategy.RevisionRepository); ok {
+		if revision > 0 {
+			definition, version, err = repository.LoadRevision(ctx, strategyID, revision)
+		} else {
+			definition, err = repository.LoadByID(ctx, strategyID)
+			if err == nil {
+				version, err = repository.LatestRevision(ctx, strategyID)
+			}
+		}
+	} else {
+		if revision > 1 {
+			return strategy.Definition{}, compiler.Plan{}, strategy.RevisionMetadata{}, fmt.Errorf(
+				"strategy repository does not support revision %d",
+				revision,
+			)
+		}
+		definition, err = s.repository.LoadByID(ctx, strategyID)
+		if err == nil {
+			version.Revision = 1
+			version.DefinitionSHA256, err = strategy.DefinitionSHA256(definition)
+		}
+	}
 	if err != nil {
-		return strategy.Definition{}, compiler.Plan{}, err
+		return strategy.Definition{}, compiler.Plan{}, strategy.RevisionMetadata{}, err
 	}
 	plan, err := compiler.Compile(definition, s.registry)
 	if err != nil {
-		return strategy.Definition{}, compiler.Plan{}, err
+		return strategy.Definition{}, compiler.Plan{}, strategy.RevisionMetadata{}, err
 	}
-	return definition, plan, nil
+	return plan.Strategy, plan, version, nil
 }
 
 func (s *Service) Run(ctx context.Context, request Request) (Response, error) {
-	definition, plan, err := s.CompileStrategy(ctx, request.StrategyID)
+	definition, plan, version, err := s.compileStrategyRevision(
+		ctx,
+		request.StrategyID,
+		request.StrategyRevision,
+	)
 	if err != nil {
 		return Response{}, err
 	}
@@ -82,6 +143,11 @@ func (s *Service) Run(ctx context.Context, request Request) (Response, error) {
 	if symbol == "" {
 		return Response{}, fmt.Errorf("initial engine supports exactly one symbol")
 	}
+	normalizedSymbol, err := market.NormalizeSymbol(symbol)
+	if err != nil {
+		return Response{}, err
+	}
+	symbol = normalizedSymbol
 
 	timeframe := definition.Data.Timeframe
 	if timeframe == "" {
@@ -96,11 +162,64 @@ func (s *Service) Run(ctx context.Context, request Request) (Response, error) {
 	if request.EndMS > 0 {
 		endMS = request.EndMS
 	}
+	timeframeMS, err := market.ParseTimeframeMS(timeframe)
+	if err != nil {
+		return Response{}, err
+	}
+	if err := market.RequireAlignedRange(startMS, endMS, timeframeMS); err != nil {
+		return Response{}, fmt.Errorf("backtest range: %w", err)
+	}
 
 	var bars []market.Bar
+	provenance := DataProvenance{
+		DatasetID: datasetID,
+		Symbol:    symbol,
+		Timeframe: timeframe,
+		StartMS:   startMS,
+		EndMS:     endMS,
+	}
 	if datasetID == "__sample__" || strings.EqualFold(datasetID, "sample") {
 		bars = market.GenerateSampleBars(symbol, startMS, endMS)
-	} else if datasetID != "" {
+		expectedBars := (endMS - startMS) / timeframeMS
+		if int64(len(bars)) != expectedBars {
+			return Response{}, fmt.Errorf(
+				"synthetic range requires %d bars; maximum supported is %d",
+				expectedBars,
+				market.MaxSyntheticBars,
+			)
+		}
+		provenance.DatasetID = "__sample__"
+		provenance.Synthetic = true
+	} else {
+		if datasetID == "" {
+			return Response{}, fmt.Errorf("dataset_id is required; use __sample__ explicitly for synthetic data")
+		}
+		manifest, _, manifestErr := dataset.ReadManifest(s.dataRoot, datasetID)
+		if manifestErr != nil {
+			return Response{}, fmt.Errorf("read manifest for dataset %q: %w", datasetID, manifestErr)
+		}
+		if manifest.MarketType != string(definition.Account.MarketType) {
+			return Response{}, fmt.Errorf(
+				"dataset %q market_type %q does not match strategy account market_type %q",
+				datasetID,
+				manifest.MarketType,
+				definition.Account.MarketType,
+			)
+		}
+		if startMS < manifest.StartMS || endMS > manifest.EndMS {
+			return Response{}, fmt.Errorf(
+				"backtest range [%d, %d) is outside dataset range [%d, %d)",
+				startMS,
+				endMS,
+				manifest.StartMS,
+				manifest.EndMS,
+			)
+		}
+		manifestHash, hashErr := dataset.ManifestSHA256(s.dataRoot, datasetID)
+		if hashErr != nil {
+			return Response{}, fmt.Errorf("hash manifest for dataset %q: %w", datasetID, hashErr)
+		}
+		provenance.ManifestSHA256 = manifestHash
 		readBars, readErr := dataset.ReadBars(
 			s.dataRoot,
 			datasetID,
@@ -109,20 +228,13 @@ func (s *Service) Run(ctx context.Context, request Request) (Response, error) {
 			startMS,
 			endMS,
 		)
-		if readErr == nil && len(readBars) > 0 {
-			bars = readBars
-		} else {
-			if strings.TrimSpace(request.DatasetID) == "" {
-				bars = market.GenerateSampleBars(symbol, startMS, endMS)
-			} else {
-				if readErr != nil {
-					return Response{}, fmt.Errorf("read bars for dataset %q symbol %q: %w", datasetID, symbol, readErr)
-				}
-				return Response{}, fmt.Errorf("no bars found in dataset %q for symbol %q", datasetID, symbol)
-			}
+		if readErr != nil {
+			return Response{}, fmt.Errorf("read bars for dataset %q symbol %q: %w", datasetID, symbol, readErr)
 		}
-	} else {
-		bars = market.GenerateSampleBars(symbol, startMS, endMS)
+		if len(readBars) == 0 {
+			return Response{}, fmt.Errorf("no bars found in dataset %q for symbol %q", datasetID, symbol)
+		}
+		bars = readBars
 	}
 
 	if len(bars) == 0 {
@@ -136,25 +248,25 @@ func (s *Service) Run(ctx context.Context, request Request) (Response, error) {
 	if err != nil {
 		return Response{}, err
 	}
-	return BuildResponse(definition, len(bars), result), nil
+	return BuildResponse(definition, version, provenance, len(bars), result), nil
 }
 
-func BuildResponse(definition strategy.Definition, barCount int, result engine.Result) Response {
-	orderCount := len(result.Orders)
-	if value, ok := result.Metrics[engine.MetricOrderCount]; ok {
-		orderCount = int(value)
-	}
-	fillCount := len(result.Fills)
-	if value, ok := result.Metrics[engine.MetricFillCount]; ok {
-		fillCount = int(value)
-	}
+func BuildResponse(
+	definition strategy.Definition,
+	version strategy.RevisionMetadata,
+	data DataProvenance,
+	barCount int,
+	result engine.Result,
+) Response {
 	return Response{
-		Status:      "backtest_completed",
-		Strategy:    strategy.Summarize(definition),
-		BarCount:    barCount,
-		OrderCount:  orderCount,
-		FillCount:   fillCount,
-		FinalEquity: result.FinalEquity,
-		Report:      result,
+		Status:          "backtest_completed",
+		Strategy:        strategy.Summarize(definition),
+		StrategyVersion: version,
+		Data:            data,
+		BarCount:        barCount,
+		OrderCount:      result.TotalOrders,
+		FillCount:       result.TotalFills,
+		FinalEquity:     result.FinalEquity,
+		Report:          result,
 	}
 }

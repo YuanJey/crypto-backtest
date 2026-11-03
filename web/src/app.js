@@ -12,6 +12,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   ];
 
   const charts = {};
+  const equityChart = new EquityCurveChart('canvas-equity');
+  const indicatorColors = ['#22d3ee', '#f59e0b', '#a78bfa', '#34d399', '#fb7185', '#60a5fa', '#facc15'];
+  let strategySummaries = [];
+  let activeBacktest = null;
 
   timeframes.forEach(({ tf, ms }) => {
     charts[tf] = new CandleChart(`canvas-${tf}`, {
@@ -49,6 +53,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           charts[tf].setBars(multiBars[tf]);
         }
       });
+      updateBacktestVisuals(index, currentBar15m, multiBars);
 
       // 更新顶部当前行情指标
       updateHeaderMeta(currentBar15m);
@@ -80,7 +85,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   const replayStatusText = document.getElementById('replayStatusText');
   const speedButtons = document.querySelectorAll('.btn-speed');
   const chartsGrid = document.getElementById('chartsGrid');
+  const backtestWorkspace = document.getElementById('backtestWorkspace');
   const btnReloadData = document.getElementById('btnReloadData');
+  const equityEmptyState = document.getElementById('equityEmptyState');
+  const equityStatus = document.getElementById('equityStatus');
+  const liveEquity = document.getElementById('liveEquity');
+  const liveReturn = document.getElementById('liveReturn');
+  const liveDrawdown = document.getElementById('liveDrawdown');
+  const livePosition = document.getElementById('livePosition');
 
   // 4. 事件绑定：回放控制
   btnPlayPause.addEventListener('click', () => replay.togglePlay());
@@ -135,11 +147,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       if (isAlreadyMax) {
         chartsGrid.classList.remove('maximized-mode');
+        backtestWorkspace.classList.remove('chart-maximized');
         panel.classList.remove('is-maximized');
         btn.textContent = '⛶';
       } else {
         document.querySelectorAll('.chart-panel').forEach(p => p.classList.remove('is-maximized'));
         chartsGrid.classList.add('maximized-mode');
+        backtestWorkspace.classList.add('chart-maximized');
         panel.classList.add('is-maximized');
         btn.textContent = '❐';
       }
@@ -147,6 +161,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       // 重算尺寸
       setTimeout(() => {
         Object.values(charts).forEach(c => c.resize());
+        equityChart.resize();
       }, 50);
     });
   });
@@ -238,8 +253,181 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  function resetBacktestVisualization(message = '等待回测') {
+    activeBacktest = null;
+    if (metricsBar) metricsBar.style.display = 'none';
+    Object.values(charts).forEach(chart => chart.setIndicators([]));
+    timeframes.forEach(({ tf }) => {
+      renderIndicatorLegend(tf, [], message);
+    });
+    equityChart.setPoints([], 0);
+    equityEmptyState.classList.remove('hidden');
+    equityEmptyState.textContent = '暂无资金数据';
+    equityStatus.textContent = message;
+    equityStatus.className = 'equity-status';
+    for (const element of [liveEquity, liveReturn, liveDrawdown, livePosition]) {
+      element.textContent = '--';
+      element.className = 'equity-live-value';
+    }
+  }
+
+  function indicatorColor(key) {
+    let hash = 0;
+    for (let index = 0; index < key.length; index++) {
+      hash = ((hash << 5) - hash + key.charCodeAt(index)) | 0;
+    }
+    return indicatorColors[Math.abs(hash) % indicatorColors.length];
+  }
+
+  function indicatorPane(type) {
+    return ['ema', 'sma', 'boll'].includes(String(type || '').toLowerCase())
+      ? 'price'
+      : 'oscillator';
+  }
+
+  function indicatorValueIndex(tf, bar, currentIndex, baseIndexByTime) {
+    if (tf === '15m') {
+      return baseIndexByTime.get(bar.open_time_ms) ?? currentIndex;
+    }
+    if (bar.state === 'forming') return currentIndex;
+    const timeframe = timeframes.find(item => item.tf === tf);
+    const completedAtOpen = bar.open_time_ms + timeframe.ms - 15 * 60 * 1000;
+    const completedIndex = baseIndexByTime.get(completedAtOpen);
+    return completedIndex === undefined || completedIndex > currentIndex
+      ? currentIndex
+      : completedIndex;
+  }
+
+  function buildChartIndicatorSeries(tf, chartBars, currentIndex) {
+    if (!activeBacktest) return [];
+    const reportIndicators = activeBacktest.response.report?.indicators || {};
+    const metadata = activeBacktest.indicators.filter(item => (item.timeframe || '15m') === tf);
+    const series = [];
+
+    metadata.forEach(item => {
+      const fields = reportIndicators[item.id]?.fields || {};
+      Object.entries(fields).forEach(([field, reportValues]) => {
+        const key = `${item.id}.${field}`;
+        const type = String(item.type || '').toLowerCase();
+        const values = chartBars.map(bar => {
+          const reportIndex = indicatorValueIndex(
+            tf,
+            bar,
+            currentIndex,
+            activeBacktest.baseIndexByTime,
+          );
+          const value = reportValues[reportIndex];
+          return Number.isFinite(value) ? value : null;
+        });
+        series.push({
+          id: item.id,
+          field,
+          label: key,
+          kind: type,
+          pane: indicatorPane(type),
+          color: indicatorColor(key),
+          dashed: type === 'boll' && field === 'middle',
+          min: type === 'rsi' ? 0 : undefined,
+          max: type === 'rsi' ? 100 : undefined,
+          values,
+        });
+      });
+    });
+    return series;
+  }
+
+  function formatIndicatorValue(value) {
+    if (!Number.isFinite(value)) return '--';
+    if (Math.abs(value) >= 1000) return value.toFixed(2);
+    if (Math.abs(value) < 1) return value.toFixed(4);
+    return value.toFixed(2);
+  }
+
+  function renderIndicatorLegend(tf, series, emptyMessage = '当前周期未配置策略指标') {
+    const legend = document.getElementById(`legend-${tf}`);
+    if (!legend) return;
+    legend.innerHTML = '';
+    if (series.length === 0) {
+      const empty = document.createElement('span');
+      empty.className = 'legend-empty';
+      empty.textContent = emptyMessage;
+      legend.appendChild(empty);
+      return;
+    }
+
+    series.forEach(item => {
+      const wrapper = document.createElement('span');
+      wrapper.className = 'indicator-legend-item';
+      const swatch = document.createElement('span');
+      swatch.className = 'indicator-legend-swatch';
+      swatch.style.backgroundColor = item.color;
+      const label = document.createElement('span');
+      label.textContent = item.label;
+      const value = document.createElement('span');
+      value.className = 'indicator-legend-value';
+      const latest = [...item.values].reverse().find(Number.isFinite);
+      value.textContent = formatIndicatorValue(latest);
+      wrapper.append(swatch, label, value);
+      legend.appendChild(wrapper);
+    });
+  }
+
+  function visibleEquityPointCount(points, cutoffMS) {
+    let low = 0;
+    let high = points.length;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (points[middle].time_ms <= cutoffMS) low = middle + 1;
+      else high = middle;
+    }
+    return low;
+  }
+
+  function updateLiveEquity(points, visibleCount) {
+    if (visibleCount <= 0) return;
+    const visible = points.slice(0, visibleCount);
+    const current = visible[visible.length - 1];
+    const initialCash = activeBacktest.initialCash;
+    const returnPct = initialCash > 0
+      ? ((current.equity - initialCash) / initialCash) * 100
+      : 0;
+    const peak = visible.reduce((value, point) => Math.max(value, point.equity), initialCash);
+    const drawdown = peak > 0 ? ((peak - current.equity) / peak) * 100 : 0;
+
+    liveEquity.textContent = current.equity.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    liveReturn.textContent = `${returnPct >= 0 ? '+' : ''}${returnPct.toFixed(2)}%`;
+    liveReturn.className = `equity-live-value ${returnPct >= 0 ? 'positive' : 'negative'}`;
+    liveDrawdown.textContent = `-${Math.max(0, drawdown).toFixed(2)}%`;
+    liveDrawdown.className = `equity-live-value ${drawdown > 0 ? 'negative' : ''}`;
+    livePosition.textContent = Number(current.position_qty || 0).toFixed(4);
+    equityStatus.textContent = `${visibleCount} / ${points.length} 点`;
+    equityStatus.className = 'equity-status ready';
+  }
+
+  function updateBacktestVisuals(index, currentBar, multiBars) {
+    if (!activeBacktest || !currentBar) return;
+
+    timeframes.forEach(({ tf }) => {
+      const chartBars = multiBars[tf] || [];
+      const series = buildChartIndicatorSeries(tf, chartBars, index);
+      charts[tf].setIndicators(series);
+      renderIndicatorLegend(tf, series);
+    });
+
+    const points = activeBacktest.response.report?.equity_curve || [];
+    const cutoffMS = currentBar.open_time_ms + 15 * 60 * 1000;
+    const visibleCount = visibleEquityPointCount(points, cutoffMS);
+    equityChart.setVisibleCount(visibleCount);
+    equityEmptyState.classList.toggle('hidden', visibleCount > 0);
+    updateLiveEquity(points, visibleCount);
+  }
+
   // 7. 加载行情数据并启动
   async function loadMarketData(symbol = 'BTC-USDT', datasetID = '') {
+    resetBacktestVisualization('等待回测');
     replayStatusText.textContent = '正在获取行情数据...';
     try {
       const data = await Api.fetchMarketBars(symbol, datasetID, true);
@@ -298,6 +486,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!selStrategy) return;
     const currentVal = selStrategy.value;
     const strategies = await Api.fetchStrategies();
+    strategySummaries = strategies || [];
 
     if (!strategies || strategies.length === 0) {
       selStrategy.innerHTML = `<option value="">(策略库为空，请前往策略页创建)</option>`;
@@ -315,6 +504,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (currentVal && selStrategy.querySelector(`option[value="${currentVal}"]`)) {
       selStrategy.value = currentVal;
     }
+    updateHeaderMarketType();
+  }
+
+  function updateHeaderMarketType() {
+    const strategy = strategySummaries.find(item => item.id === selStrategy?.value);
+    const tag = document.getElementById('currentMarketType');
+    if (tag) {
+      tag.textContent = strategy?.market_type
+        ? strategy.market_type.toUpperCase()
+        : '--';
+    }
   }
 
   // 监听数据集切换：即刻载入该数据集到多周期图表中
@@ -324,6 +524,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       const datasetId = selDataset.value === '__sample__' ? '' : selDataset.value;
       const sym = (opt && opt.dataset.symbol) || 'BTC-USDT';
       loadMarketData(sym, datasetId);
+    });
+  }
+
+  if (selStrategy) {
+    selStrategy.addEventListener('change', () => {
+      updateHeaderMarketType();
+      resetBacktestVisualization('策略已切换');
     });
   }
 
@@ -341,6 +548,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       const sym = (opt && opt.dataset.symbol) || 'BTC-USDT';
       const startMS = parseInt((opt && opt.dataset.start) || '0', 10);
       const endMS = parseInt((opt && opt.dataset.end) || '0', 10);
+      let strategyMeta = strategySummaries.find(item => item.id === strategyId);
+      if (!strategyMeta || !Array.isArray(strategyMeta.indicators)) {
+        strategyMeta = await Api.fetchStrategyById(strategyId);
+      }
+      const strategyIndicators = strategyMeta?.indicators || [];
 
       btnRun.disabled = true;
       btnRun.innerHTML = `<span class="spinner-sm"></span> 回测撮合中...`;
@@ -348,20 +560,49 @@ document.addEventListener('DOMContentLoaded', async () => {
       try {
         const payload = {
           dataset_id: datasetVal,
-          symbol: sym
+          symbol: sym,
+          report: {
+            equity_curve: true,
+            metrics: [
+              'final_equity',
+              'total_return_pct',
+              'max_drawdown_pct',
+              'order_count',
+              'fill_count'
+            ],
+            indicators: strategyIndicators.map(indicator => ({ id: indicator.id }))
+          }
         };
         if (startMS > 0) payload.start_ms = startMS;
         if (endMS > 0) payload.end_ms = endMS;
+        if (datasetVal === '__sample__' && replay.baseBars.length > 0) {
+          payload.start_ms = replay.baseBars[0].open_time_ms;
+          payload.end_ms = replay.baseBars[replay.baseBars.length - 1].open_time_ms + 15 * 60 * 1000;
+        }
 
         const resp = await Api.runBacktest(strategyId, payload);
-
+        const marketTypeTag = document.getElementById('currentMarketType');
+        if (marketTypeTag && resp.strategy?.market_type) {
+          marketTypeTag.textContent = resp.strategy.market_type.toUpperCase();
+        }
+        const equityPoints = resp.report?.equity_curve || [];
+        activeBacktest = {
+          response: resp,
+          indicators: strategyIndicators,
+          initialCash: resp.strategy?.initial_cash || 0,
+          baseIndexByTime: new Map(
+            replay.baseBars.map((bar, index) => [bar.open_time_ms, index]),
+          ),
+        };
+        equityChart.setPoints(equityPoints, 0);
+        replay.emitTick();
 
         // 渲染回测指标看板
         if (metricsBar && resp && resp.report) {
           metricsBar.style.display = 'flex';
           const metrics = resp.report.metrics || {};
-          const initialCapital = (resp.strategy && resp.strategy.initial_capital) || 10000;
-          const finalEq = resp.final_equity || initialCapital;
+          const initialCapital = (resp.strategy && resp.strategy.initial_cash) || 10000;
+          const finalEq = resp.final_equity ?? initialCapital;
           const retPct = ((finalEq - initialCapital) / initialCapital) * 100;
 
           const bmReturn = document.getElementById('bmReturn');
@@ -375,15 +616,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             bmReturn.className = `m-val ${retPct >= 0 ? 'm-success' : 'm-danger'}`;
           }
           if (bmMaxDD) {
-            const maxDD = metrics.max_drawdown || 0;
+            const maxDD = metrics.max_drawdown_pct || 0;
             bmMaxDD.textContent = `-${Math.abs(maxDD * 100).toFixed(2)}%`;
           }
           if (bmWinRate) {
-            const winRate = metrics.win_rate !== undefined ? metrics.win_rate * 100 : 0;
-            bmWinRate.textContent = `${winRate.toFixed(1)}%`;
+            bmWinRate.textContent = metrics.win_rate !== undefined
+              ? `${(metrics.win_rate * 100).toFixed(1)}%`
+              : '--';
           }
           if (bmTrades) {
-            const trades = resp.fill_count || resp.order_count || 0;
+            const trades = resp.fill_count ?? resp.order_count ?? 0;
             bmTrades.textContent = `${trades} 笔`;
           }
           if (bmEquity) {
@@ -397,7 +639,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         alert(`执行回测失败: ${err.message}`);
       } finally {
         btnRun.disabled = false;
-        btnRun.innerHTML = `<span class="btn-icon">🚀</span> 执行回测`;
+        btnRun.innerHTML = `<span class="btn-icon" aria-hidden="true">▶</span> 执行回测`;
       }
     });
   }
@@ -413,6 +655,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (tabId === 'backtest') {
       setTimeout(() => {
         Object.values(charts).forEach((c) => c.resize());
+        equityChart.resize();
       }, 50);
       refreshDatasetOptions();
       refreshStrategyOptions();
@@ -456,4 +699,3 @@ document.addEventListener('DOMContentLoaded', async () => {
   await refreshStrategyOptions();
   await loadMarketData();
 });
-

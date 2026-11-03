@@ -52,6 +52,15 @@ func (p *portfolio) open(side strategy.TradeSide, price float64, sizePct float64
 	if notional <= 0 {
 		return 0, 0, false
 	}
+	if p.marketType == strategy.MarketTypeSpot {
+		maxNotional := p.cash / (1 + feeRate)
+		if notional > maxNotional {
+			notional = maxNotional
+		}
+		if notional <= 0 {
+			return 0, 0, false
+		}
+	}
 	quantity := notional / price
 	fee := notional * feeRate
 	if side == strategy.TradeSideShort {

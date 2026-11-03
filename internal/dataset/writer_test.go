@@ -72,3 +72,16 @@ func TestReadBarsFromManifest(t *testing.T) {
 		t.Fatalf("len(loaded)=%d, want 2", len(loaded))
 	}
 }
+
+func TestDatasetIDRejectsPathTraversal(t *testing.T) {
+	writer := Writer{
+		OutputRoot: t.TempDir(),
+		DatasetID:  "../outside",
+	}
+	if _, err := writer.Root(); err == nil {
+		t.Fatal("expected writer to reject path traversal dataset id")
+	}
+	if _, _, err := ReadManifest(t.TempDir(), "../outside"); err == nil {
+		t.Fatal("expected reader to reject path traversal dataset id")
+	}
+}

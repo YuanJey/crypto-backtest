@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"os"
@@ -54,10 +55,17 @@ func (s *Server) Handler() http.Handler {
 
 	if s.webRoot != "" {
 		if info, err := os.Stat(s.webRoot); err == nil && info.IsDir() {
-			mux.Handle("GET /", http.FileServer(http.Dir(s.webRoot)))
+			mux.Handle("GET /", noStore(http.FileServer(http.Dir(s.webRoot))))
 		}
 	}
 	return mux
+}
+
+func noStore(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -108,14 +116,39 @@ func (s *Server) handleCreateStrategy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	var version strategy.RevisionMetadata
+	if repository, ok := s.repository.(strategy.RevisionRepository); ok {
+		version, err = repository.LatestRevision(r.Context(), definition.ID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"strategy": strategy.Summarize(definition),
+		"strategy":         strategy.Summarize(definition),
+		"strategy_version": version,
 	})
 }
 
 func (s *Server) handleGetStrategy(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	definition, err := s.repository.LoadByID(r.Context(), id)
+	var definition strategy.Definition
+	var err error
+	if value := strings.TrimSpace(r.URL.Query().Get("revision")); value != "" {
+		revision, parseErr := strconv.Atoi(value)
+		if parseErr != nil || revision < 1 {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("revision must be a positive integer"))
+			return
+		}
+		repository, ok := s.repository.(strategy.RevisionRepository)
+		if !ok {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("strategy repository does not support revisions"))
+			return
+		}
+		definition, _, err = repository.LoadRevision(r.Context(), id, revision)
+	} else {
+		definition, err = s.repository.LoadByID(r.Context(), id)
+	}
 	if err != nil {
 		writeError(w, http.StatusNotFound, err)
 		return
@@ -126,12 +159,16 @@ func (s *Server) handleGetStrategy(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleRunBacktest(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	var request backtest.Request
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+	if err := decodeStrictJSON(r.Body, &request); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 	if strings.TrimSpace(request.StrategyID) == "" {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("strategy_id is required"))
+		return
+	}
+	if request.StrategyRevision < 0 {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("strategy_revision must be a positive integer"))
 		return
 	}
 	response, err := s.runner.Run(r.Context(), request)
@@ -140,6 +177,18 @@ func (s *Server) handleRunBacktest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+func decodeStrictJSON(reader io.Reader, target any) error {
+	decoder := json.NewDecoder(reader)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return fmt.Errorf("request body contains trailing data")
+	}
+	return nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, value interface{}) {
@@ -167,23 +216,38 @@ func (s *Server) handleGetMarketBars(w http.ResponseWriter, r *http.Request) {
 	endStr := query.Get("end_ms")
 	var startMS, endMS int64
 	if startStr != "" {
-		startMS, _ = strconv.ParseInt(startStr, 10, 64)
+		var err error
+		startMS, err = strconv.ParseInt(startStr, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("start_ms must be an integer"))
+			return
+		}
 	}
 	if endStr != "" {
-		endMS, _ = strconv.ParseInt(endStr, 10, 64)
+		var err error
+		endMS, err = strconv.ParseInt(endStr, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("end_ms must be an integer"))
+			return
+		}
 	}
 	if endMS == 0 {
 		endMS = math.MaxInt64
 	}
 
 	var bars []market.Bar
-	var err error
-
 	if datasetID != "" {
+		var err error
 		bars, err = dataset.ReadBars(s.dataRoot, datasetID, symbol, market.BaseTimeframe, startMS, endMS)
-	}
-
-	if err != nil || len(bars) == 0 {
+		if err != nil {
+			writeError(w, http.StatusNotFound, fmt.Errorf("read dataset %q: %w", datasetID, err))
+			return
+		}
+		if len(bars) == 0 {
+			writeError(w, http.StatusNotFound, fmt.Errorf("no bars found in dataset %q for symbol %q", datasetID, symbol))
+			return
+		}
+	} else {
 		bars = generateSampleBars(symbol, startMS, endMS)
 	}
 
@@ -268,7 +332,6 @@ func aggregateBars(bars []market.Bar, targetMS int64) []market.Bar {
 func generateSampleBars(symbol string, startMS, endMS int64) []market.Bar {
 	return market.GenerateSampleBars(symbol, startMS, endMS)
 }
-
 
 func (s *Server) handleListDatasets(w http.ResponseWriter, r *http.Request) {
 	entries, err := os.ReadDir(s.dataRoot)

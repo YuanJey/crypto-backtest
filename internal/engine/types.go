@@ -12,6 +12,8 @@ type Result struct {
 	Indicators  map[string]IndicatorReport `json:"indicators,omitempty"`
 	Metrics     map[MetricType]float64     `json:"metrics,omitempty"`
 	FinalEquity float64                    `json:"final_equity"`
+	TotalOrders int                        `json:"-"`
+	TotalFills  int                        `json:"-"`
 }
 
 type OrderStatus string
@@ -80,7 +82,7 @@ type IndicatorOverlay struct {
 }
 
 type IndicatorReport struct {
-	Fields map[string][]float64 `json:"fields"`
+	Fields map[string][]*float64 `json:"fields"`
 }
 
 func DefaultReportSpec() ReportSpec {

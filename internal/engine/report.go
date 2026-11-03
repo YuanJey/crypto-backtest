@@ -1,12 +1,53 @@
 package engine
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+
+	"github.com/YuanJey/crypto-backtest/internal/compiler"
+)
 
 func normalizeReportSpec(spec ReportSpec) ReportSpec {
 	if spec.EquityCurve || spec.Orders || spec.Fills || len(spec.Metrics) > 0 || len(spec.Indicators) > 0 {
 		return spec
 	}
 	return DefaultReportSpec()
+}
+
+func validateReportSpec(spec ReportSpec, plan compiler.Plan) error {
+	validMetrics := map[MetricType]struct{}{
+		MetricFinalEquity:    {},
+		MetricTotalReturnPct: {},
+		MetricMaxDrawdownPct: {},
+		MetricOrderCount:     {},
+		MetricFillCount:      {},
+	}
+	for _, metric := range spec.Metrics {
+		if _, ok := validMetrics[metric]; !ok {
+			return fmt.Errorf("unknown report metric %q", metric)
+		}
+	}
+
+	outputs := make(map[string]map[string]struct{}, len(plan.Indicators))
+	for _, item := range plan.Indicators {
+		fields := make(map[string]struct{}, len(item.Outputs))
+		for _, field := range item.Outputs {
+			fields[field] = struct{}{}
+		}
+		outputs[item.ID] = fields
+	}
+	for _, overlay := range spec.Indicators {
+		fields, ok := outputs[overlay.ID]
+		if !ok {
+			return fmt.Errorf("report indicator %q does not exist", overlay.ID)
+		}
+		for _, field := range overlay.Fields {
+			if _, ok := fields[field]; !ok {
+				return fmt.Errorf("report indicator %q has no field %q", overlay.ID, field)
+			}
+		}
+	}
+	return nil
 }
 
 func applyReportSpec(result *Result, spec ReportSpec, indicatorSeries map[string]map[string][]float64, initialCash float64) error {
@@ -79,10 +120,10 @@ func buildIndicatorReports(series map[string]map[string][]float64, overlays []In
 		if !ok {
 			return nil, fmt.Errorf("report indicator %q does not exist", overlay.ID)
 		}
-		selected := map[string][]float64{}
+		selected := map[string][]*float64{}
 		if len(overlay.Fields) == 0 {
 			for field, values := range fields {
-				selected[field] = values
+				selected[field] = nullableSeries(values)
 			}
 		} else {
 			for _, field := range overlay.Fields {
@@ -90,10 +131,22 @@ func buildIndicatorReports(series map[string]map[string][]float64, overlays []In
 				if !ok {
 					return nil, fmt.Errorf("report indicator %q has no field %q", overlay.ID, field)
 				}
-				selected[field] = values
+				selected[field] = nullableSeries(values)
 			}
 		}
 		reports[overlay.ID] = IndicatorReport{Fields: selected}
 	}
 	return reports, nil
+}
+
+func nullableSeries(values []float64) []*float64 {
+	result := make([]*float64, len(values))
+	for index, value := range values {
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			continue
+		}
+		valueCopy := value
+		result[index] = &valueCopy
+	}
+	return result
 }

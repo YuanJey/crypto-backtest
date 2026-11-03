@@ -186,8 +186,22 @@ class StrategyWorkbench {
   }
 
   async loadCatalog() {
-    const data = await Api.fetchCatalog();
-    this.catalog = data.indicators || [];
+    try {
+      const data = await Api.fetchCatalog();
+      this.catalog = data.indicators || [];
+    } catch (err) {
+      this.catalog = [];
+      const container = document.getElementById('catalogListContainer');
+      if (container) {
+        container.innerHTML = '';
+        const message = document.createElement('div');
+        message.className = 'loading-hint';
+        message.textContent = `指标目录加载失败: ${err.message}`;
+        container.appendChild(message);
+      }
+      this.showAlert(`指标目录加载失败: ${err.message}`, 'error');
+      return;
+    }
     const countEl = document.getElementById('catalogCount');
     if (countEl) countEl.textContent = `${this.catalog.length} 个`;
 
@@ -559,6 +573,33 @@ class StrategyWorkbench {
     return list;
   }
 
+  getAvailableIndicatorOperands() {
+    return this.getAvailableOperands().filter(item => item.value.startsWith('indicator:'));
+  }
+
+  isCrossOperator(op) {
+    return op === 'cross_up' || op === 'cross_down';
+  }
+
+  normalizeConditionItem(item, operands) {
+    if (!this.isCrossOperator(item.op)) return item;
+
+    const indicatorOperands = operands.filter(option => option.value.startsWith('indicator:'));
+    item.rightType = 'indicator';
+    if (indicatorOperands.length < 2) return item;
+
+    if (!indicatorOperands.some(option => option.value === item.left)) {
+      item.left = indicatorOperands[0].value;
+    }
+    if (
+      !indicatorOperands.some(option => option.value === item.rightIndicator) ||
+      item.rightIndicator === item.left
+    ) {
+      item.rightIndicator = indicatorOperands.find(option => option.value !== item.left).value;
+    }
+    return item;
+  }
+
   renderRulesEditor(def) {
     const rulesContainer = document.getElementById('rulesTreeContainer');
     const rules = def.rules || [];
@@ -567,6 +608,7 @@ class StrategyWorkbench {
 
     rulesContainer.innerHTML = rules.map((rule, rIdx) => {
       const parsedWhen = this.parseAstWhen(rule.when);
+      parsedWhen.items.forEach(item => this.normalizeConditionItem(item, operands));
       const action = rule.action || { type: 'open', side: 'long', size_pct: 0.25 };
       const sizePct = Math.round((action.size_pct || 0.25) * 100);
 
@@ -622,16 +664,22 @@ class StrategyWorkbench {
   }
 
   renderConditionRowHtml(item, rIdx, cIdx, operands) {
-    const isNum = item.rightType === 'number';
+    const isCross = this.isCrossOperator(item.op);
+    const indicatorOperands = operands.filter(option => option.value.startsWith('indicator:'));
+    const leftOperands = isCross ? indicatorOperands : operands;
+    const rightOperands = (isCross ? indicatorOperands : operands)
+      .filter(option => option.value !== item.left);
+    const isNum = !isCross && item.rightType === 'number';
+    const canCross = indicatorOperands.length >= 2;
     return `
       <div class="condition-item-row" data-ridx="${rIdx}" data-cidx="${cIdx}">
         <select class="form-select cond-left-select" data-ridx="${rIdx}" data-cidx="${cIdx}">
-          ${operands.map(op => `<option value="${op.value}" ${op.value === item.left ? 'selected' : ''}>${op.label}</option>`).join('')}
+          ${leftOperands.map(op => `<option value="${op.value}" ${op.value === item.left ? 'selected' : ''}>${op.label}</option>`).join('')}
         </select>
 
         <select class="form-select cond-op-select" data-ridx="${rIdx}" data-cidx="${cIdx}">
-          <option value="cross_up" ${item.op === 'cross_up' ? 'selected' : ''}>金叉 (cross_up)</option>
-          <option value="cross_down" ${item.op === 'cross_down' ? 'selected' : ''}>死叉 (cross_down)</option>
+          <option value="cross_up" ${item.op === 'cross_up' ? 'selected' : ''} ${canCross ? '' : 'disabled'}>金叉：指标上穿 (cross_up)</option>
+          <option value="cross_down" ${item.op === 'cross_down' ? 'selected' : ''} ${canCross ? '' : 'disabled'}>死叉：指标下穿 (cross_down)</option>
           <option value="gt" ${item.op === 'gt' ? 'selected' : ''}>大于 (&gt;)</option>
           <option value="gte" ${item.op === 'gte' ? 'selected' : ''}>大于等于 (&gt;=)</option>
           <option value="lt" ${item.op === 'lt' ? 'selected' : ''}>小于 (&lt;)</option>
@@ -644,12 +692,14 @@ class StrategyWorkbench {
             <input type="number" step="0.5" class="form-control cond-right-num" data-ridx="${rIdx}" data-cidx="${cIdx}" value="${item.rightNumber}">
           ` : `
             <select class="form-select cond-right-select" data-ridx="${rIdx}" data-cidx="${cIdx}">
-              ${operands.map(op => `<option value="${op.value}" ${op.value === item.rightIndicator ? 'selected' : ''}>${op.label}</option>`).join('')}
+              ${rightOperands.map(op => `<option value="${op.value}" ${op.value === item.rightIndicator ? 'selected' : ''}>${op.label}</option>`).join('')}
             </select>
           `}
-          <button class="btn-toggle-operand" data-ridx="${rIdx}" data-cidx="${cIdx}" title="切换右操作数模式 (常数/指标)">
-            ${isNum ? '常数' : '指标'}
-          </button>
+          ${isCross ? '<span class="operand-kind-label">指标</span>' : `
+            <button class="btn-toggle-operand" data-ridx="${rIdx}" data-cidx="${cIdx}" title="切换右操作数模式 (常数/序列)">
+              ${isNum ? '常数' : '序列'}
+            </button>
+          `}
         </div>
 
         <button class="btn-delete-row" data-ridx="${rIdx}" data-cidx="${cIdx}" title="删除此条件">✕</button>
@@ -718,8 +768,13 @@ class StrategyWorkbench {
         const cIdx = parseInt(sel.dataset.cidx, 10);
         const parsed = this.parseAstWhen(def.rules[rIdx].when);
         if (parsed.items[cIdx]) {
-          parsed.items[cIdx].left = sel.value;
+          const item = parsed.items[cIdx];
+          item.left = sel.value;
+          this.normalizeConditionItem(item, this.getAvailableOperands());
           def.rules[rIdx].when = this.compileAstWhen(parsed.gate, parsed.items);
+          if (this.isCrossOperator(item.op)) {
+            this.renderRulesEditor(def);
+          }
           this.syncToJson();
         }
       });
@@ -732,8 +787,11 @@ class StrategyWorkbench {
         const cIdx = parseInt(sel.dataset.cidx, 10);
         const parsed = this.parseAstWhen(def.rules[rIdx].when);
         if (parsed.items[cIdx]) {
-          parsed.items[cIdx].op = sel.value;
+          const item = parsed.items[cIdx];
+          item.op = sel.value;
+          this.normalizeConditionItem(item, this.getAvailableOperands());
           def.rules[rIdx].when = this.compileAstWhen(parsed.gate, parsed.items);
+          this.renderRulesEditor(def);
           this.syncToJson();
         }
       });
@@ -774,6 +832,7 @@ class StrategyWorkbench {
         const cIdx = parseInt(btn.dataset.cidx, 10);
         const parsed = this.parseAstWhen(def.rules[rIdx].when);
         if (parsed.items[cIdx]) {
+          if (this.isCrossOperator(parsed.items[cIdx].op)) return;
           parsed.items[cIdx].rightType = parsed.items[cIdx].rightType === 'number' ? 'indicator' : 'number';
           def.rules[rIdx].when = this.compileAstWhen(parsed.gate, parsed.items);
           this.renderRulesEditor(def);
@@ -829,16 +888,22 @@ class StrategyWorkbench {
   addNewRule() {
     if (!this.currentStrategy.rules) this.currentStrategy.rules = [];
     const id = `rule_${this.currentStrategy.rules.length + 1}`;
-    const operands = this.getAvailableOperands();
+    const indicatorOperands = this.getAvailableIndicatorOperands();
+    const hasIndicatorPair = indicatorOperands.length >= 2;
     const newRule = {
       id: id,
       when: {
         kind: 'operator',
-        op: 'cross_up',
-        args: [
-          this.operandValueToNode(operands[0]?.value || 'market:close'),
-          this.operandValueToNode(operands[1]?.value || 'market:open')
-        ]
+        op: hasIndicatorPair ? 'cross_up' : 'gt',
+        args: hasIndicatorPair
+          ? [
+              this.operandValueToNode(indicatorOperands[0].value),
+              this.operandValueToNode(indicatorOperands[1].value)
+            ]
+          : [
+              this.operandValueToNode('market:close'),
+              { kind: 'number', number: 0 }
+            ]
       },
       action: {
         type: 'open',
@@ -896,15 +961,16 @@ class StrategyWorkbench {
     if (!node) return '';
     if (node.kind === 'reference' && node.ref) {
       if (node.ref.scope === 'market') return `market:${node.ref.field || 'close'}`;
-      return `indicator:${node.ref.id}:${node.ref.field || 'value'}`;
+      return `indicator:${node.ref.name || node.ref.id}:${node.ref.field || 'value'}`;
     }
     return '';
   }
 
   compileConditionItem(item) {
+    this.normalizeConditionItem(item, this.getAvailableOperands());
     const leftArg = this.operandValueToNode(item.left);
     let rightArg;
-    if (item.rightType === 'number') {
+    if (!this.isCrossOperator(item.op) && item.rightType === 'number') {
       rightArg = { kind: 'number', number: parseFloat(item.rightNumber) || 0 };
     } else {
       rightArg = this.operandValueToNode(item.rightIndicator);
@@ -926,7 +992,7 @@ class StrategyWorkbench {
       kind: 'reference',
       ref: {
         scope: 'indicator',
-        id: parts[1],
+        name: parts[1],
         field: parts[2] || 'value',
         offset: 0
       }
@@ -1035,15 +1101,15 @@ class StrategyWorkbench {
       },
       position: {
         initial_size_pct: 0.25,
-        allow_pyramiding: false,
         max_additions: 0,
-        add_size_multiplier: 1,
         max_position_pct: 1
       },
       execution: {
-        fill_mode: 'next_open',
+        signal_time: 'bar_close',
+        market_fill_time: 'next_bar_open',
+        intrabar_conflict: 'conservative',
         fee: { maker_rate: 0.0002, taker_rate: 0.0005 },
-        slippage: { type: 'fixed', value: 2 }
+        slippage: { type: 'bps', value: 2 }
       },
       risk: {
         max_symbol_equity_pct: 1,
@@ -1092,15 +1158,15 @@ class StrategyWorkbench {
                 kind: 'operator',
                 op: 'cross_up',
                 args: [
-                  { kind: 'reference', ref: { scope: 'indicator', id: 'ema_fast_15m', field: 'value', offset: 0 } },
-                  { kind: 'reference', ref: { scope: 'indicator', id: 'ema_slow_15m', field: 'value', offset: 0 } }
+                  { kind: 'reference', ref: { scope: 'indicator', name: 'ema_fast_15m', field: 'value', offset: 0 } },
+                  { kind: 'reference', ref: { scope: 'indicator', name: 'ema_slow_15m', field: 'value', offset: 0 } }
                 ]
               },
               {
                 kind: 'operator',
                 op: 'gt',
                 args: [
-                  { kind: 'reference', ref: { scope: 'indicator', id: 'rsi_14_4h', field: 'value', offset: 0 } },
+                  { kind: 'reference', ref: { scope: 'indicator', name: 'rsi_14_4h', field: 'value', offset: 0 } },
                   { kind: 'number', number: 45.0 }
                 ]
               }
@@ -1122,15 +1188,15 @@ class StrategyWorkbench {
                 kind: 'operator',
                 op: 'cross_down',
                 args: [
-                  { kind: 'reference', ref: { scope: 'indicator', id: 'ema_fast_15m', field: 'value', offset: 0 } },
-                  { kind: 'reference', ref: { scope: 'indicator', id: 'ema_slow_15m', field: 'value', offset: 0 } }
+                  { kind: 'reference', ref: { scope: 'indicator', name: 'ema_fast_15m', field: 'value', offset: 0 } },
+                  { kind: 'reference', ref: { scope: 'indicator', name: 'ema_slow_15m', field: 'value', offset: 0 } }
                 ]
               },
               {
                 kind: 'operator',
                 op: 'gt',
                 args: [
-                  { kind: 'reference', ref: { scope: 'indicator', id: 'rsi_14_4h', field: 'value', offset: 0 } },
+                  { kind: 'reference', ref: { scope: 'indicator', name: 'rsi_14_4h', field: 'value', offset: 0 } },
                   { kind: 'number', number: 80.0 }
                 ]
               }

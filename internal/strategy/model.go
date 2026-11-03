@@ -50,7 +50,9 @@ type BehaviorSpec struct {
 }
 
 type PositionSpec struct {
-	InitialSizePct    float64 `json:"initial_size_pct,omitempty"`
+	InitialSizePct float64 `json:"initial_size_pct,omitempty"`
+	// AllowPyramiding is a legacy alias. Normalize migrates it to
+	// Behavior.AllowPyramiding so runtime policy has one source of truth.
 	AllowPyramiding   bool    `json:"allow_pyramiding,omitempty"`
 	MaxAdditions      int     `json:"max_additions,omitempty"`
 	AddSizePct        float64 `json:"add_size_pct,omitempty"`

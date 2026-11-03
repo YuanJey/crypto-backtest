@@ -49,6 +49,71 @@ func TestServiceRunsSQLiteStrategy(t *testing.T) {
 	if response.OrderCount == 0 || response.FillCount == 0 {
 		t.Fatalf("expected orders and fills, got orders=%d fills=%d", response.OrderCount, response.FillCount)
 	}
+	if response.Data.Synthetic || response.Data.ManifestSHA256 == "" {
+		t.Fatalf("expected real dataset provenance with manifest hash: %+v", response.Data)
+	}
+	if response.StrategyVersion.Revision != 1 || response.StrategyVersion.DefinitionSHA256 == "" {
+		t.Fatalf("unexpected strategy version: %+v", response.StrategyVersion)
+	}
+}
+
+func TestServiceRunsRequestedStrategyRevision(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	repository, err := strategy.OpenSQLiteRepository(ctx, filepath.Join(root, "app.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+
+	first := testDefinition()
+	first.Name = "Revision One"
+	firstRaw, err := json.Marshal(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.Save(ctx, first, firstRaw); err != nil {
+		t.Fatal(err)
+	}
+	writeTestDataset(t, root, first)
+
+	second := first
+	second.Name = "Revision Two"
+	secondRaw, err := json.Marshal(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.Save(ctx, second, secondRaw); err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewService(repository, indicator.MustBuiltinRegistry(), filepath.Join(root, "market"))
+	response, err := service.Run(ctx, Request{
+		StrategyID:       first.ID,
+		StrategyRevision: 1,
+		Report: engine.ReportSpec{
+			Metrics: []engine.MetricType{engine.MetricFinalEquity},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Strategy.Name != "Revision One" || response.StrategyVersion.Revision != 1 {
+		t.Fatalf("unexpected historical strategy response: %+v", response)
+	}
+}
+
+func TestBuildResponseKeepsCountsWhenDetailsAreOmitted(t *testing.T) {
+	response := BuildResponse(
+		testDefinition(),
+		strategy.RevisionMetadata{Revision: 1, DefinitionSHA256: "hash"},
+		DataProvenance{DatasetID: "__sample__", Synthetic: true},
+		3,
+		engine.Result{TotalOrders: 2, TotalFills: 1, FinalEquity: 10_100},
+	)
+	if response.OrderCount != 2 || response.FillCount != 1 {
+		t.Fatalf("unexpected response counts: %+v", response)
+	}
 }
 
 func writeTestDataset(t *testing.T, root string, definition strategy.Definition) {
@@ -138,7 +203,7 @@ func testBar(openTimeMS int64, open float64) market.Bar {
 	}
 }
 
-func TestServiceSampleFallbackWhenDatasetMissing(t *testing.T) {
+func TestServiceRejectsMissingDatasetWithoutExplicitSample(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
 	repository, err := strategy.OpenSQLiteRepository(ctx, filepath.Join(root, "app.db"))
@@ -158,17 +223,14 @@ func TestServiceSampleFallbackWhenDatasetMissing(t *testing.T) {
 	}
 
 	service := NewService(repository, indicator.MustBuiltinRegistry(), filepath.Join(root, "empty-market"))
-	response, err := service.Run(ctx, Request{
+	_, err = service.Run(ctx, Request{
 		StrategyID: definition.ID,
 		Report: engine.ReportSpec{
 			Metrics: []engine.MetricType{engine.MetricFinalEquity, engine.MetricOrderCount},
 		},
 	})
-	if err != nil {
-		t.Fatalf("expected fallback to sample data, but got err: %v", err)
-	}
-	if response.BarCount == 0 {
-		t.Fatalf("expected > 0 bars from sample generator, got 0")
+	if err == nil {
+		t.Fatal("expected missing dataset to fail instead of using synthetic bars")
 	}
 }
 
@@ -205,5 +267,7 @@ func TestServiceExplicitSampleDataset(t *testing.T) {
 	if response.BarCount == 0 {
 		t.Fatalf("expected sample bars, got 0")
 	}
+	if !response.Data.Synthetic || response.Data.DatasetID != "__sample__" {
+		t.Fatalf("unexpected sample provenance: %+v", response.Data)
+	}
 }
-

@@ -14,85 +14,20 @@ const Api = {
     if (datasetID) url.searchParams.set('dataset_id', datasetID);
     if (multi) url.searchParams.set('multi', 'true');
 
-    try {
-      const res = await fetch(url.toString());
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-      }
-      return await res.json();
-    } catch (err) {
-      console.warn('API request failed, generating client-side fallback data:', err);
-      return this.generateFallbackBars(symbol);
+    const res = await fetch(url.toString());
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${await res.text()}`);
     }
-  },
-
-  /**
-   * 客户端确定性仿真数据（保证在断网或本地静态单页时也能即刻体验）
-   */
-  generateFallbackBars(symbol) {
-    const total = 672; // 7 days of 15m
-    const baseMS = 1735689600000;
-    const stepMS = 15 * 60 * 1000;
-    const bars15m = [];
-    let price = 93500.0;
-
-    for (let i = 0; i < total; i++) {
-      const t = baseMS + i * stepMS;
-      const phase = i * 0.08;
-      const harmonic = Math.sin(phase) * 180.0 + Math.cos(phase * 0.35) * 350.0 + Math.sin(i * 0.015) * 600.0;
-      const drift = i * 6.5;
-
-      const open = price;
-      const noise = Math.sin(i * 13) * 45.0 + Math.cos(i * 7) * 30.0;
-      const close = 93500.0 + harmonic + drift + noise;
-      const high = Math.max(open, close) + Math.abs(Math.sin(i * 17)) * 75.0 + 20.0;
-      const low = Math.min(open, close) - Math.abs(Math.cos(i * 23)) * 75.0 - 20.0;
-      const volume = 120.0 + Math.abs(Math.sin(i)) * 250.0 + Math.abs(close - open) * 0.8;
-
-      bars15m.push({
-        open_time_ms: t,
-        open: Math.round(open * 100) / 100,
-        high: Math.round(high * 100) / 100,
-        low: Math.round(low * 100) / 100,
-        close: Math.round(close * 100) / 100,
-        volume: Math.round(volume * 100) / 100,
-        quote_volume: Math.round(volume * close * 100) / 100,
-        trade_count: 1500 + (i % 50) * 30,
-        state: 'closed'
-      });
-      price = close;
-    }
-
-    return {
-      symbol: symbol,
-      dataset_id: 'sample-client',
-      base_timeframe: '15m',
-      timeframes: {
-        '15m': bars15m
-      }
-    };
+    return await res.json();
   },
 
   /**
    * 获取系统能力指标目录
    */
   async fetchCatalog() {
-    try {
-      const res = await fetch(`${this.baseUrl}/api/v1/catalog`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.json();
-    } catch (err) {
-      console.warn('Failed to fetch catalog from API, returning builtin catalog fallback:', err);
-      return {
-        indicators: [
-          { type: 'ema', label: 'EMA', category: 'trend', params: [{ name: 'period', type: 'int', required: true }] },
-          { type: 'sma', label: 'SMA', category: 'trend', params: [{ name: 'period', type: 'int', required: true }] },
-          { type: 'rsi', label: 'RSI', category: 'momentum', params: [{ name: 'period', type: 'int', required: true }] },
-          { type: 'atr', label: 'ATR', category: 'volatility', params: [{ name: 'period', type: 'int', required: true }] },
-          { type: 'boll', label: 'BOLL', category: 'volatility', params: [{ name: 'period', type: 'int', required: true }, { name: 'stddev', type: 'float', required: true }] },
-        ]
-      };
-    }
+    const res = await fetch(`${this.baseUrl}/api/v1/catalog`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
   },
 
   /**
@@ -149,11 +84,11 @@ const Api = {
   /**
    * 提交回测任务
    */
-  async runBacktest(strategyId, reportSpec = {}) {
+  async runBacktest(strategyId, request = {}) {
     const res = await fetch(`${this.baseUrl}/api/v1/backtests`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ strategy_id: strategyId, report: reportSpec }),
+      body: JSON.stringify({ strategy_id: strategyId, ...request }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -267,4 +202,3 @@ const Api = {
 };
 
 window.Api = Api;
-

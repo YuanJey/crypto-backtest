@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20261103-3">
 </head>
 <body class="theme-dark">
   <div class="terminal-container">
@@ -21,7 +21,7 @@
         </div>
         <div class="symbol-badge">
           <span class="symbol-name" id="currentSymbol">BTC-USDT</span>
-          <span class="market-tag">SPOT</span>
+          <span class="market-tag" id="currentMarketType">--</span>
         </div>
         <div class="kline-meta-group" id="headerKlineMeta">
           <span class="meta-item"><span class="meta-label">TIME</span><span class="meta-val" id="metaTime">--:--:--</span></span>
@@ -36,13 +36,13 @@
       <div class="header-right">
         <nav class="terminal-nav-tabs" id="mainNavTabs">
           <button class="nav-tab-btn active" data-tab="backtest">
-            <span class="tab-icon">📈</span> 行情回测
+            <span class="tab-icon" aria-hidden="true">▥</span> 行情回测
           </button>
           <button class="nav-tab-btn" data-tab="strategies">
-            <span class="tab-icon">⚙️</span> 策略管理
+            <span class="tab-icon" aria-hidden="true">⌘</span> 策略管理
           </button>
           <button class="nav-tab-btn" data-tab="data">
-            <span class="tab-icon">📥</span> 历史数据
+            <span class="tab-icon" aria-hidden="true">↓</span> 历史数据
           </button>
         </nav>
         <div class="replay-status-pill" id="replayStatusPill">
@@ -63,21 +63,21 @@
         <div class="backtest-orchestrator-bar" id="btOrchestratorBar">
           <div class="orchestrator-left">
             <div class="ctrl-select-group">
-              <span class="ctrl-icon">🗄️</span>
+              <span class="ctrl-icon" aria-hidden="true">▤</span>
               <label class="ctrl-sublabel" for="btSelectDataset">行情数据源:</label>
               <select id="btSelectDataset" class="orchestrator-select">
                 <option value="__sample__">【仿真演示】BTC-USDT (15m · 7天)</option>
               </select>
             </div>
             <div class="ctrl-select-group">
-              <span class="ctrl-icon">⚙️</span>
+              <span class="ctrl-icon" aria-hidden="true">◇</span>
               <label class="ctrl-sublabel" for="btSelectStrategy">回测策略:</label>
               <select id="btSelectStrategy" class="orchestrator-select">
                 <option value="">正在读取策略库...</option>
               </select>
             </div>
             <button class="btn btn-sm btn-primary btn-run-backtest" id="btnRunBacktest">
-              <span class="btn-icon">🚀</span> 执行回测
+              <span class="btn-icon" aria-hidden="true">▶</span> 执行回测
             </button>
           </div>
           <div class="orchestrator-right" id="btMetricsBar" style="display: none;">
@@ -104,6 +104,7 @@
           </div>
         </div>
 
+        <div class="backtest-workspace" id="backtestWorkspace">
         <main class="charts-grid-layout" id="chartsGrid">
       <!-- 15m 分区 -->
       <section class="chart-panel active" data-timeframe="15m" id="panel-15m">
@@ -120,6 +121,9 @@
         </div>
         <div class="canvas-wrapper">
           <canvas id="canvas-15m"></canvas>
+          <div class="chart-indicator-legend" id="legend-15m">
+            <span class="legend-empty">等待回测</span>
+          </div>
           <div class="chart-crosshair-tooltip" id="tooltip-15m"></div>
         </div>
       </section>
@@ -139,6 +143,9 @@
         </div>
         <div class="canvas-wrapper">
           <canvas id="canvas-1h"></canvas>
+          <div class="chart-indicator-legend" id="legend-1h">
+            <span class="legend-empty">等待回测</span>
+          </div>
           <div class="chart-crosshair-tooltip" id="tooltip-1h"></div>
         </div>
       </section>
@@ -158,6 +165,9 @@
         </div>
         <div class="canvas-wrapper">
           <canvas id="canvas-4h"></canvas>
+          <div class="chart-indicator-legend" id="legend-4h">
+            <span class="legend-empty">等待回测</span>
+          </div>
           <div class="chart-crosshair-tooltip" id="tooltip-4h"></div>
         </div>
       </section>
@@ -177,10 +187,46 @@
         </div>
         <div class="canvas-wrapper">
           <canvas id="canvas-1d"></canvas>
+          <div class="chart-indicator-legend" id="legend-1d">
+            <span class="legend-empty">等待回测</span>
+          </div>
           <div class="chart-crosshair-tooltip" id="tooltip-1d"></div>
         </div>
       </section>
     </main>
+
+    <section class="equity-section" id="equitySection">
+      <div class="equity-header">
+        <div class="equity-title-group">
+          <span class="equity-title">实时资金曲线</span>
+          <span class="equity-subtitle">EQUITY / 回放时点可见</span>
+          <span class="equity-status" id="equityStatus">等待回测</span>
+        </div>
+        <div class="equity-live-metrics">
+          <div class="equity-live-item">
+            <span class="equity-live-label">当前权益</span>
+            <strong class="equity-live-value" id="liveEquity">--</strong>
+          </div>
+          <div class="equity-live-item">
+            <span class="equity-live-label">当前收益</span>
+            <strong class="equity-live-value" id="liveReturn">--</strong>
+          </div>
+          <div class="equity-live-item">
+            <span class="equity-live-label">当前回撤</span>
+            <strong class="equity-live-value" id="liveDrawdown">--</strong>
+          </div>
+          <div class="equity-live-item">
+            <span class="equity-live-label">持仓数量</span>
+            <strong class="equity-live-value" id="livePosition">--</strong>
+          </div>
+        </div>
+      </div>
+      <div class="equity-canvas-wrapper">
+        <canvas id="canvas-equity"></canvas>
+        <div class="equity-empty-state" id="equityEmptyState">暂无资金数据</div>
+      </div>
+    </section>
+    </div><!-- /.backtest-workspace -->
 
     <!-- 底部回放控制中心 -->
     <footer class="terminal-footer">
@@ -246,11 +292,11 @@
   </div><!-- /.terminal-container -->
   <div id="modalContainer"></div>
 
-  <script src="src/chart.js"></script>
-  <script src="src/replay.js"></script>
-  <script src="src/api.js"></script>
-  <script src="src/strategy.js"></script>
-  <script src="src/data.js"></script>
-  <script src="src/app.js"></script>
+  <script src="src/chart.js?v=20261103-3"></script>
+  <script src="src/replay.js?v=20261103-3"></script>
+  <script src="src/api.js?v=20261103-3"></script>
+  <script src="src/strategy.js?v=20261103-3"></script>
+  <script src="src/data.js?v=20261103-3"></script>
+  <script src="src/app.js?v=20261103-3"></script>
 </body>
 </html>

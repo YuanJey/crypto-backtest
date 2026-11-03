@@ -115,15 +115,6 @@ func evalNumber(expression strategy.Expression, ctx evalContext, offsetDelta int
 			return value, false, err
 		}
 		return value, true, nil
-	case strategy.ExprOperator:
-		value, err := evalBool(expression, ctx)
-		if err != nil {
-			return 0, false, err
-		}
-		if value {
-			return 1, true, nil
-		}
-		return 0, true, nil
 	default:
 		return 0, false, fmt.Errorf("expression kind %q is not numeric", expression.Kind)
 	}

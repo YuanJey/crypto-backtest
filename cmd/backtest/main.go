@@ -27,6 +27,7 @@ func main() {
 func run(args []string) error {
 	flags := flag.NewFlagSet("backtest", flag.ContinueOnError)
 	strategyID := flags.String("strategy-id", "", "strategy id to load from strategies directory")
+	strategyRevision := flags.Int("strategy-revision", 0, "immutable strategy revision; defaults to latest")
 	strategiesDir := flags.String("strategies-dir", "strategies", "directory containing strategy JSON files")
 	dbPath := flags.String("db", "", "SQLite database path; when set, load strategy from SQLite instead of strategies directory")
 	runBacktest := flags.Bool("run", false, "run the compiled strategy against its dataset")
@@ -51,7 +52,11 @@ func run(args []string) error {
 	defer closeRepository()
 
 	runner := backtest.NewService(repository, registry, *dataRoot)
-	definition, plan, err := runner.CompileStrategy(context.Background(), *strategyID)
+	definition, plan, version, err := runner.CompileStrategyRevision(
+		context.Background(),
+		*strategyID,
+		*strategyRevision,
+	)
 	if err != nil {
 		return err
 	}
@@ -62,18 +67,21 @@ func run(args []string) error {
 	}
 	if !*runBacktest {
 		payload := struct {
-			Status   string           `json:"status"`
-			Strategy strategy.Summary `json:"strategy"`
+			Status          string                    `json:"status"`
+			Strategy        strategy.Summary          `json:"strategy"`
+			StrategyVersion strategy.RevisionMetadata `json:"strategy_version"`
 		}{
-			Status:   "strategy_compiled",
-			Strategy: strategy.Summarize(definition),
+			Status:          "strategy_compiled",
+			Strategy:        strategy.Summarize(definition),
+			StrategyVersion: version,
 		}
 		return printJSON(payload)
 	}
 
 	response, err := runner.Run(context.Background(), backtest.Request{
-		StrategyID: *strategyID,
-		Report:     reportSpec,
+		StrategyID:       *strategyID,
+		StrategyRevision: *strategyRevision,
+		Report:           reportSpec,
 	})
 	if err != nil {
 		return err

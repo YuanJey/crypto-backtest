@@ -3,6 +3,11 @@ package strategy
 import "strings"
 
 func Normalize(definition Definition) (Definition, error) {
+	if definition.Position.AllowPyramiding {
+		definition.Behavior.AllowPyramiding = true
+	}
+	definition.Position.AllowPyramiding = false
+
 	for index, rule := range definition.Rules {
 		condition := strings.TrimSpace(rule.Condition)
 		if condition == "" {

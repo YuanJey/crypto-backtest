@@ -5,8 +5,9 @@ import "math"
 type BarState string
 
 const (
-	BarStateForming BarState = "forming"
-	BarStateClosed  BarState = "closed"
+	BarStateForming  BarState = "forming"
+	BarStateClosed   BarState = "closed"
+	MaxSyntheticBars          = 100_000
 )
 
 // Bar is the canonical OHLCV contract shared by data download, cleaning and
@@ -34,20 +35,20 @@ func (b Bar) WithDefaultClosedState() Bar {
 	return b
 }
 
-// GenerateSampleBars 生成 7 天 15m 周期的基准仿真行情 K 线，用于演示或缺省回退
+// GenerateSampleBars returns deterministic 15m synthetic bars for explicit demos.
 func GenerateSampleBars(symbol string, startMS, endMS int64) []Bar {
 	stepMS := int64(15 * 60 * 1000)
 	totalBars := 672 // 默认生成 7 天 15m K 线
 
 	baseTime := int64(1735689600000) // 2025-01-01 00:00:00 UTC
-	if startMS > 0 {
+	if startMS > 0 || (endMS > 0 && endMS != math.MaxInt64) {
 		baseTime = (startMS / stepMS) * stepMS
 	}
 
-	if endMS > baseTime {
-		barsInRange := int((endMS - baseTime) / stepMS)
-		if barsInRange > 0 && barsInRange < totalBars {
-			totalBars = barsInRange
+	if endMS > baseTime && endMS != math.MaxInt64 {
+		barsInRange := (endMS - baseTime) / stepMS
+		if barsInRange > 0 {
+			totalBars = int(min(barsInRange, MaxSyntheticBars))
 		}
 	}
 
@@ -85,5 +86,3 @@ func GenerateSampleBars(symbol string, startMS, endMS int64) []Bar {
 	}
 	return bars
 }
-
-

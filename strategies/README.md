@@ -13,7 +13,11 @@ go run ./cmd/api -addr :8080 -db data/app.db -data-root data/market
 ```bash
 go run ./cmd/backtest -strategy-id ema-boll-rsi
 go run ./cmd/backtest -db data/app.db -strategy-id ema-boll-rsi
+go run ./cmd/backtest -db data/app.db -strategy-id ema-boll-rsi -strategy-revision 2
 ```
+
+SQLite 保存同 ID 策略时会追加不可变 revision。回测请求省略 revision 时使用最新
+版本，也可以通过 `strategy_revision` 或 CLI 的 `-strategy-revision` 精确复跑历史版本。
 
 执行回测时加 `-run`，从策略的 `dataset_id` 对应目录读取 Parquet：
 
@@ -76,11 +80,11 @@ go run ./cmd/backtest -strategy-id ema-boll-rsi -run \
 }
 ```
 
-马丁式加仓可以通过 position 状态控制：
+通用的分层加仓可以通过 position 状态控制：
 
 ```json
 {
-  "id": "martingale_long",
+  "id": "add_long",
   "condition": "or(position.flat(), and(position.long(), position.entry_count.lt(3), position.avg_entry_price.gte(market.close)))",
   "action": {
     "type": "open",
@@ -93,15 +97,20 @@ go run ./cmd/backtest -strategy-id ema-boll-rsi -run \
 
 ```json
 {
+  "behavior": {
+    "allow_pyramiding": true
+  },
   "position": {
     "initial_size_pct": 0.2,
-    "allow_pyramiding": true,
     "max_additions": 2,
     "add_size_multiplier": 2,
     "max_position_pct": 1
   }
 }
 ```
+
+`behavior.allow_pyramiding` 是是否允许同向加仓的唯一权威开关。旧策略中的
+`position.allow_pyramiding` 仍可读取，但会在编译前迁移到 `behavior`。
 
 当前内置指标参数：
 

@@ -27,8 +27,8 @@ func (w Writer) Root() (string, error) {
 	if w.OutputRoot == "" {
 		return "", fmt.Errorf("output root is required")
 	}
-	if w.DatasetID == "" {
-		return "", fmt.Errorf("dataset id is required")
+	if err := ValidateDatasetID(w.DatasetID); err != nil {
+		return "", err
 	}
 	return filepath.Abs(filepath.Join(w.OutputRoot, w.DatasetID))
 }

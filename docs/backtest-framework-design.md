@@ -273,15 +273,17 @@ indicators:
 and(position.flat(), ema_fast_15m.gte(ema_slow_1h))
 ```
 
-执行层仍保留安全门控：当 `allow_pyramiding=false` 且当前已有持仓时，开仓信号不会继续生成新仓。后续马丁 / 加仓逻辑应扩展持仓状态字段和加仓规则，而不是绕过执行层门控。
+执行层仍保留安全门控：当 `behavior.allow_pyramiding=false` 且当前已有持仓时，开仓信号不会继续生成新仓。加仓逻辑必须使用持仓状态字段和规则表达，不能绕过执行层门控。
 
 策略级仓位参数：
 
 ```json
 {
+  "behavior": {
+    "allow_pyramiding": true
+  },
   "position": {
     "initial_size_pct": 0.2,
-    "allow_pyramiding": true,
     "max_additions": 2,
     "add_size_multiplier": 2,
     "max_position_pct": 1
@@ -301,7 +303,7 @@ and(position.flat(), ema_fast_15m.gte(ema_slow_1h))
 - `position.unrealized_pnl_pct`
 - `position.side`
 
-马丁式加仓可以表达为：
+通用的分层加仓条件可以表达为：
 
 ```text
 or(position.flat(), and(position.long(), position.entry_count.lt(3), position.avg_entry_price.gte(market.close)))
@@ -334,7 +336,8 @@ or(position.flat(), and(position.long(), position.entry_count.lt(3), position.av
 left[t-1] <= right[t-1] AND left[t] > right[t]
 ```
 
-必须同时具备 `t-1` 和 `t` 的有效值，否则返回 `false`。
+`left` 和 `right` 必须引用两个不同的指标输出；不接受行情字段、常数或同一输出
+与自身交叉。必须同时具备 `t-1` 和 `t` 的有效值，否则返回 `false`。
 
 ### 7.4 规则配置示例
 
@@ -366,8 +369,8 @@ rules:
           left: indicator.ema_fast_15m.value
           right: indicator.ema_slow_1h.value
         - op: cross_up
-          left: market.close
-          right: indicator.boll_20_15m.middle
+          left: indicator.ema_fast_15m.value
+          right: indicator.ema_slow_1h.value
         - op: lt
           left: indicator.rsi_14_4h.value
           right: 70
@@ -381,8 +384,8 @@ rules:
     when:
       or:
         - op: cross_down
-          left: market.close
-          right: indicator.ema_fast_15m.value
+          left: indicator.ema_fast_15m.value
+          right: indicator.ema_slow_1h.value
         - op: gt
           left: indicator.rsi_14_4h.value
           right: 80

@@ -30,6 +30,9 @@ func TestServerCreatesAndListsStrategies(t *testing.T) {
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("create status=%d body=%s", createRec.Code, createRec.Body.String())
 	}
+	if !bytes.Contains(createRec.Body.Bytes(), []byte(`"revision":1`)) {
+		t.Fatalf("expected strategy revision in create response: %s", createRec.Body.String())
+	}
 
 	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/strategies", nil)
 	listRec := httptest.NewRecorder()
@@ -51,6 +54,26 @@ func TestServerRejectsMissingStrategyIDBacktest(t *testing.T) {
 	server := NewServer(repository, indicator.MustBuiltinRegistry(), t.TempDir())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/backtests", bytes.NewReader([]byte(`{}`)))
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestServerRejectsUnknownBacktestRequestField(t *testing.T) {
+	repository, err := strategy.OpenSQLiteRepository(context.Background(), filepath.Join(t.TempDir(), "strategies.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	server := NewServer(repository, indicator.MustBuiltinRegistry(), t.TempDir())
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/backtests",
+		bytes.NewReader([]byte(`{"strategy_id":"test","report":{"dataset_id":"wrong-level"}}`)),
+	)
 	rec := httptest.NewRecorder()
 	server.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
@@ -187,6 +210,26 @@ func TestServerMarketBarsMulti(t *testing.T) {
 	}
 }
 
+func TestServerMarketBarsDoesNotFallbackForMissingDataset(t *testing.T) {
+	repository, err := strategy.OpenSQLiteRepository(context.Background(), filepath.Join(t.TempDir(), "strategies.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	server := NewServer(repository, indicator.MustBuiltinRegistry(), t.TempDir())
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/market/bars?dataset_id=missing&symbol=BTC-USDT",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestServerStaticWebFiles(t *testing.T) {
 	repository, err := strategy.OpenSQLiteRepository(context.Background(), filepath.Join(t.TempDir(), "strategies.db"))
 	if err != nil {
@@ -204,6 +247,9 @@ func TestServerStaticWebFiles(t *testing.T) {
 	}
 	if !bytes.Contains(rec.Body.Bytes(), []byte("QUANTIX")) {
 		t.Fatalf("expected web/index.html to contain QUANTIX brand")
+	}
+	if rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("Cache-Control=%q, want no-store", rec.Header().Get("Cache-Control"))
 	}
 }
 
@@ -302,5 +348,3 @@ func TestServerDownloadMarketDataStreamHeaders(t *testing.T) {
 		t.Fatalf("expected 400 for invalid timeframe, got %d", rec.Code)
 	}
 }
-
-

@@ -1,5 +1,19 @@
 package dataset
 
+import (
+	"fmt"
+	"regexp"
+)
+
+var safeDatasetID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
+
+func ValidateDatasetID(id string) error {
+	if !safeDatasetID.MatchString(id) {
+		return fmt.Errorf("invalid dataset id %q", id)
+	}
+	return nil
+}
+
 type FileEntry struct {
 	Path     string `json:"path"`
 	SHA256   string `json:"sha256"`

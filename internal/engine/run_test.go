@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"testing"
 	"time"
 
@@ -78,7 +79,7 @@ func TestRunCanGateEntryWithPositionFlatCondition(t *testing.T) {
 	}
 }
 
-func TestRunSupportsMartingaleStylePyramidingState(t *testing.T) {
+func TestRunSupportsStateDrivenPyramiding(t *testing.T) {
 	definition := baseDefinition()
 	definition.Position = strategy.PositionSpec{
 		InitialSizePct:    0.2,
@@ -88,7 +89,7 @@ func TestRunSupportsMartingaleStylePyramidingState(t *testing.T) {
 		MaxPositionPct:    1,
 	}
 	definition.Rules = []strategy.RuleSpec{{
-		ID:        "martingale_long",
+		ID:        "add_long",
 		Condition: "or(position.flat(), and(position.long(), position.entry_count.lt(3), position.avg_entry_price.gte(market.close)))",
 		Action: strategy.ActionSpec{
 			Type: strategy.ActionOpen,
@@ -105,7 +106,7 @@ func TestRunSupportsMartingaleStylePyramidingState(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(result.Fills) != 3 {
-		t.Fatalf("len(result.Fills)=%d, want 3 martingale entries capped by entry_count", len(result.Fills))
+		t.Fatalf("len(result.Fills)=%d, want 3 entries capped by entry_count", len(result.Fills))
 	}
 	if len(result.Orders) != 3 {
 		t.Fatalf("len(result.Orders)=%d, want 3", len(result.Orders))
@@ -122,7 +123,7 @@ func TestRunCapsPyramidingSizeByMaxPositionPct(t *testing.T) {
 		MaxPositionPct:    0.7,
 	}
 	definition.Rules = []strategy.RuleSpec{{
-		ID:        "martingale_long",
+		ID:        "add_long",
 		Condition: "or(position.flat(), and(position.long(), position.entry_count.lt(6), position.avg_entry_price.gte(market.close)))",
 		Action: strategy.ActionSpec{
 			Type: strategy.ActionOpen,
@@ -145,6 +146,144 @@ func TestRunCapsPyramidingSizeByMaxPositionPct(t *testing.T) {
 	secondNotional := result.Fills[1].Price * result.Fills[1].Quantity
 	if secondNotional >= firstNotional {
 		t.Fatalf("secondNotional=%f, want capped addition smaller than firstNotional=%f", secondNotional, firstNotional)
+	}
+}
+
+func TestRunDoesNotPyramidWhenMaxAdditionsIsZero(t *testing.T) {
+	definition := baseDefinition()
+	definition.Behavior.AllowPyramiding = true
+	definition.Position = strategy.PositionSpec{
+		InitialSizePct: 0.2,
+		MaxAdditions:   0,
+		MaxPositionPct: 1,
+	}
+	definition.Rules = []strategy.RuleSpec{{
+		ID:     "open_long",
+		When:   strategy.Bool(true),
+		Action: strategy.ActionSpec{Type: strategy.ActionOpen, Side: strategy.TradeSideLong},
+	}}
+	plan, err := compiler.Compile(definition, indicator.MustBuiltinRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Run(context.Background(), plan, RunRequest{Bars: testBars(5)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Fills) != 1 {
+		t.Fatalf("len(result.Fills)=%d, want 1", len(result.Fills))
+	}
+}
+
+func TestRunAppliesCooldownAfterFill(t *testing.T) {
+	definition := baseDefinition()
+	definition.Behavior.AllowPyramiding = true
+	definition.Behavior.CooldownBars = 2
+	definition.Position = strategy.PositionSpec{
+		InitialSizePct: 0.1,
+		MaxAdditions:   4,
+		AddSizePct:     0.1,
+		MaxPositionPct: 1,
+	}
+	definition.Rules = []strategy.RuleSpec{{
+		ID:     "open_long",
+		When:   strategy.Bool(true),
+		Action: strategy.ActionSpec{Type: strategy.ActionOpen, Side: strategy.TradeSideLong},
+	}}
+	plan, err := compiler.Compile(definition, indicator.MustBuiltinRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Run(context.Background(), plan, RunRequest{Bars: testBars(6)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Fills) != 2 {
+		t.Fatalf("len(result.Fills)=%d, want fills separated by cooldown", len(result.Fills))
+	}
+	if result.Fills[1].TimeMS-result.Fills[0].TimeMS != 3*900_000 {
+		t.Fatalf("unexpected fill spacing: %+v", result.Fills)
+	}
+}
+
+func TestRunCapsOpenByRiskExposure(t *testing.T) {
+	definition := baseDefinition()
+	definition.Risk.MaxSymbolEquityPct = 0.25
+	definition.Rules = []strategy.RuleSpec{{
+		ID:     "open_long",
+		When:   strategy.Bool(true),
+		Action: strategy.ActionSpec{Type: strategy.ActionOpen, Side: strategy.TradeSideLong, SizePct: 1},
+	}}
+	plan, err := compiler.Compile(definition, indicator.MustBuiltinRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Run(context.Background(), plan, RunRequest{Bars: testBars(3)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Fills) != 1 {
+		t.Fatalf("len(result.Fills)=%d, want 1", len(result.Fills))
+	}
+	notional := math.Abs(result.Fills[0].Quantity) * result.Fills[0].Price
+	if notional > definition.Account.InitialCash*0.25+1e-9 {
+		t.Fatalf("fill notional=%f exceeds risk cap", notional)
+	}
+}
+
+func TestRunHaltsNewEntriesAtMaxDrawdown(t *testing.T) {
+	definition := baseDefinition()
+	definition.Behavior.AllowPyramiding = true
+	definition.Position = strategy.PositionSpec{
+		InitialSizePct: 0.5,
+		MaxAdditions:   4,
+		AddSizePct:     0.1,
+		MaxPositionPct: 1,
+	}
+	definition.Risk.MaxDrawdownHaltPct = 0.001
+	definition.Rules = []strategy.RuleSpec{{
+		ID:     "open_long",
+		When:   strategy.Bool(true),
+		Action: strategy.ActionSpec{Type: strategy.ActionOpen, Side: strategy.TradeSideLong},
+	}}
+	plan, err := compiler.Compile(definition, indicator.MustBuiltinRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Run(context.Background(), plan, RunRequest{Bars: fallingBars()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Fills) != 1 {
+		t.Fatalf("len(result.Fills)=%d, want risk halt after first fill", len(result.Fills))
+	}
+}
+
+func TestRunSpotOpenKeepsCashNonNegative(t *testing.T) {
+	definition := baseDefinition()
+	definition.Account.MarketType = strategy.MarketTypeSpot
+	definition.Rules = []strategy.RuleSpec{{
+		ID:     "open_long",
+		When:   strategy.Bool(true),
+		Action: strategy.ActionSpec{Type: strategy.ActionOpen, Side: strategy.TradeSideLong, SizePct: 1},
+	}}
+	plan, err := compiler.Compile(definition, indicator.MustBuiltinRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Run(context.Background(), plan, RunRequest{Bars: testBars(3)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, point := range result.EquityCurve {
+		if point.Cash < -1e-9 {
+			t.Fatalf("spot cash became negative: %+v", point)
+		}
 	}
 }
 
@@ -235,6 +374,9 @@ func TestRunAppliesReportSpec(t *testing.T) {
 	if len(result.Orders) != 0 || len(result.Fills) != 0 || len(result.EquityCurve) != 0 {
 		t.Fatalf("expected detail sections to be omitted: %+v", result)
 	}
+	if result.TotalOrders == 0 || result.TotalFills == 0 {
+		t.Fatalf("expected internal totals to survive report filtering: %+v", result)
+	}
 	if result.Metrics[MetricOrderCount] == 0 || result.Metrics[MetricFillCount] == 0 {
 		t.Fatalf("expected order/fill metrics: %+v", result.Metrics)
 	}
@@ -258,6 +400,47 @@ func TestRunRejectsUnknownReportIndicator(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected unknown report indicator to fail")
+	}
+}
+
+func TestRunIndicatorReportUsesNullForWarmupValues(t *testing.T) {
+	definition := baseDefinition()
+	definition.Indicators[0].Params = json.RawMessage(`{"period":3}`)
+	plan, err := compiler.Compile(definition, indicator.MustBuiltinRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Run(context.Background(), plan, RunRequest{
+		Bars: testBars(3),
+		Report: ReportSpec{
+			Indicators: []IndicatorOverlay{{ID: "ema_15m"}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := result.Indicators["ema_15m"].Fields["value"]
+	if len(values) != 3 || values[0] != nil || values[1] != nil || values[2] == nil {
+		t.Fatalf("unexpected nullable warmup series: %+v", values)
+	}
+	if _, err := json.Marshal(result); err != nil {
+		t.Fatalf("indicator report must be JSON serializable: %v", err)
+	}
+}
+
+func TestRunRejectsUnknownReportMetric(t *testing.T) {
+	definition := baseDefinition()
+	plan, err := compiler.Compile(definition, indicator.MustBuiltinRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = Run(context.Background(), plan, RunRequest{
+		Bars:   testBars(3),
+		Report: ReportSpec{Metrics: []MetricType{"unknown"}},
+	})
+	if err == nil {
+		t.Fatal("expected unknown report metric to fail")
 	}
 }
 

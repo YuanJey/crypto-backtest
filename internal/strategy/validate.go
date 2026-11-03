@@ -36,7 +36,7 @@ func Validate(definition Definition, registry *indicator.Registry) error {
 	if err := validateBehavior(definition.Behavior); err != nil {
 		return err
 	}
-	if err := validatePosition(definition.Position); err != nil {
+	if err := validatePosition(definition.Position, definition.Behavior); err != nil {
 		return err
 	}
 	if err := validateExecution(definition.Execution); err != nil {
@@ -56,8 +56,8 @@ func validateData(data DataSelection) error {
 	if strings.TrimSpace(data.DatasetID) == "" {
 		return fmt.Errorf("data.dataset_id is required")
 	}
-	if len(data.Symbols) == 0 {
-		return fmt.Errorf("data.symbols must not be empty")
+	if len(data.Symbols) != 1 {
+		return fmt.Errorf("data.symbols must contain exactly one symbol")
 	}
 	for _, symbol := range data.Symbols {
 		if _, err := market.NormalizeSymbol(symbol); err != nil {
@@ -99,13 +99,16 @@ func validateAccount(account AccountSpec) error {
 }
 
 func validateBehavior(behavior BehaviorSpec) error {
+	if behavior.AllowSameBarReversal {
+		return fmt.Errorf("behavior.allow_same_bar_reversal is not supported by the next-bar-open engine")
+	}
 	if behavior.CooldownBars < 0 {
 		return fmt.Errorf("behavior.cooldown_bars must be >= 0")
 	}
 	return nil
 }
 
-func validatePosition(position PositionSpec) error {
+func validatePosition(position PositionSpec, behavior BehaviorSpec) error {
 	if position.InitialSizePct < 0 || position.InitialSizePct > 1 {
 		return fmt.Errorf("position.initial_size_pct must be in [0, 1]")
 	}
@@ -120,6 +123,15 @@ func validatePosition(position PositionSpec) error {
 	}
 	if position.MaxPositionPct < 0 || position.MaxPositionPct > 1 {
 		return fmt.Errorf("position.max_position_pct must be in [0, 1]")
+	}
+	if position.MaxAdditions > 0 && !behavior.AllowPyramiding {
+		return fmt.Errorf("position.max_additions requires behavior.allow_pyramiding=true")
+	}
+	if position.AddSizePct > 0 && position.AddSizeMultiplier > 0 {
+		return fmt.Errorf("position.add_size_pct and position.add_size_multiplier are mutually exclusive")
+	}
+	if position.MaxAdditions == 0 && (position.AddSizePct > 0 || position.AddSizeMultiplier > 0) {
+		return fmt.Errorf("position addition sizing requires max_additions > 0")
 	}
 	return nil
 }
@@ -155,8 +167,8 @@ func validateRisk(risk RiskSpec) error {
 	if risk.MaxTotalExposurePct <= 0 || risk.MaxTotalExposurePct > 1 {
 		return fmt.Errorf("risk.max_total_exposure_pct must be in (0, 1]")
 	}
-	if risk.MaxOpenPositions < 1 {
-		return fmt.Errorf("risk.max_open_positions must be >= 1")
+	if risk.MaxOpenPositions != 1 {
+		return fmt.Errorf("risk.max_open_positions must be 1 for the single-symbol engine")
 	}
 	if risk.MaxDrawdownHaltPct < 0 || risk.MaxDrawdownHaltPct > 1 {
 		return fmt.Errorf("risk.max_drawdown_halt_pct must be in [0, 1]")
@@ -194,9 +206,27 @@ func validateIndicators(indicators []IndicatorSpec, registry *indicator.Registry
 		if len(spec.Inputs) == 0 {
 			return nil, fmt.Errorf("indicator %q inputs must not be empty", spec.ID)
 		}
+		requiredInputs := 0
+		for _, input := range definition.Inputs {
+			if input.Required {
+				requiredInputs++
+			}
+		}
+		if len(spec.Inputs) < requiredInputs || len(spec.Inputs) > len(definition.Inputs) {
+			return nil, fmt.Errorf(
+				"indicator %q requires %d to %d inputs, got %d",
+				spec.ID,
+				requiredInputs,
+				len(definition.Inputs),
+				len(spec.Inputs),
+			)
+		}
 		for _, input := range spec.Inputs {
 			if err := validateValueRef(input, nil); err != nil {
 				return nil, fmt.Errorf("indicator %q input: %w", spec.ID, err)
+			}
+			if input.Scope != ValueScopeMarket && input.Scope != ValueScopeIndicator {
+				return nil, fmt.Errorf("indicator %q input scope must be market or indicator", spec.ID)
 			}
 		}
 		if err := registry.ValidateParams(spec.Type, spec.Params); err != nil {
@@ -214,7 +244,57 @@ func validateIndicators(indicators []IndicatorSpec, registry *indicator.Registry
 			}
 		}
 	}
+	if err := validateIndicatorGraph(indicators); err != nil {
+		return nil, err
+	}
 	return outputsByID, nil
+}
+
+func validateIndicatorGraph(indicators []IndicatorSpec) error {
+	dependencies := make(map[string][]string, len(indicators))
+	for _, spec := range indicators {
+		seen := map[string]struct{}{}
+		for _, input := range spec.Inputs {
+			if input.Scope != ValueScopeIndicator {
+				continue
+			}
+			if _, ok := seen[input.Name]; ok {
+				continue
+			}
+			seen[input.Name] = struct{}{}
+			dependencies[spec.ID] = append(dependencies[spec.ID], input.Name)
+		}
+	}
+
+	const (
+		unvisited = iota
+		visiting
+		visited
+	)
+	state := make(map[string]int, len(indicators))
+	var visit func(string) error
+	visit = func(id string) error {
+		switch state[id] {
+		case visiting:
+			return fmt.Errorf("indicator dependency cycle includes %q", id)
+		case visited:
+			return nil
+		}
+		state[id] = visiting
+		for _, dependency := range dependencies[id] {
+			if err := visit(dependency); err != nil {
+				return err
+			}
+		}
+		state[id] = visited
+		return nil
+	}
+	for _, spec := range indicators {
+		if err := visit(spec.ID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func validateIndicatorTimeframe(timeframe string, baseTimeframe string) error {
@@ -251,8 +331,12 @@ func validateRules(rules []RuleSpec, indicatorOutputs map[string]map[string]stru
 		if rule.Disabled {
 			continue
 		}
-		if err := validateExpression(rule.When, indicatorOutputs); err != nil {
+		expressionType, err := validateExpression(rule.When, indicatorOutputs)
+		if err != nil {
 			return fmt.Errorf("rule %q when: %w", rule.ID, err)
+		}
+		if expressionType != expressionTypeBool {
+			return fmt.Errorf("rule %q when: root expression must be boolean", rule.ID)
 		}
 		if err := validateAction(rule.Action, marketType, position); err != nil {
 			return fmt.Errorf("rule %q action: %w", rule.ID, err)
@@ -285,31 +369,53 @@ func validateAction(action ActionSpec, marketType MarketType, position PositionS
 	return nil
 }
 
-func validateExpression(expression Expression, indicatorOutputs map[string]map[string]struct{}) error {
+type expressionType int
+
+const (
+	expressionTypeNumber expressionType = iota
+	expressionTypeBool
+)
+
+func validateExpression(expression Expression, indicatorOutputs map[string]map[string]struct{}) (expressionType, error) {
 	switch expression.Kind {
 	case ExprOperator:
+		if expression.Ref != nil || expression.Number != nil || expression.Bool != nil {
+			return 0, fmt.Errorf("operator expression contains fields from another expression kind")
+		}
 		return validateOperatorExpression(expression, indicatorOutputs)
 	case ExprReference:
 		if expression.Ref == nil {
-			return fmt.Errorf("reference expression requires ref")
+			return 0, fmt.Errorf("reference expression requires ref")
 		}
-		return validateValueRef(*expression.Ref, indicatorOutputs)
+		if expression.Op != "" || len(expression.Args) != 0 || expression.Number != nil || expression.Bool != nil {
+			return 0, fmt.Errorf("reference expression contains fields from another expression kind")
+		}
+		if err := validateValueRef(*expression.Ref, indicatorOutputs); err != nil {
+			return 0, err
+		}
+		return expressionTypeNumber, nil
 	case ExprNumber:
 		if expression.Number == nil {
-			return fmt.Errorf("number expression requires number")
+			return 0, fmt.Errorf("number expression requires number")
 		}
-		return nil
+		if expression.Op != "" || len(expression.Args) != 0 || expression.Ref != nil || expression.Bool != nil {
+			return 0, fmt.Errorf("number expression contains fields from another expression kind")
+		}
+		return expressionTypeNumber, nil
 	case ExprBoolean:
 		if expression.Bool == nil {
-			return fmt.Errorf("boolean expression requires bool")
+			return 0, fmt.Errorf("boolean expression requires bool")
 		}
-		return nil
+		if expression.Op != "" || len(expression.Args) != 0 || expression.Ref != nil || expression.Number != nil {
+			return 0, fmt.Errorf("boolean expression contains fields from another expression kind")
+		}
+		return expressionTypeBool, nil
 	default:
-		return fmt.Errorf("unknown expression kind %q", expression.Kind)
+		return 0, fmt.Errorf("unknown expression kind %q", expression.Kind)
 	}
 }
 
-func validateOperatorExpression(expression Expression, indicatorOutputs map[string]map[string]struct{}) error {
+func validateOperatorExpression(expression Expression, indicatorOutputs map[string]map[string]struct{}) (expressionType, error) {
 	expectedArgs := map[Operator]int{
 		OperatorNot:       1,
 		OperatorGT:        2,
@@ -323,21 +429,41 @@ func validateOperatorExpression(expression Expression, indicatorOutputs map[stri
 	switch expression.Op {
 	case OperatorAnd, OperatorOr:
 		if len(expression.Args) < 2 {
-			return fmt.Errorf("operator %q requires at least 2 args", expression.Op)
+			return 0, fmt.Errorf("operator %q requires at least 2 args", expression.Op)
 		}
 	case OperatorNot, OperatorGT, OperatorGTE, OperatorLT, OperatorLTE, OperatorEQ, OperatorCrossUp, OperatorCrossDown:
 		if len(expression.Args) != expectedArgs[expression.Op] {
-			return fmt.Errorf("operator %q requires %d args", expression.Op, expectedArgs[expression.Op])
+			return 0, fmt.Errorf("operator %q requires %d args", expression.Op, expectedArgs[expression.Op])
 		}
 	default:
-		return fmt.Errorf("unknown operator %q", expression.Op)
+		return 0, fmt.Errorf("unknown operator %q", expression.Op)
 	}
-	for _, arg := range expression.Args {
-		if err := validateExpression(arg, indicatorOutputs); err != nil {
-			return err
+	expectedType := expressionTypeNumber
+	if expression.Op == OperatorAnd || expression.Op == OperatorOr || expression.Op == OperatorNot {
+		expectedType = expressionTypeBool
+	}
+	for index, arg := range expression.Args {
+		actualType, err := validateExpression(arg, indicatorOutputs)
+		if err != nil {
+			return 0, err
+		}
+		if actualType != expectedType {
+			return 0, fmt.Errorf("operator %q arg %d has incompatible type", expression.Op, index)
 		}
 	}
-	return nil
+	if expression.Op == OperatorCrossUp || expression.Op == OperatorCrossDown {
+		for index, arg := range expression.Args {
+			if arg.Kind != ExprReference || arg.Ref == nil || arg.Ref.Scope != ValueScopeIndicator {
+				return 0, fmt.Errorf("operator %q arg %d must reference an indicator output", expression.Op, index)
+			}
+		}
+		left := expression.Args[0].Ref
+		right := expression.Args[1].Ref
+		if left.Name == right.Name && left.Field == right.Field {
+			return 0, fmt.Errorf("operator %q requires two different indicator outputs", expression.Op)
+		}
+	}
+	return expressionTypeBool, nil
 }
 
 func validateValueRef(ref ValueRef, indicatorOutputs map[string]map[string]struct{}) error {
