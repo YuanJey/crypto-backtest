@@ -1854,6 +1854,20 @@ kbd {
   white-space: nowrap;
 }
 
+.semantic-condition-hint {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid rgba(101, 217, 255, 0.22);
+  border-radius: 3px;
+  background: rgba(101, 217, 255, 0.06);
+  color: #8cdfff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
 .btn-delete-row {
   background: transparent;
   border: none;

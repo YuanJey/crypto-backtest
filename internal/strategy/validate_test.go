@@ -133,6 +133,125 @@ func TestValidateRejectsCrossAgainstSameIndicator(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsCrossBetweenIncompatibleIndicatorGroups(t *testing.T) {
+	definition := validDefinition()
+	definition.Indicators = append(definition.Indicators, IndicatorSpec{
+		ID:     "rsi_slow",
+		Type:   "rsi",
+		Inputs: []ValueRef{{Scope: ValueScopeMarket, Name: "bar", Field: "close"}},
+		Params: json.RawMessage(`{"period":28}`),
+	})
+	definition.Rules = []RuleSpec{{
+		ID:   "invalid_cross",
+		When: Indicator("ema_fast").CrossUp(Indicator("rsi_slow")),
+		Action: ActionSpec{
+			Type: ActionOpen, Side: TradeSideLong, SizePct: 0.2,
+		},
+	}}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected incompatible indicator cross groups to fail")
+	}
+}
+
+func TestValidateSupertrendSemanticConditions(t *testing.T) {
+	definition := validDefinition()
+	definition.Indicators = append(definition.Indicators, IndicatorSpec{
+		ID:     "supertrend",
+		Type:   "supertrend",
+		Inputs: nil,
+		Params: json.RawMessage(`{"period":10,"multiplier":3}`),
+	})
+	definition.Rules = []RuleSpec{
+		{
+			ID:   "bullish",
+			When: IndicatorField("supertrend", "direction").EQ(1),
+			Action: ActionSpec{
+				Type: ActionOpen, Side: TradeSideLong, SizePct: 0.2,
+			},
+		},
+		{
+			ID: "support",
+			When: Market("close").GTE(
+				IndicatorField("supertrend", "value"),
+			),
+			Action: ActionSpec{
+				Type: ActionOpen, Side: TradeSideLong, SizePct: 0.2,
+			},
+		},
+		{
+			ID:   "turn_bullish",
+			When: IndicatorField("supertrend", "direction").TurnsBullish(),
+			Action: ActionSpec{
+				Type: ActionOpen, Side: TradeSideLong, SizePct: 0.2,
+			},
+		},
+		{
+			ID:   "turn_bearish",
+			When: IndicatorField("supertrend", "direction").TurnsBearish(),
+			Action: ActionSpec{
+				Type: ActionClose, Side: TradeSideLong, SizePct: 1,
+			},
+		},
+	}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err != nil {
+		t.Fatalf("expected Supertrend semantic conditions to pass: %v", err)
+	}
+}
+
+func TestValidateRejectsTrendTransitionOnNonDirectionOutput(t *testing.T) {
+	definition := validDefinition()
+	definition.Rules = []RuleSpec{{
+		ID:   "invalid_transition",
+		When: Indicator("ema_fast").TurnsBullish(),
+		Action: ActionSpec{
+			Type: ActionOpen, Side: TradeSideLong, SizePct: 0.2,
+		},
+	}}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected trend transition on EMA to fail")
+	}
+}
+
+func TestValidateRejectsInvalidSupertrendDirectionComparison(t *testing.T) {
+	definition := validDefinition()
+	definition.Indicators = append(definition.Indicators, IndicatorSpec{
+		ID:     "supertrend",
+		Type:   "supertrend",
+		Inputs: nil,
+		Params: json.RawMessage(`{"period":10,"multiplier":3}`),
+	})
+	definition.Rules = []RuleSpec{{
+		ID:   "invalid_direction",
+		When: IndicatorField("supertrend", "direction").GT(0),
+		Action: ActionSpec{
+			Type: ActionOpen, Side: TradeSideLong, SizePct: 0.2,
+		},
+	}}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected non-equality direction comparison to fail")
+	}
+}
+
+func TestValidateRejectsComparisonAcrossValueDomains(t *testing.T) {
+	definition := validDefinition()
+	definition.Indicators = append(definition.Indicators, IndicatorSpec{
+		ID:     "rsi",
+		Type:   "rsi",
+		Inputs: []ValueRef{{Scope: ValueScopeMarket, Name: "bar", Field: "close"}},
+		Params: json.RawMessage(`{"period":14}`),
+	})
+	definition.Rules = []RuleSpec{{
+		ID:   "invalid_domain",
+		When: Indicator("ema_fast").GT(Indicator("rsi")),
+		Action: ActionSpec{
+			Type: ActionOpen, Side: TradeSideLong, SizePct: 0.2,
+		},
+	}}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected price and oscillator comparison to fail")
+	}
+}
+
 func TestValidateRejectsNumericRuleRoot(t *testing.T) {
 	definition := validDefinition()
 	definition.Rules = []RuleSpec{{
@@ -305,6 +424,13 @@ func TestValidateStrategyWithEmptyInputsAutoInferred(t *testing.T) {
 		Timeframe: "15m",
 		Inputs:    nil,
 		Params:    json.RawMessage(`{"period":14}`),
+	})
+	definition.Indicators = append(definition.Indicators, IndicatorSpec{
+		ID:        "supertrend_15m",
+		Type:      "supertrend",
+		Timeframe: "15m",
+		Inputs:    nil,
+		Params:    json.RawMessage(`{"period":10,"multiplier":3}`),
 	})
 
 	// 校验应由 Normalize 自动补齐 high/low/close 与 close，校验必须通过

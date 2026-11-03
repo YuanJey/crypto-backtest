@@ -176,7 +176,9 @@ func validateRisk(risk RiskSpec) error {
 	return nil
 }
 
-func validateIndicators(indicators []IndicatorSpec, registry *indicator.Registry, baseTimeframe string) (map[string]map[string]struct{}, error) {
+type indicatorOutputs map[string]map[string]indicator.OutputDefinition
+
+func validateIndicators(indicators []IndicatorSpec, registry *indicator.Registry, baseTimeframe string) (indicatorOutputs, error) {
 	if registry == nil {
 		return nil, fmt.Errorf("indicator registry is required")
 	}
@@ -184,7 +186,7 @@ func validateIndicators(indicators []IndicatorSpec, registry *indicator.Registry
 		return nil, fmt.Errorf("indicators must not be empty")
 	}
 	ids := map[string]struct{}{}
-	outputsByID := map[string]map[string]struct{}{}
+	outputsByID := indicatorOutputs{}
 	for _, spec := range indicators {
 		if strings.TrimSpace(spec.ID) == "" {
 			return nil, fmt.Errorf("indicator id is required")
@@ -232,9 +234,9 @@ func validateIndicators(indicators []IndicatorSpec, registry *indicator.Registry
 		if err := registry.ValidateParams(spec.Type, spec.Params); err != nil {
 			return nil, fmt.Errorf("indicator %q params: %w", spec.ID, err)
 		}
-		outputsByID[spec.ID] = map[string]struct{}{}
+		outputsByID[spec.ID] = map[string]indicator.OutputDefinition{}
 		for _, output := range definition.Outputs {
-			outputsByID[spec.ID][output.Name] = struct{}{}
+			outputsByID[spec.ID][output.Name] = output
 		}
 	}
 	for _, spec := range indicators {
@@ -318,7 +320,7 @@ func validateIndicatorTimeframe(timeframe string, baseTimeframe string) error {
 	return nil
 }
 
-func validateRules(rules []RuleSpec, indicatorOutputs map[string]map[string]struct{}, marketType MarketType, position PositionSpec) error {
+func validateRules(rules []RuleSpec, indicatorOutputs indicatorOutputs, marketType MarketType, position PositionSpec) error {
 	ids := map[string]struct{}{}
 	for _, rule := range rules {
 		if strings.TrimSpace(rule.ID) == "" {
@@ -376,7 +378,7 @@ const (
 	expressionTypeBool
 )
 
-func validateExpression(expression Expression, indicatorOutputs map[string]map[string]struct{}) (expressionType, error) {
+func validateExpression(expression Expression, indicatorOutputs indicatorOutputs) (expressionType, error) {
 	switch expression.Kind {
 	case ExprOperator:
 		if expression.Ref != nil || expression.Number != nil || expression.Bool != nil {
@@ -415,23 +417,34 @@ func validateExpression(expression Expression, indicatorOutputs map[string]map[s
 	}
 }
 
-func validateOperatorExpression(expression Expression, indicatorOutputs map[string]map[string]struct{}) (expressionType, error) {
+func validateOperatorExpression(expression Expression, indicatorOutputs indicatorOutputs) (expressionType, error) {
 	expectedArgs := map[Operator]int{
-		OperatorNot:       1,
-		OperatorGT:        2,
-		OperatorGTE:       2,
-		OperatorLT:        2,
-		OperatorLTE:       2,
-		OperatorEQ:        2,
-		OperatorCrossUp:   2,
-		OperatorCrossDown: 2,
+		OperatorNot:         1,
+		OperatorGT:          2,
+		OperatorGTE:         2,
+		OperatorLT:          2,
+		OperatorLTE:         2,
+		OperatorEQ:          2,
+		OperatorCrossUp:     2,
+		OperatorCrossDown:   2,
+		OperatorTurnBullish: 1,
+		OperatorTurnBearish: 1,
 	}
 	switch expression.Op {
 	case OperatorAnd, OperatorOr:
 		if len(expression.Args) < 2 {
 			return 0, fmt.Errorf("operator %q requires at least 2 args", expression.Op)
 		}
-	case OperatorNot, OperatorGT, OperatorGTE, OperatorLT, OperatorLTE, OperatorEQ, OperatorCrossUp, OperatorCrossDown:
+	case OperatorNot,
+		OperatorGT,
+		OperatorGTE,
+		OperatorLT,
+		OperatorLTE,
+		OperatorEQ,
+		OperatorCrossUp,
+		OperatorCrossDown,
+		OperatorTurnBullish,
+		OperatorTurnBearish:
 		if len(expression.Args) != expectedArgs[expression.Op] {
 			return 0, fmt.Errorf("operator %q requires %d args", expression.Op, expectedArgs[expression.Op])
 		}
@@ -462,11 +475,37 @@ func validateOperatorExpression(expression Expression, indicatorOutputs map[stri
 		if left.Name == right.Name && left.Field == right.Field {
 			return 0, fmt.Errorf("operator %q requires two different indicator outputs", expression.Op)
 		}
+		leftOutput, leftOK := lookupIndicatorOutput(*left, indicatorOutputs)
+		rightOutput, rightOK := lookupIndicatorOutput(*right, indicatorOutputs)
+		if !leftOK || !rightOK ||
+			leftOutput.CrossGroup == "" ||
+			leftOutput.CrossGroup != rightOutput.CrossGroup {
+			return 0, fmt.Errorf("operator %q requires outputs from the same cross group", expression.Op)
+		}
+	}
+	if expression.Op == OperatorTurnBullish || expression.Op == OperatorTurnBearish {
+		arg := expression.Args[0]
+		if arg.Kind != ExprReference || arg.Ref == nil {
+			return 0, fmt.Errorf("operator %q requires an indicator reference", expression.Op)
+		}
+		output, ok := lookupIndicatorOutput(*arg.Ref, indicatorOutputs)
+		if !ok || output.Semantic != indicator.OutputSemanticTrendDirection {
+			return 0, fmt.Errorf("operator %q requires a trend direction output", expression.Op)
+		}
+	}
+	if expression.Op == OperatorGT ||
+		expression.Op == OperatorGTE ||
+		expression.Op == OperatorLT ||
+		expression.Op == OperatorLTE ||
+		expression.Op == OperatorEQ {
+		if err := validateComparisonSemantics(expression, indicatorOutputs); err != nil {
+			return 0, err
+		}
 	}
 	return expressionTypeBool, nil
 }
 
-func validateValueRef(ref ValueRef, indicatorOutputs map[string]map[string]struct{}) error {
+func validateValueRef(ref ValueRef, indicatorOutputs indicatorOutputs) error {
 	if ref.Offset > 0 {
 		return fmt.Errorf("offset must be <= 0")
 	}
@@ -508,4 +547,84 @@ func validateValueRef(ref ValueRef, indicatorOutputs map[string]map[string]struc
 	default:
 		return fmt.Errorf("unknown scope %q", ref.Scope)
 	}
+}
+
+func lookupIndicatorOutput(
+	ref ValueRef,
+	outputs indicatorOutputs,
+) (indicator.OutputDefinition, bool) {
+	if ref.Scope != ValueScopeIndicator || outputs == nil {
+		return indicator.OutputDefinition{}, false
+	}
+	fields, ok := outputs[ref.Name]
+	if !ok {
+		return indicator.OutputDefinition{}, false
+	}
+	output, ok := fields[ref.Field]
+	return output, ok
+}
+
+func validateComparisonSemantics(expression Expression, outputs indicatorOutputs) error {
+	for index, arg := range expression.Args {
+		if arg.Ref == nil {
+			continue
+		}
+		output, ok := lookupIndicatorOutput(*arg.Ref, outputs)
+		if !ok || output.Semantic != indicator.OutputSemanticTrendDirection {
+			continue
+		}
+		if expression.Op != OperatorEQ {
+			return fmt.Errorf("trend direction only supports operator %q", OperatorEQ)
+		}
+		other := expression.Args[1-index]
+		if other.Kind != ExprNumber ||
+			other.Number == nil ||
+			(*other.Number != 1 && *other.Number != -1) {
+			return fmt.Errorf("trend direction must be compared with 1 or -1")
+		}
+	}
+
+	leftDomain := referenceDomain(expression.Args[0], outputs)
+	rightDomain := referenceDomain(expression.Args[1], outputs)
+	if leftDomain != "" && rightDomain != "" && leftDomain != rightDomain {
+		return fmt.Errorf(
+			"operator %q cannot compare %s with %s",
+			expression.Op,
+			leftDomain,
+			rightDomain,
+		)
+	}
+	return nil
+}
+
+func referenceDomain(expression Expression, outputs indicatorOutputs) string {
+	if expression.Kind != ExprReference || expression.Ref == nil {
+		return ""
+	}
+	ref := *expression.Ref
+	switch ref.Scope {
+	case ValueScopeMarket:
+		switch ref.Field {
+		case "open", "high", "low", "close":
+			return "price"
+		case "volume", "quote_volume", "trade_count":
+			return "volume"
+		}
+	case ValueScopeIndicator:
+		output, ok := lookupIndicatorOutput(ref, outputs)
+		if !ok {
+			return ""
+		}
+		switch output.Semantic {
+		case indicator.OutputSemanticPrice, indicator.OutputSemanticTrendLevel:
+			return "price"
+		case indicator.OutputSemanticOscillator:
+			return "oscillator"
+		case indicator.OutputSemanticVolatility:
+			return "volatility"
+		case indicator.OutputSemanticTrendDirection:
+			return "trend_direction"
+		}
+	}
+	return ""
 }

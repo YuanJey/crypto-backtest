@@ -300,7 +300,35 @@ type BollParams struct {
 	Period int     `json:"period"`
 	StdDev float64 `json:"stddev"`
 }
+
+type SupertrendParams struct {
+	Period     int     `json:"period"`
+	Multiplier float64 `json:"multiplier"`
+}
 ```
+
+Supertrend 使用 `high/low/close` 与 Wilder ATR 递推，输出趋势线 `value` 和方向
+`direction`；方向值 `1` 表示多头趋势，`-1` 表示空头趋势。默认前端参数为
+`period=10`、`multiplier=3`，服务端要求 `period >= 1`、`multiplier > 0`。
+
+指标输出还必须声明语义和可交叉分组：
+
+```go
+type OutputDefinition struct {
+	Name       string         `json:"name"`
+	Type       ValueType      `json:"type"`
+	Semantic   OutputSemantic `json:"semantic"`
+	CrossGroup string         `json:"cross_group,omitempty"`
+}
+```
+
+- EMA/SMA 属于 `price_series + moving_average`，可与同组均线形成金叉/死叉。
+- RSI 属于 `oscillator_series + rsi`，只有两个 RSI 输出之间可交叉。
+- BOLL、ATR 没有 `cross_group`，不提供金叉/死叉。
+- Supertrend `direction` 是 `trend_direction`，只允许等于 `1/-1`。
+- Supertrend `value` 是 `trend_level`，与市场价格构成支撑/阻力关系。
+- `turn_bullish`、`turn_bearish` 仅接受 `trend_direction` 输出，通过上一根与当前
+  方向值判断趋势切换；首个有效值和 warm-up 阶段统一返回 `false`。
 
 引擎内部不得持续传递 `map[string]any`。
 

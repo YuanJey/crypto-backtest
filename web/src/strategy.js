@@ -416,7 +416,7 @@ class StrategyWorkbench {
     const defaultType = existingInd ? existingInd.type : (this.catalog[0]?.type || 'ema');
     const defaultTf = existingInd ? (existingInd.timeframe || '15m') : '15m';
     const defaultId = existingInd ? existingInd.id : `${defaultType}_${Date.now().toString().slice(-4)}`;
-    const currentParams = (existingInd && existingInd.params) || { period: 20, stddev: 2.0 };
+    const currentParams = (existingInd && existingInd.params) || {};
 
     modalContainer.innerHTML = `
       <div class="modal-backdrop" id="indModalBackdrop">
@@ -466,25 +466,37 @@ class StrategyWorkbench {
 
     const renderParamInputs = (type) => {
       const pBox = document.getElementById('modalParamInputs');
-      if (type === 'boll') {
-        pBox.innerHTML = `
+      const definition = this.catalog.find(item => item.type === type);
+      const labels = {
+        period: '计算周期 (Period)',
+        stddev: '标准差倍数 (StdDev)',
+        multiplier: 'ATR 倍数 (Multiplier)',
+      };
+      const defaults = {
+        period: type === 'supertrend' ? 10 : (type === 'rsi' || type === 'atr' ? 14 : 20),
+        stddev: 2,
+        multiplier: 3,
+      };
+      pBox.innerHTML = (definition?.params || []).map(param => {
+        const value = currentParams[param.name] ?? defaults[param.name] ?? 1;
+        const step = param.type === 'int' ? 1 : 0.1;
+        const min = param.name === 'stddev' || param.name === 'multiplier'
+          ? Math.max(0.1, Number(param.min || 0))
+          : Number(param.min || 0);
+        return `
           <div class="form-group">
-            <label class="form-label">计算周期 (Period)</label>
-            <input type="number" class="form-control" id="paramValPeriod" value="${currentParams.period || 20}" min="1">
-          </div>
-          <div class="form-group">
-            <label class="form-label">标准差倍数 (StdDev)</label>
-            <input type="number" class="form-control" id="paramValStddev" value="${currentParams.stddev || 2.0}" step="0.1" min="0.1">
+            <label class="form-label">${labels[param.name] || param.name}</label>
+            <input
+              type="number"
+              class="form-control indicator-param-input"
+              data-param-name="${param.name}"
+              data-param-type="${param.type}"
+              value="${value}"
+              step="${step}"
+              min="${min}">
           </div>
         `;
-      } else {
-        pBox.innerHTML = `
-          <div class="form-group" style="grid-column: span 2;">
-            <label class="form-label">计算周期 (Period)</label>
-            <input type="number" class="form-control" id="paramValPeriod" value="${currentParams.period || 14}" min="1">
-          </div>
-        `;
-      }
+      }).join('');
     };
 
     renderParamInputs(defaultType);
@@ -512,15 +524,16 @@ class StrategyWorkbench {
         return;
       }
 
-      let params = {};
-      const periodEl = document.getElementById('paramValPeriod');
-      if (periodEl) params.period = parseInt(periodEl.value, 10) || 14;
-      const stddevEl = document.getElementById('paramValStddev');
-      if (stddevEl) params.stddev = parseFloat(stddevEl.value) || 2.0;
+      const params = {};
+      document.querySelectorAll('.indicator-param-input').forEach(input => {
+        params[input.dataset.paramName] = input.dataset.paramType === 'int'
+          ? parseInt(input.value, 10)
+          : parseFloat(input.value);
+      });
 
       // 系统内部全自动解构并映射 K 线结构体输入，无需用户人工指定价格字段
       let inputs = [];
-      if (type === 'atr') {
+      if (type === 'atr' || type === 'supertrend') {
         inputs = [
           { scope: 'market', name: 'bar', field: 'high' },
           { scope: 'market', name: 'bar', field: 'low' },
@@ -554,20 +567,25 @@ class StrategyWorkbench {
 
   getAvailableOperands() {
     const list = [
-      { label: '行情: 收盘价 (close)', value: 'market:close' },
-      { label: '行情: 开盘价 (open)', value: 'market:open' },
-      { label: '行情: 最高价 (high)', value: 'market:high' },
-      { label: '行情: 最低价 (low)', value: 'market:low' },
-      { label: '行情: 成交量 (volume)', value: 'market:volume' },
+      { label: '行情: 收盘价 (close)', value: 'market:close', semantic: 'price_series', domain: 'price' },
+      { label: '行情: 开盘价 (open)', value: 'market:open', semantic: 'price_series', domain: 'price' },
+      { label: '行情: 最高价 (high)', value: 'market:high', semantic: 'price_series', domain: 'price' },
+      { label: '行情: 最低价 (low)', value: 'market:low', semantic: 'price_series', domain: 'price' },
+      { label: '行情: 成交量 (volume)', value: 'market:volume', semantic: 'volume_series', domain: 'volume' },
     ];
     const indicators = (this.currentStrategy && this.currentStrategy.indicators) || [];
     for (const ind of indicators) {
-      if (ind.type === 'boll') {
-        list.push({ label: `BOLL上轨: ${ind.id}.upper`, value: `indicator:${ind.id}:upper` });
-        list.push({ label: `BOLL中轨: ${ind.id}.middle`, value: `indicator:${ind.id}:middle` });
-        list.push({ label: `BOLL下轨: ${ind.id}.lower`, value: `indicator:${ind.id}:lower` });
-      } else {
-        list.push({ label: `指标: ${ind.id}.value (${ind.type.toUpperCase()} ${ind.timeframe || '15m'})`, value: `indicator:${ind.id}:value` });
+      const definition = this.catalog.find(item => item.type === ind.type);
+      const outputs = definition?.outputs || [{ name: 'value' }];
+      for (const output of outputs) {
+        list.push({
+          label: `${definition?.label || ind.type.toUpperCase()}: ${ind.id}.${output.name} (${ind.timeframe || '15m'})`,
+          value: `indicator:${ind.id}:${output.name}`,
+          semantic: output.semantic || 'numeric_series',
+          domain: this.outputDomain(output.semantic),
+          crossGroup: output.cross_group || '',
+          indicatorType: ind.type,
+        });
       }
     }
     return list;
@@ -577,25 +595,120 @@ class StrategyWorkbench {
     return this.getAvailableOperands().filter(item => item.value.startsWith('indicator:'));
   }
 
+  outputDomain(semantic) {
+    switch (semantic) {
+      case 'price_series':
+      case 'trend_level':
+        return 'price';
+      case 'oscillator_series':
+        return 'oscillator';
+      case 'volatility_series':
+        return 'volatility';
+      case 'trend_direction':
+        return 'trend_direction';
+      default:
+        return 'numeric';
+    }
+  }
+
   isCrossOperator(op) {
     return op === 'cross_up' || op === 'cross_down';
   }
 
-  normalizeConditionItem(item, operands) {
-    if (!this.isCrossOperator(item.op)) return item;
+  isSemanticOperator(op) {
+    return [
+      'bullish_trend',
+      'bearish_trend',
+      'trend_turns_bullish',
+      'trend_turns_bearish',
+      'support',
+      'resistance',
+    ].includes(op);
+  }
 
-    const indicatorOperands = operands.filter(option => option.value.startsWith('indicator:'));
-    item.rightType = 'indicator';
-    if (indicatorOperands.length < 2) return item;
-
-    if (!indicatorOperands.some(option => option.value === item.left)) {
-      item.left = indicatorOperands[0].value;
+  operatorOptionsFor(item, operands) {
+    const left = operands.find(option => option.value === item.left);
+    if (left?.semantic === 'trend_direction') {
+      return [
+        { value: 'bullish_trend', label: '多头趋势' },
+        { value: 'bearish_trend', label: '空头趋势' },
+        { value: 'trend_turns_bullish', label: '趋势转多' },
+        { value: 'trend_turns_bearish', label: '趋势转空' },
+      ];
     }
-    if (
-      !indicatorOperands.some(option => option.value === item.rightIndicator) ||
-      item.rightIndicator === item.left
-    ) {
-      item.rightIndicator = indicatorOperands.find(option => option.value !== item.left).value;
+    if (left?.semantic === 'trend_level') {
+      return [
+        { value: 'support', label: '价格位于支撑侧' },
+        { value: 'resistance', label: '价格位于阻力侧' },
+      ];
+    }
+
+    const options = [
+      { value: 'gt', label: '大于 (&gt;)' },
+      { value: 'gte', label: '大于等于 (&gt;=)' },
+      { value: 'lt', label: '小于 (&lt;)' },
+      { value: 'lte', label: '小于等于 (&lt;=)' },
+      { value: 'eq', label: '等于 (==)' },
+    ];
+    const crossCandidates = this.compatibleCrossOperands(item.left, operands);
+    if (left?.crossGroup && crossCandidates.length > 0) {
+      options.push(
+        { value: 'cross_up', label: '金叉：同类指标上穿' },
+        { value: 'cross_down', label: '死叉：同类指标下穿' },
+      );
+    }
+    return options;
+  }
+
+  compatibleCrossOperands(leftValue, operands) {
+    const left = operands.find(option => option.value === leftValue);
+    if (!left?.crossGroup) return [];
+    return operands.filter(option =>
+      option.value !== leftValue &&
+      option.crossGroup === left.crossGroup
+    );
+  }
+
+  compatibleComparisonOperands(leftValue, operands) {
+    const left = operands.find(option => option.value === leftValue);
+    if (!left) return [];
+    return operands.filter(option =>
+      option.value !== leftValue &&
+      option.domain === left.domain &&
+      option.semantic !== 'trend_direction'
+    );
+  }
+
+  normalizeConditionItem(item, operands) {
+    const left = operands.find(option => option.value === item.left) || operands[0];
+    item.left = left.value;
+    const operatorOptions = this.operatorOptionsFor(item, operands);
+    if (!operatorOptions.some(option => option.value === item.op)) {
+      item.op = operatorOptions[0]?.value || 'gt';
+    }
+
+    if (this.isSemanticOperator(item.op)) {
+      item.rightType = 'semantic';
+      return item;
+    }
+    if (this.isCrossOperator(item.op)) {
+      const candidates = this.compatibleCrossOperands(item.left, operands);
+      item.rightType = 'indicator';
+      if (!candidates.some(option => option.value === item.rightIndicator)) {
+        item.rightIndicator = candidates[0]?.value || item.left;
+      }
+      return item;
+    }
+
+    if (item.rightType !== 'number' && item.rightType !== 'indicator') {
+      item.rightType = 'number';
+    }
+    if (item.rightType === 'indicator') {
+      const candidates = this.compatibleComparisonOperands(item.left, operands);
+      if (!candidates.some(option => option.value === item.rightIndicator)) {
+        if (candidates.length > 0) item.rightIndicator = candidates[0].value;
+        else item.rightType = 'number';
+      }
     }
     return item;
   }
@@ -609,6 +722,7 @@ class StrategyWorkbench {
     rulesContainer.innerHTML = rules.map((rule, rIdx) => {
       const parsedWhen = this.parseAstWhen(rule.when);
       parsedWhen.items.forEach(item => this.normalizeConditionItem(item, operands));
+      rule.when = this.compileAstWhen(parsedWhen.gate, parsedWhen.items);
       const action = rule.action || { type: 'open', side: 'long', size_pct: 0.25 };
       const sizePct = Math.round((action.size_pct || 0.25) * 100);
 
@@ -664,38 +778,45 @@ class StrategyWorkbench {
   }
 
   renderConditionRowHtml(item, rIdx, cIdx, operands) {
+    this.normalizeConditionItem(item, operands);
     const isCross = this.isCrossOperator(item.op);
-    const indicatorOperands = operands.filter(option => option.value.startsWith('indicator:'));
-    const leftOperands = isCross ? indicatorOperands : operands;
-    const rightOperands = (isCross ? indicatorOperands : operands)
-      .filter(option => option.value !== item.left);
-    const isNum = !isCross && item.rightType === 'number';
-    const canCross = indicatorOperands.length >= 2;
+    const isSemantic = this.isSemanticOperator(item.op);
+    const operatorOptions = this.operatorOptionsFor(item, operands);
+    const rightOperands = isCross
+      ? this.compatibleCrossOperands(item.left, operands)
+      : this.compatibleComparisonOperands(item.left, operands);
+    const isNum = !isCross && !isSemantic && item.rightType === 'number';
+    const semanticHints = {
+      bullish_trend: 'direction = 1',
+      bearish_trend: 'direction = -1',
+      trend_turns_bullish: '-1 → 1',
+      trend_turns_bearish: '1 → -1',
+      support: 'close ≥ trend line',
+      resistance: 'close ≤ trend line',
+    };
     return `
       <div class="condition-item-row" data-ridx="${rIdx}" data-cidx="${cIdx}">
         <select class="form-select cond-left-select" data-ridx="${rIdx}" data-cidx="${cIdx}">
-          ${leftOperands.map(op => `<option value="${op.value}" ${op.value === item.left ? 'selected' : ''}>${op.label}</option>`).join('')}
+          ${operands.map(op => `<option value="${op.value}" ${op.value === item.left ? 'selected' : ''}>${op.label}</option>`).join('')}
         </select>
 
         <select class="form-select cond-op-select" data-ridx="${rIdx}" data-cidx="${cIdx}">
-          <option value="cross_up" ${item.op === 'cross_up' ? 'selected' : ''} ${canCross ? '' : 'disabled'}>金叉：指标上穿 (cross_up)</option>
-          <option value="cross_down" ${item.op === 'cross_down' ? 'selected' : ''} ${canCross ? '' : 'disabled'}>死叉：指标下穿 (cross_down)</option>
-          <option value="gt" ${item.op === 'gt' ? 'selected' : ''}>大于 (&gt;)</option>
-          <option value="gte" ${item.op === 'gte' ? 'selected' : ''}>大于等于 (&gt;=)</option>
-          <option value="lt" ${item.op === 'lt' ? 'selected' : ''}>小于 (&lt;)</option>
-          <option value="lte" ${item.op === 'lte' ? 'selected' : ''}>小于等于 (&lt;=)</option>
-          <option value="eq" ${item.op === 'eq' ? 'selected' : ''}>等于 (==)</option>
+          ${operatorOptions.map(option => `
+            <option value="${option.value}" ${item.op === option.value ? 'selected' : ''}>${option.label}</option>
+          `).join('')}
         </select>
 
         <div class="right-operand-group">
-          ${isNum ? `
+          ${isSemantic ? `
+            <span class="semantic-condition-hint">${semanticHints[item.op]}</span>
+          ` : isNum ? `
             <input type="number" step="0.5" class="form-control cond-right-num" data-ridx="${rIdx}" data-cidx="${cIdx}" value="${item.rightNumber}">
           ` : `
             <select class="form-select cond-right-select" data-ridx="${rIdx}" data-cidx="${cIdx}">
               ${rightOperands.map(op => `<option value="${op.value}" ${op.value === item.rightIndicator ? 'selected' : ''}>${op.label}</option>`).join('')}
             </select>
           `}
-          ${isCross ? '<span class="operand-kind-label">指标</span>' : `
+          ${isCross ? '<span class="operand-kind-label">同类指标</span>' : isSemantic ? '' : `
             <button class="btn-toggle-operand" data-ridx="${rIdx}" data-cidx="${cIdx}" title="切换右操作数模式 (常数/序列)">
               ${isNum ? '常数' : '序列'}
             </button>
@@ -772,9 +893,7 @@ class StrategyWorkbench {
           item.left = sel.value;
           this.normalizeConditionItem(item, this.getAvailableOperands());
           def.rules[rIdx].when = this.compileAstWhen(parsed.gate, parsed.items);
-          if (this.isCrossOperator(item.op)) {
-            this.renderRulesEditor(def);
-          }
+          this.renderRulesEditor(def);
           this.syncToJson();
         }
       });
@@ -832,7 +951,10 @@ class StrategyWorkbench {
         const cIdx = parseInt(btn.dataset.cidx, 10);
         const parsed = this.parseAstWhen(def.rules[rIdx].when);
         if (parsed.items[cIdx]) {
-          if (this.isCrossOperator(parsed.items[cIdx].op)) return;
+          if (
+            this.isCrossOperator(parsed.items[cIdx].op) ||
+            this.isSemanticOperator(parsed.items[cIdx].op)
+          ) return;
           parsed.items[cIdx].rightType = parsed.items[cIdx].rightType === 'number' ? 'indicator' : 'number';
           def.rules[rIdx].when = this.compileAstWhen(parsed.gate, parsed.items);
           this.renderRulesEditor(def);
@@ -888,22 +1010,15 @@ class StrategyWorkbench {
   addNewRule() {
     if (!this.currentStrategy.rules) this.currentStrategy.rules = [];
     const id = `rule_${this.currentStrategy.rules.length + 1}`;
-    const indicatorOperands = this.getAvailableIndicatorOperands();
-    const hasIndicatorPair = indicatorOperands.length >= 2;
     const newRule = {
       id: id,
       when: {
         kind: 'operator',
-        op: hasIndicatorPair ? 'cross_up' : 'gt',
-        args: hasIndicatorPair
-          ? [
-              this.operandValueToNode(indicatorOperands[0].value),
-              this.operandValueToNode(indicatorOperands[1].value)
-            ]
-          : [
-              this.operandValueToNode('market:close'),
-              { kind: 'number', number: 0 }
-            ]
+        op: 'gt',
+        args: [
+          this.operandValueToNode('market:close'),
+          { kind: 'number', number: 0 }
+        ]
       },
       action: {
         type: 'open',
@@ -932,6 +1047,9 @@ class StrategyWorkbench {
 
   parseConditionItem(node) {
     if (!node || node.kind !== 'operator') return null;
+    const semanticItem = this.parseSemanticCondition(node);
+    if (semanticItem) return semanticItem;
+
     const op = node.op;
     const leftNode = node.args && node.args[0];
     const rightNode = node.args && node.args[1];
@@ -957,6 +1075,70 @@ class StrategyWorkbench {
     };
   }
 
+  parseSemanticCondition(node) {
+    const operands = this.getAvailableOperands();
+    const leftNode = node.args && node.args[0];
+    const rightNode = node.args && node.args[1];
+    const leftValue = this.nodeToOperandValue(leftNode);
+    const rightValue = this.nodeToOperandValue(rightNode);
+    const leftOperand = operands.find(item => item.value === leftValue);
+    const rightOperand = operands.find(item => item.value === rightValue);
+
+    if (
+      (node.op === 'turn_bullish' || node.op === 'turn_bearish') &&
+      leftOperand?.semantic === 'trend_direction'
+    ) {
+      return {
+        left: leftValue,
+        op: node.op === 'turn_bullish' ? 'trend_turns_bullish' : 'trend_turns_bearish',
+        rightType: 'semantic',
+        rightIndicator: '',
+        rightNumber: 0,
+      };
+    }
+
+    if (
+      node.op === 'eq' &&
+      leftOperand?.semantic === 'trend_direction' &&
+      rightNode?.kind === 'number' &&
+      (rightNode.number === 1 || rightNode.number === -1)
+    ) {
+      return {
+        left: leftValue,
+        op: rightNode.number === 1 ? 'bullish_trend' : 'bearish_trend',
+        rightType: 'semantic',
+        rightIndicator: '',
+        rightNumber: rightNode.number,
+      };
+    }
+
+    const leftIsClose = leftValue === 'market:close';
+    const rightIsClose = rightValue === 'market:close';
+    if (leftIsClose && rightOperand?.semantic === 'trend_level') {
+      if (node.op === 'gte' || node.op === 'lte') {
+        return {
+          left: rightValue,
+          op: node.op === 'gte' ? 'support' : 'resistance',
+          rightType: 'semantic',
+          rightIndicator: '',
+          rightNumber: 0,
+        };
+      }
+    }
+    if (rightIsClose && leftOperand?.semantic === 'trend_level') {
+      if (node.op === 'lte' || node.op === 'gte') {
+        return {
+          left: leftValue,
+          op: node.op === 'lte' ? 'support' : 'resistance',
+          rightType: 'semantic',
+          rightIndicator: '',
+          rightNumber: 0,
+        };
+      }
+    }
+    return null;
+  }
+
   nodeToOperandValue(node) {
     if (!node) return '';
     if (node.kind === 'reference' && node.ref) {
@@ -969,6 +1151,34 @@ class StrategyWorkbench {
   compileConditionItem(item) {
     this.normalizeConditionItem(item, this.getAvailableOperands());
     const leftArg = this.operandValueToNode(item.left);
+    if (item.op === 'bullish_trend' || item.op === 'bearish_trend') {
+      return {
+        kind: 'operator',
+        op: 'eq',
+        args: [
+          leftArg,
+          { kind: 'number', number: item.op === 'bullish_trend' ? 1 : -1 }
+        ]
+      };
+    }
+    if (item.op === 'trend_turns_bullish' || item.op === 'trend_turns_bearish') {
+      return {
+        kind: 'operator',
+        op: item.op === 'trend_turns_bullish' ? 'turn_bullish' : 'turn_bearish',
+        args: [leftArg]
+      };
+    }
+    if (item.op === 'support' || item.op === 'resistance') {
+      return {
+        kind: 'operator',
+        op: item.op === 'support' ? 'gte' : 'lte',
+        args: [
+          this.operandValueToNode('market:close'),
+          leftArg
+        ]
+      };
+    }
+
     let rightArg;
     if (!this.isCrossOperator(item.op) && item.rightType === 'number') {
       rightArg = { kind: 'number', number: parseFloat(item.rightNumber) || 0 };

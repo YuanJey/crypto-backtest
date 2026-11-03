@@ -429,6 +429,37 @@ func TestRunIndicatorReportUsesNullForWarmupValues(t *testing.T) {
 	}
 }
 
+func TestRunReportsSupertrendValueAndDirection(t *testing.T) {
+	definition := baseDefinition()
+	definition.Indicators = []strategy.IndicatorSpec{{
+		ID:        "supertrend_15m",
+		Type:      "supertrend",
+		Timeframe: "15m",
+		Params:    json.RawMessage(`{"period":2,"multiplier":1}`),
+	}}
+	plan, err := compiler.Compile(definition, indicator.MustBuiltinRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Run(context.Background(), plan, RunRequest{
+		Bars: testBars(5),
+		Report: ReportSpec{
+			Indicators: []IndicatorOverlay{{ID: "supertrend_15m"}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields := result.Indicators["supertrend_15m"].Fields
+	if len(fields["value"]) != 5 || len(fields["direction"]) != 5 {
+		t.Fatalf("unexpected supertrend report fields: %+v", fields)
+	}
+	if fields["value"][2] == nil || fields["direction"][2] == nil {
+		t.Fatalf("expected supertrend values after warmup: %+v", fields)
+	}
+}
+
 func TestRunRejectsUnknownReportMetric(t *testing.T) {
 	definition := baseDefinition()
 	plan, err := compiler.Compile(definition, indicator.MustBuiltinRegistry())

@@ -95,6 +95,15 @@ func (p *conditionParser) parseMethodCall(refSegments []string, method string) (
 	}
 	ref := p.refFromSegments(refSegments)
 	switch method {
+	case "turn_bullish", "turn_bearish":
+		if len(args) != 0 {
+			return Expression{}, fmt.Errorf("%s requires 0 args", method)
+		}
+		op := OperatorTurnBullish
+		if method == "turn_bearish" {
+			op = OperatorTurnBearish
+		}
+		return Expression{Kind: ExprOperator, Op: op, Args: []Expression{ref}}, nil
 	case "gt", "gte", "lt", "lte", "eq", "cross_up", "cross_down":
 		if len(args) != 1 {
 			return Expression{}, fmt.Errorf("%s requires 1 arg", method)

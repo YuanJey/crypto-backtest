@@ -29,7 +29,7 @@ crypto-backtest/
 │   ├── datafeed/       # 币安 REST 行情数据抓取客户端
 │   ├── dataset/        # 行情清洗、质量检测与 Parquet 读写器
 │   ├── engine/         # 事件驱动回测撮合引擎与高周期聚合器
-│   ├── indicator/      # 内置指标运行时（EMA/SMA/RSI/ATR/BOLL）与注册表
+│   ├── indicator/      # 内置指标运行时（EMA/SMA/RSI/ATR/BOLL/Supertrend）与注册表
 │   ├── market/         # K 线、交易对、时间周期领域模型
 │   └── strategy/       # 策略模型、JSON 解码、静态语义校验器与 SQLite 仓储
 ├── web/                # 前端多周期图表与回放终端

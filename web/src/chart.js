@@ -427,6 +427,18 @@ class CandleChart {
   }
 
   drawSeriesLine(ctx, series, startIndex, endIndex, spacing, valueToY, lineWidth) {
+    if (series.directionValues) {
+      this.drawDirectionalSeriesLine(
+        ctx,
+        series,
+        startIndex,
+        endIndex,
+        spacing,
+        valueToY,
+        lineWidth,
+      );
+      return;
+    }
     ctx.save();
     ctx.lineWidth = lineWidth;
     ctx.strokeStyle = series.color || '#f59e0b';
@@ -460,6 +472,40 @@ class CandleChart {
       }
     }
     ctx.stroke();
+    ctx.restore();
+  }
+
+  drawDirectionalSeriesLine(ctx, series, startIndex, endIndex, spacing, valueToY, lineWidth) {
+    ctx.save();
+    ctx.lineWidth = lineWidth;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    let previousPoint = null;
+
+    for (let index = startIndex; index < endIndex; index++) {
+      const value = series.values[index];
+      const direction = series.directionValues[index];
+      if (!Number.isFinite(value) || !Number.isFinite(direction)) {
+        previousPoint = null;
+        continue;
+      }
+      const x = this.chartAreaWidth -
+        ((this.bars.length - 1 - index + this.rightOffsetBars) * spacing) -
+        spacing * 0.5;
+      const y = valueToY(value);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        previousPoint = null;
+        continue;
+      }
+      if (previousPoint) {
+        ctx.beginPath();
+        ctx.moveTo(previousPoint.x, previousPoint.y);
+        ctx.lineTo(x, y);
+        ctx.strokeStyle = direction >= 0 ? '#2ad3a3' : '#ff6278';
+        ctx.stroke();
+      }
+      previousPoint = { x, y };
+    }
     ctx.restore();
   }
 

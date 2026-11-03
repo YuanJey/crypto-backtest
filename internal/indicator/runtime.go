@@ -222,6 +222,117 @@ func (r *atrRuntime) Update(inputs []float64) []float64 {
 	return []float64{r.value}
 }
 
+func buildSupertrend(raw json.RawMessage) (RuntimeIndicator, error) {
+	var params SupertrendParams
+	if err := decodeStrictParams(raw, &params); err != nil {
+		return nil, err
+	}
+	return &supertrendRuntime{
+		period:     params.Period,
+		multiplier: params.Multiplier,
+	}, nil
+}
+
+type supertrendRuntime struct {
+	period        int
+	multiplier    float64
+	atrCount      int
+	atrSum        float64
+	atr           float64
+	prevClose     float64
+	hasPrevClose  bool
+	finalUpper    float64
+	finalLower    float64
+	value         float64
+	direction     float64
+	hasSupertrend bool
+}
+
+func (r *supertrendRuntime) Warmup() int { return r.period + 1 }
+
+func (r *supertrendRuntime) Reset() {
+	*r = supertrendRuntime{
+		period:     r.period,
+		multiplier: r.multiplier,
+	}
+}
+
+func (r *supertrendRuntime) Update(inputs []float64) []float64 {
+	if len(inputs) < 3 {
+		return []float64{math.NaN(), math.NaN()}
+	}
+	high, low, closeValue := inputs[0], inputs[1], inputs[2]
+	if math.IsNaN(high) || math.IsNaN(low) || math.IsNaN(closeValue) {
+		return []float64{math.NaN(), math.NaN()}
+	}
+	if !r.hasPrevClose {
+		r.prevClose = closeValue
+		r.hasPrevClose = true
+		return []float64{math.NaN(), math.NaN()}
+	}
+
+	previousClose := r.prevClose
+	trueRange := math.Max(
+		high-low,
+		math.Max(math.Abs(high-previousClose), math.Abs(low-previousClose)),
+	)
+	r.prevClose = closeValue
+	r.atrCount++
+	if r.atrCount <= r.period {
+		r.atrSum += trueRange
+		if r.atrCount < r.period {
+			return []float64{math.NaN(), math.NaN()}
+		}
+		r.atr = r.atrSum / float64(r.period)
+	} else {
+		r.atr = (r.atr*float64(r.period-1) + trueRange) / float64(r.period)
+	}
+
+	midpoint := (high + low) / 2
+	basicUpper := midpoint + r.multiplier*r.atr
+	basicLower := midpoint - r.multiplier*r.atr
+	if !r.hasSupertrend {
+		r.finalUpper = basicUpper
+		r.finalLower = basicLower
+		if closeValue >= midpoint {
+			r.value = r.finalLower
+			r.direction = 1
+		} else {
+			r.value = r.finalUpper
+			r.direction = -1
+		}
+		r.hasSupertrend = true
+		return []float64{r.value, r.direction}
+	}
+
+	previousUpper := r.finalUpper
+	previousLower := r.finalLower
+	previousValue := r.value
+	if basicUpper < previousUpper || previousClose > previousUpper {
+		r.finalUpper = basicUpper
+	}
+	if basicLower > previousLower || previousClose < previousLower {
+		r.finalLower = basicLower
+	}
+
+	if previousValue == previousUpper {
+		if closeValue <= r.finalUpper {
+			r.value = r.finalUpper
+			r.direction = -1
+		} else {
+			r.value = r.finalLower
+			r.direction = 1
+		}
+	} else if closeValue >= r.finalLower {
+		r.value = r.finalLower
+		r.direction = 1
+	} else {
+		r.value = r.finalUpper
+		r.direction = -1
+	}
+	return []float64{r.value, r.direction}
+}
+
 func firstInput(inputs []float64) float64 {
 	if len(inputs) == 0 {
 		return math.NaN()

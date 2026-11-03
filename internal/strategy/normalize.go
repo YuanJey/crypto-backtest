@@ -28,7 +28,7 @@ func Normalize(definition Definition) (Definition, error) {
 	for index, spec := range definition.Indicators {
 		if len(spec.Inputs) == 0 {
 			indicatorType := strings.ToLower(strings.TrimSpace(spec.Type))
-			if indicatorType == "atr" {
+			if indicatorType == "atr" || indicatorType == "supertrend" {
 				definition.Indicators[index].Inputs = []ValueRef{
 					{Scope: ValueScopeMarket, Name: "bar", Field: "high"},
 					{Scope: ValueScopeMarket, Name: "bar", Field: "low"},

@@ -16,6 +16,11 @@ type BollParams struct {
 	StdDev float64 `json:"stddev"`
 }
 
+type SupertrendParams struct {
+	Period     int     `json:"period"`
+	Multiplier float64 `json:"multiplier"`
+}
+
 func BuiltinRegistry() (*Registry, error) {
 	registry := NewRegistry()
 	for _, item := range []struct {
@@ -24,19 +29,40 @@ func BuiltinRegistry() (*Registry, error) {
 		builder    RuntimeBuilder
 	}{
 		{
-			definition: periodIndicator("ema", "EMA", "trend", "value"),
-			validator:  validatePeriodParams,
-			builder:    buildEMA,
+			definition: periodIndicator(
+				"ema",
+				"EMA",
+				"trend",
+				"value",
+				OutputSemanticPrice,
+				"moving_average",
+			),
+			validator: validatePeriodParams,
+			builder:   buildEMA,
 		},
 		{
-			definition: periodIndicator("sma", "SMA", "trend", "value"),
-			validator:  validatePeriodParams,
-			builder:    buildSMA,
+			definition: periodIndicator(
+				"sma",
+				"SMA",
+				"trend",
+				"value",
+				OutputSemanticPrice,
+				"moving_average",
+			),
+			validator: validatePeriodParams,
+			builder:   buildSMA,
 		},
 		{
-			definition: periodIndicator("rsi", "RSI", "momentum", "value"),
-			validator:  validatePeriodParams,
-			builder:    buildRSI,
+			definition: periodIndicator(
+				"rsi",
+				"RSI",
+				"momentum",
+				"value",
+				OutputSemanticOscillator,
+				"rsi",
+			),
+			validator: validatePeriodParams,
+			builder:   buildRSI,
 		},
 		{
 			definition: Definition{
@@ -52,7 +78,7 @@ func BuiltinRegistry() (*Registry, error) {
 					{Name: "period", Type: ValueTypeInt, Required: true, Min: json.Number("1")},
 				},
 				Outputs: []OutputDefinition{
-					{Name: "value", Type: ValueTypeFloat},
+					{Name: "value", Type: ValueTypeFloat, Semantic: OutputSemanticVolatility},
 				},
 			},
 			validator: validatePeriodParams,
@@ -73,13 +99,35 @@ func BuiltinRegistry() (*Registry, error) {
 					{Name: "stddev", Type: ValueTypeFloat, Required: true, Min: json.Number("0")},
 				},
 				Outputs: []OutputDefinition{
-					{Name: "middle", Type: ValueTypeFloat},
-					{Name: "upper", Type: ValueTypeFloat},
-					{Name: "lower", Type: ValueTypeFloat},
+					{Name: "middle", Type: ValueTypeFloat, Semantic: OutputSemanticPrice},
+					{Name: "upper", Type: ValueTypeFloat, Semantic: OutputSemanticPrice},
+					{Name: "lower", Type: ValueTypeFloat, Semantic: OutputSemanticPrice},
 				},
 			},
 			validator: validateBollParams,
 			builder:   buildBOLL,
+		},
+		{
+			definition: Definition{
+				Type:     "supertrend",
+				Label:    "Supertrend",
+				Category: "trend",
+				Inputs: []InputDefinition{
+					{Name: "high", Type: ValueTypeFloat, Required: true},
+					{Name: "low", Type: ValueTypeFloat, Required: true},
+					{Name: "close", Type: ValueTypeFloat, Required: true},
+				},
+				Params: []ParamDefinition{
+					{Name: "period", Type: ValueTypeInt, Required: true, Min: json.Number("1")},
+					{Name: "multiplier", Type: ValueTypeFloat, Required: true, Min: json.Number("0")},
+				},
+				Outputs: []OutputDefinition{
+					{Name: "value", Type: ValueTypeFloat, Semantic: OutputSemanticTrendLevel},
+					{Name: "direction", Type: ValueTypeFloat, Semantic: OutputSemanticTrendDirection},
+				},
+			},
+			validator: validateSupertrendParams,
+			builder:   buildSupertrend,
 		},
 	} {
 		if err := registry.RegisterRuntime(item.definition, item.validator, item.builder); err != nil {
@@ -97,7 +145,14 @@ func MustBuiltinRegistry() *Registry {
 	return registry
 }
 
-func periodIndicator(indicatorType, label, category, output string) Definition {
+func periodIndicator(
+	indicatorType string,
+	label string,
+	category string,
+	output string,
+	semantic OutputSemantic,
+	crossGroup string,
+) Definition {
 	return Definition{
 		Type:     indicatorType,
 		Label:    label,
@@ -111,7 +166,12 @@ func periodIndicator(indicatorType, label, category, output string) Definition {
 			{Name: "period", Type: ValueTypeInt, Required: true, Min: json.Number("1")},
 		},
 		Outputs: []OutputDefinition{
-			{Name: output, Type: ValueTypeFloat},
+			{
+				Name:       output,
+				Type:       ValueTypeFloat,
+				Semantic:   semantic,
+				CrossGroup: crossGroup,
+			},
 		},
 	}
 }
@@ -137,6 +197,20 @@ func validateBollParams(raw json.RawMessage) error {
 	}
 	if params.StdDev <= 0 {
 		return fmt.Errorf("stddev must be > 0")
+	}
+	return nil
+}
+
+func validateSupertrendParams(raw json.RawMessage) error {
+	var params SupertrendParams
+	if err := decodeStrictParams(raw, &params); err != nil {
+		return err
+	}
+	if params.Period < 1 {
+		return fmt.Errorf("period must be >= 1")
+	}
+	if params.Multiplier <= 0 {
+		return fmt.Errorf("multiplier must be > 0")
 	}
 	return nil
 }

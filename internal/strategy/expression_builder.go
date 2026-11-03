@@ -77,6 +77,22 @@ func (r SeriesRef) CrossDown(value interface{}) Expression {
 	return compare(OperatorCrossDown, r.Ref(), value)
 }
 
+func (r SeriesRef) TurnsBullish() Expression {
+	return Expression{
+		Kind: ExprOperator,
+		Op:   OperatorTurnBullish,
+		Args: []Expression{r.Ref()},
+	}
+}
+
+func (r SeriesRef) TurnsBearish() Expression {
+	return Expression{
+		Kind: ExprOperator,
+		Op:   OperatorTurnBearish,
+		Args: []Expression{r.Ref()},
+	}
+}
+
 func And(args ...Expression) Expression {
 	return Expression{Kind: ExprOperator, Op: OperatorAnd, Args: args}
 }

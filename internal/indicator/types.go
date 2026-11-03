@@ -3,10 +3,17 @@ package indicator
 import "encoding/json"
 
 type ValueType string
+type OutputSemantic string
 
 const (
 	ValueTypeFloat ValueType = "float"
 	ValueTypeInt   ValueType = "int"
+
+	OutputSemanticPrice          OutputSemantic = "price_series"
+	OutputSemanticOscillator     OutputSemantic = "oscillator_series"
+	OutputSemanticVolatility     OutputSemantic = "volatility_series"
+	OutputSemanticTrendLevel     OutputSemantic = "trend_level"
+	OutputSemanticTrendDirection OutputSemantic = "trend_direction"
 )
 
 type Definition struct {
@@ -32,8 +39,10 @@ type ParamDefinition struct {
 }
 
 type OutputDefinition struct {
-	Name string    `json:"name"`
-	Type ValueType `json:"type"`
+	Name       string         `json:"name"`
+	Type       ValueType      `json:"type"`
+	Semantic   OutputSemantic `json:"semantic"`
+	CrossGroup string         `json:"cross_group,omitempty"`
 }
 
 type ParamValidator func(json.RawMessage) error

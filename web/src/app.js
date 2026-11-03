@@ -279,8 +279,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     return indicatorColors[Math.abs(hash) % indicatorColors.length];
   }
 
-  function indicatorPane(type) {
-    return ['ema', 'sma', 'boll'].includes(String(type || '').toLowerCase())
+  function indicatorPane(type, field) {
+    const normalizedType = String(type || '').toLowerCase();
+    if (normalizedType === 'supertrend') {
+      return field === 'value' ? 'price' : 'oscillator';
+    }
+    return ['ema', 'sma', 'boll'].includes(normalizedType)
       ? 'price'
       : 'oscillator';
   }
@@ -309,26 +313,38 @@ document.addEventListener('DOMContentLoaded', async () => {
       Object.entries(fields).forEach(([field, reportValues]) => {
         const key = `${item.id}.${field}`;
         const type = String(item.type || '').toLowerCase();
-        const values = chartBars.map(bar => {
+        const reportIndexes = chartBars.map(bar => {
           const reportIndex = indicatorValueIndex(
             tf,
             bar,
             currentIndex,
             activeBacktest.baseIndexByTime,
           );
+          return reportIndex;
+        });
+        const values = reportIndexes.map(reportIndex => {
           const value = reportValues[reportIndex];
           return Number.isFinite(value) ? value : null;
         });
+        const directionValues = type === 'supertrend' && field === 'value'
+          ? reportIndexes.map(reportIndex => {
+              const value = fields.direction?.[reportIndex];
+              return Number.isFinite(value) ? value : null;
+            })
+          : null;
         series.push({
           id: item.id,
           field,
           label: key,
           kind: type,
-          pane: indicatorPane(type),
-          color: indicatorColor(key),
+          pane: indicatorPane(type, field),
+          color: type === 'supertrend' && field === 'direction'
+            ? '#f5b84b'
+            : indicatorColor(key),
+          directionValues,
           dashed: type === 'boll' && field === 'middle',
-          min: type === 'rsi' ? 0 : undefined,
-          max: type === 'rsi' ? 100 : undefined,
+          min: type === 'rsi' ? 0 : (type === 'supertrend' && field === 'direction' ? -1 : undefined),
+          max: type === 'rsi' ? 100 : (type === 'supertrend' && field === 'direction' ? 1 : undefined),
           values,
         });
       });
@@ -360,7 +376,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       wrapper.className = 'indicator-legend-item';
       const swatch = document.createElement('span');
       swatch.className = 'indicator-legend-swatch';
-      swatch.style.backgroundColor = item.color;
+      const latestDirection = item.directionValues
+        ? ([...item.directionValues].reverse().find(Number.isFinite) ?? null)
+        : null;
+      swatch.style.backgroundColor = latestDirection === null
+        ? item.color
+        : (latestDirection >= 0 ? '#2ad3a3' : '#ff6278');
       const label = document.createElement('span');
       label.textContent = item.label;
       const value = document.createElement('span');

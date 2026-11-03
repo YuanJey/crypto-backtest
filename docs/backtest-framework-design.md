@@ -187,16 +187,13 @@ type RuntimeIndicator interface {
 
 - EMA：`value`
 - BOLL：`middle`、`upper`、`lower`
-- MACD：`macd`、`signal`、`histogram`
-- STOCH：`k`、`d`
+- Supertrend：`value`、`direction`
 
-首批内置指标：
+当前内置指标：
 
-- 趋势：SMA、EMA、WMA、MACD、ADX
-- 动量：RSI、STOCH、ROC、CCI
-- 波动率：BOLL、ATR、标准差
-- 成交量：OBV、成交量均线
-- 基础滚动值：最高、最低、均值、求和、收益率
+- 趋势：SMA、EMA、Supertrend
+- 动量：RSI
+- 波动率：BOLL、ATR
 
 ### 6.2 指标配置
 
@@ -228,6 +225,13 @@ indicators:
     input: market.close
     params:
       period: 14
+
+  - id: supertrend_10
+    type: supertrend
+    inputs: [market.high, market.low, market.close]
+    params:
+      period: 10
+      multiplier: 3
 ```
 
 规则中的引用分别为：
@@ -236,6 +240,8 @@ indicators:
 - `indicator.boll_20.upper`
 - `indicator.boll_20.lower`
 - `indicator.rsi_14.value`
+- `indicator.supertrend_10.value`
+- `indicator.supertrend_10.direction`，多头为 `1`，空头为 `-1`
 
 指标引擎根据输入引用构建 DAG，禁止循环依赖。相同类型、输入和参数的指标只计算一次。
 
@@ -336,8 +342,19 @@ or(position.flat(), and(position.long(), position.entry_count.lt(3), position.av
 left[t-1] <= right[t-1] AND left[t] > right[t]
 ```
 
-`left` 和 `right` 必须引用两个不同的指标输出；不接受行情字段、常数或同一输出
-与自身交叉。必须同时具备 `t-1` 和 `t` 的有效值，否则返回 `false`。
+`left` 和 `right` 必须引用两个不同、且 `cross_group` 相同的指标输出；例如
+EMA/SMA 同属均线组，两个 RSI 同属 RSI 组。BOLL、ATR、Supertrend 不提供交叉组。
+交叉不接受行情字段、常数或同一输出与自身交叉。必须同时具备 `t-1` 和 `t`
+的有效值，否则返回 `false`。
+
+Supertrend 使用语义化条件：
+
+- 多头趋势：`supertrend.direction == 1`
+- 空头趋势：`supertrend.direction == -1`
+- 趋势转多：`supertrend.direction.turn_bullish()`，上一值为 `-1` 且当前值为 `1`
+- 趋势转空：`supertrend.direction.turn_bearish()`，上一值为 `1` 且当前值为 `-1`
+- 支撑侧：`market.close >= supertrend.value`
+- 阻力侧：`market.close <= supertrend.value`
 
 ### 7.4 规则配置示例
 

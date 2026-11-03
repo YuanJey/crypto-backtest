@@ -83,6 +83,19 @@ func evalOperator(expression strategy.Expression, ctx evalContext) (bool, error)
 			return prevLeft <= prevRight && curLeft > curRight, nil
 		}
 		return prevLeft >= prevRight && curLeft < curRight, nil
+	case strategy.OperatorTurnBullish, strategy.OperatorTurnBearish:
+		previous, ok, err := evalNumber(expression.Args[0], ctx, -1)
+		if err != nil || !ok {
+			return false, err
+		}
+		current, ok, err := evalNumber(expression.Args[0], ctx, 0)
+		if err != nil || !ok {
+			return false, err
+		}
+		if expression.Op == strategy.OperatorTurnBullish {
+			return previous < 0 && current > 0, nil
+		}
+		return previous > 0 && current < 0, nil
 	}
 	return false, fmt.Errorf("unsupported operator %q", expression.Op)
 }

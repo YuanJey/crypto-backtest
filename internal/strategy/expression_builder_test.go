@@ -66,6 +66,25 @@ func TestParseConditionSupportsPositionState(t *testing.T) {
 	}
 }
 
+func TestParseConditionSupportsTrendDirectionTransitions(t *testing.T) {
+	bullish, err := ParseCondition("supertrend.direction.turn_bullish()")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bullish.Op != OperatorTurnBullish ||
+		len(bullish.Args) != 1 ||
+		bullish.Args[0].Ref == nil ||
+		bullish.Args[0].Ref.Name != "supertrend" ||
+		bullish.Args[0].Ref.Field != "direction" {
+		t.Fatalf("unexpected bullish transition: %+v", bullish)
+	}
+
+	bearish := IndicatorField("supertrend", "direction").TurnsBearish()
+	if bearish.Op != OperatorTurnBearish || len(bearish.Args) != 1 {
+		t.Fatalf("unexpected bearish transition: %+v", bearish)
+	}
+}
+
 func TestParseConditionSupportsPositionFieldsForPyramiding(t *testing.T) {
 	expression, err := ParseCondition("and(position.long(), position.entry_count.lt(3), position.avg_entry_price.gte(market.close))")
 	if err != nil {

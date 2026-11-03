@@ -164,16 +164,18 @@ const (
 type Operator string
 
 const (
-	OperatorAnd       Operator = "and"
-	OperatorOr        Operator = "or"
-	OperatorNot       Operator = "not"
-	OperatorGT        Operator = "gt"
-	OperatorGTE       Operator = "gte"
-	OperatorLT        Operator = "lt"
-	OperatorLTE       Operator = "lte"
-	OperatorEQ        Operator = "eq"
-	OperatorCrossUp   Operator = "cross_up"
-	OperatorCrossDown Operator = "cross_down"
+	OperatorAnd         Operator = "and"
+	OperatorOr          Operator = "or"
+	OperatorNot         Operator = "not"
+	OperatorGT          Operator = "gt"
+	OperatorGTE         Operator = "gte"
+	OperatorLT          Operator = "lt"
+	OperatorLTE         Operator = "lte"
+	OperatorEQ          Operator = "eq"
+	OperatorCrossUp     Operator = "cross_up"
+	OperatorCrossDown   Operator = "cross_down"
+	OperatorTurnBullish Operator = "turn_bullish"
+	OperatorTurnBearish Operator = "turn_bearish"
 )
 
 type ActionSpec struct {

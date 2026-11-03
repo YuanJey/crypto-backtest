@@ -121,3 +121,4 @@ go run ./cmd/backtest -strategy-id ema-boll-rsi -run \
 | `rsi` | `period >= 1` | `value` |
 | `atr` | `period >= 1` | `value` |
 | `boll` | `period >= 1`, `stddev > 0` | `middle`, `upper`, `lower` |
+| `supertrend` | `period >= 1`, `multiplier > 0` | `value`, `direction` |
