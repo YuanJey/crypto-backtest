@@ -98,9 +98,12 @@ func selectExitCandidate(
 }
 
 func exitTarget(portfolio portfolio, runtime exitPolicyRuntime, states []indicatorState) (float64, bool) {
-	anchor, ok := exitAnchorValue(portfolio, runtime.spec.Anchor.Type)
+	anchor, ok := exitAnchorValue(portfolio, runtime.spec.Anchor, states)
 	if !ok {
 		return 0, false
+	}
+	if runtime.spec.Distance.Type == strategy.ExitDistanceDirect {
+		return anchor, true
 	}
 	distance, ok := exitDistanceValue(anchor, runtime, states)
 	if !ok || distance <= 0 {
@@ -115,9 +118,9 @@ func exitTarget(portfolio portfolio, runtime exitPolicyRuntime, states []indicat
 	return target, isUsableExitNumber(target) && target > 0
 }
 
-func exitAnchorValue(portfolio portfolio, anchorType strategy.ExitAnchorType) (float64, bool) {
+func exitAnchorValue(portfolio portfolio, anchor strategy.ExitAnchorSpec, states []indicatorState) (float64, bool) {
 	var value float64
-	switch anchorType {
+	switch anchor.Type {
 	case strategy.ExitAnchorAverageEntry:
 		value = portfolio.avgPrice
 	case strategy.ExitAnchorFirstEntry:
@@ -128,6 +131,8 @@ func exitAnchorValue(portfolio portfolio, anchorType strategy.ExitAnchorType) (f
 		value = portfolio.highestSinceEntry
 	case strategy.ExitAnchorLowestSinceEntry:
 		value = portfolio.lowestSinceEntry
+	case strategy.ExitAnchorIndicator:
+		return latestIndicatorValue(states, anchor.Indicator, anchor.Field)
 	default:
 		return 0, false
 	}

@@ -260,3 +260,51 @@ func TestRunUsesPriorClosedATRForLiveTrigger(t *testing.T) {
 		t.Fatalf("exit price=%f, want prior-bar ATR target 102", result.Fills[1].Price)
 	}
 }
+
+func TestRunExecutesExitAtPriorClosedExtreme(t *testing.T) {
+	definition := baseDefinition()
+	definition.Execution.Fee.TakerRate = 0
+	definition.Indicators = append(definition.Indicators, strategy.IndicatorSpec{
+		ID:        "extreme_2",
+		Type:      "extreme",
+		Timeframe: "15m",
+		Inputs: []strategy.ValueRef{
+			{Scope: strategy.ValueScopeMarket, Name: "bar", Field: "high"},
+			{Scope: strategy.ValueScopeMarket, Name: "bar", Field: "low"},
+		},
+		Params: []byte(`{"period":2}`),
+	})
+	definition.Rules = []strategy.RuleSpec{{
+		ID:     "open_long",
+		When:   strategy.Bool(true),
+		Action: strategy.ActionSpec{Type: strategy.ActionOpen, Side: strategy.TradeSideLong, SizePct: 0.2},
+	}}
+	definition.ExitPolicies = []strategy.ExitPolicySpec{{
+		ID:           "long_tp_extreme",
+		Side:         strategy.TradeSideLong,
+		Purpose:      strategy.ExitPurposeTakeProfit,
+		Anchor:       strategy.ExitAnchorSpec{Type: strategy.ExitAnchorIndicator, Indicator: "extreme_2", Field: "highest"},
+		Distance:     strategy.ExitDistanceSpec{Type: strategy.ExitDistanceDirect},
+		TriggerPrice: strategy.ExitTriggerHigh,
+		ClosePct:     1,
+		Execution:    strategy.ExitExecutionTriggerPrice,
+	}}
+	plan, err := compiler.Compile(definition, indicator.MustBuiltinRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
+	bars := constantPriceBars(4, 100)
+	bars[0].High = 105
+	bars[1].High = 110
+	bars[2].High = 111
+	result, err := Run(context.Background(), plan, RunRequest{Bars: bars})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Fills) != 2 {
+		t.Fatalf("fills=%d, want entry and extreme exit", len(result.Fills))
+	}
+	if result.Fills[1].Price != 110 {
+		t.Fatalf("exit price=%f, want prior closed rolling high 110", result.Fills[1].Price)
+	}
+}

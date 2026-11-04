@@ -222,6 +222,46 @@ func (r *atrRuntime) Update(inputs []float64) []float64 {
 	return []float64{r.value}
 }
 
+func buildExtreme(raw json.RawMessage) (RuntimeIndicator, error) {
+	var params PeriodParams
+	if err := decodeStrictParams(raw, &params); err != nil {
+		return nil, err
+	}
+	return &extremeRuntime{period: params.Period}, nil
+}
+
+type extremeRuntime struct {
+	period int
+	highs  []float64
+	lows   []float64
+}
+
+func (r *extremeRuntime) Warmup() int { return r.period }
+
+func (r *extremeRuntime) Reset() { *r = extremeRuntime{period: r.period} }
+
+func (r *extremeRuntime) Update(inputs []float64) []float64 {
+	if len(inputs) < 2 || math.IsNaN(inputs[0]) || math.IsNaN(inputs[1]) {
+		return []float64{math.NaN(), math.NaN()}
+	}
+	r.highs = append(r.highs, inputs[0])
+	r.lows = append(r.lows, inputs[1])
+	if len(r.highs) > r.period {
+		r.highs = r.highs[1:]
+		r.lows = r.lows[1:]
+	}
+	if len(r.highs) < r.period {
+		return []float64{math.NaN(), math.NaN()}
+	}
+	highest := r.highs[0]
+	lowest := r.lows[0]
+	for index := 1; index < len(r.highs); index++ {
+		highest = math.Max(highest, r.highs[index])
+		lowest = math.Min(lowest, r.lows[index])
+	}
+	return []float64{highest, lowest}
+}
+
 func buildSupertrend(raw json.RawMessage) (RuntimeIndicator, error) {
 	var params SupertrendParams
 	if err := decodeStrictParams(raw, &params); err != nil {

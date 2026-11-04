@@ -179,6 +179,11 @@ go run ./cmd/backtest -strategy-id ema-boll-rsi -run \
 冻结、每次加仓刷新或随最新闭合 K 线更新（下一根 K 线生效）；`close_pct` 可用于分批退出，
 `execution` 可选下一根开盘或触发价/跳空价成交。
 
+内置 `extreme` 指标同时输出滚动窗口的 `highest` 与 `lowest`。例如配置
+`timeframe: "1d"`、`params.period: 5` 可得到 5 日最高/最低价。退出策略可将
+`anchor.type` 设为 `indicator` 并引用对应输出，配合 `distance.type: "direct"`
+直接在该极值价格止盈或止损。指标锚点使用上一根已闭合指标值，下一根 K 线生效。
+
 当前内置指标参数：
 
 | type | params | outputs |

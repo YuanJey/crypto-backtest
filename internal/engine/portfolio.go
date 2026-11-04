@@ -47,6 +47,9 @@ func (p portfolio) currentSide() strategy.TradeSide {
 }
 
 func (p *portfolio) open(side strategy.TradeSide, price float64, notionalPct float64, feeRate float64, allowPyramiding bool) (float64, float64, bool) {
+	if !isPositiveFinite(p.cash) {
+		return 0, 0, false
+	}
 	if p.quantity != 0 {
 		if p.currentSide() != side || !allowPyramiding {
 			return 0, 0, false
@@ -85,6 +88,10 @@ func (p *portfolio) open(side strategy.TradeSide, price float64, notionalPct flo
 	p.entryCount++
 	p.lastEntryPrice = price
 	return quantity, fee, true
+}
+
+func isPositiveFinite(value float64) bool {
+	return value > 0 && !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
 func (p *portfolio) updateExtremes(high, low float64) {

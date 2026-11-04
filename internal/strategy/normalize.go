@@ -79,6 +79,11 @@ func Normalize(definition Definition) (Definition, error) {
 					{Scope: ValueScopeMarket, Name: "bar", Field: "low"},
 					{Scope: ValueScopeMarket, Name: "bar", Field: "close"},
 				}
+			} else if indicatorType == "extreme" {
+				definition.Indicators[index].Inputs = []ValueRef{
+					{Scope: ValueScopeMarket, Name: "bar", Field: "high"},
+					{Scope: ValueScopeMarket, Name: "bar", Field: "low"},
+				}
 			} else {
 				definition.Indicators[index].Inputs = []ValueRef{
 					{Scope: ValueScopeMarket, Name: "bar", Field: "close"},

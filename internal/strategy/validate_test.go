@@ -156,6 +156,52 @@ func TestValidateRejectsATRExitPolicyWithNonVolatilityIndicator(t *testing.T) {
 	}
 }
 
+func TestValidateAcceptsDirectIndicatorExitAnchor(t *testing.T) {
+	definition := validDefinition()
+	definition.Indicators = append(definition.Indicators, IndicatorSpec{
+		ID:     "extreme_5d",
+		Type:   "extreme",
+		Inputs: []ValueRef{{Scope: ValueScopeMarket, Name: "bar", Field: "high"}, {Scope: ValueScopeMarket, Name: "bar", Field: "low"}},
+		Params: json.RawMessage(`{"period":5}`),
+	})
+	definition.ExitPolicies = []ExitPolicySpec{{
+		ID:           "long_tp_5d_high",
+		Side:         TradeSideLong,
+		Purpose:      ExitPurposeTakeProfit,
+		Anchor:       ExitAnchorSpec{Type: ExitAnchorIndicator, Indicator: "extreme_5d", Field: "highest"},
+		Distance:     ExitDistanceSpec{Type: ExitDistanceDirect},
+		TriggerPrice: ExitTriggerHigh,
+		ClosePct:     1,
+		Execution:    ExitExecutionTriggerPrice,
+	}}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err != nil {
+		t.Fatalf("expected direct indicator exit anchor to pass: %v", err)
+	}
+}
+
+func TestValidateRejectsNonPriceIndicatorExitAnchor(t *testing.T) {
+	definition := validDefinition()
+	definition.Indicators = append(definition.Indicators, IndicatorSpec{
+		ID:     "rsi_filter",
+		Type:   "rsi",
+		Inputs: []ValueRef{{Scope: ValueScopeMarket, Name: "bar", Field: "close"}},
+		Params: json.RawMessage(`{"period":14}`),
+	})
+	definition.ExitPolicies = []ExitPolicySpec{{
+		ID:           "invalid_rsi_anchor",
+		Side:         TradeSideLong,
+		Purpose:      ExitPurposeTakeProfit,
+		Anchor:       ExitAnchorSpec{Type: ExitAnchorIndicator, Indicator: "rsi_filter", Field: "value"},
+		Distance:     ExitDistanceSpec{Type: ExitDistanceDirect},
+		TriggerPrice: ExitTriggerHigh,
+		ClosePct:     1,
+		Execution:    ExitExecutionTriggerPrice,
+	}}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected oscillator indicator anchor to fail")
+	}
+}
+
 func TestValidateRejectsCrossWithNonIndicatorOperand(t *testing.T) {
 	definition := validDefinition()
 	definition.Indicators = append(definition.Indicators, IndicatorSpec{
@@ -619,8 +665,15 @@ func TestValidateStrategyWithEmptyInputsAutoInferred(t *testing.T) {
 		Inputs:    nil,
 		Params:    json.RawMessage(`{"period":10,"multiplier":3}`),
 	})
+	definition.Indicators = append(definition.Indicators, IndicatorSpec{
+		ID:        "extreme_5d",
+		Type:      "extreme",
+		Timeframe: "1d",
+		Inputs:    nil,
+		Params:    json.RawMessage(`{"period":5}`),
+	})
 
-	// 校验应由 Normalize 自动补齐 high/low/close 与 close，校验必须通过
+	// 校验应由 Normalize 自动补齐指标所需行情字段，校验必须通过
 	if err := Validate(definition, indicator.MustBuiltinRegistry()); err != nil {
 		t.Fatalf("expected auto inferred inputs to pass validate, got: %v", err)
 	}

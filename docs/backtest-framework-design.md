@@ -379,6 +379,12 @@ and(position.flat(), ema_fast_15m.gte(ema_slow_1h))
 若开盘已越过目标则按开盘跳空价成交。多策略同根触发时优先级数值大的先执行；
 相同优先级默认止损优先于止盈。
 
+滚动极值使用内置 `extreme` 指标，输入为 `high`、`low`，输出为 `highest`、
+`lowest`。例如 `timeframe: "1d"`、`period: 5` 表示 5 日极值。退出策略可使用
+`{"type":"indicator","indicator":"extreme_5d","field":"highest"}` 作为
+价格锚点，并将距离设为 `{"type":"direct","value":0}`，直接按指标价格触发。
+指标锚点与实时 ATR 一样从下一根 K 线起生效，避免当前 K 线内前视。
+
 当前持仓状态字段：
 
 - `position.quantity`

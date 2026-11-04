@@ -86,6 +86,26 @@ func BuiltinRegistry() (*Registry, error) {
 		},
 		{
 			definition: Definition{
+				Type:     "extreme",
+				Label:    "极值",
+				Category: "trend",
+				Inputs: []InputDefinition{
+					{Name: "high", Type: ValueTypeFloat, Required: true},
+					{Name: "low", Type: ValueTypeFloat, Required: true},
+				},
+				Params: []ParamDefinition{
+					{Name: "period", Type: ValueTypeInt, Required: true, Min: json.Number("1")},
+				},
+				Outputs: []OutputDefinition{
+					{Name: "highest", Type: ValueTypeFloat, Semantic: OutputSemanticPrice},
+					{Name: "lowest", Type: ValueTypeFloat, Semantic: OutputSemanticPrice},
+				},
+			},
+			validator: validatePeriodParams,
+			builder:   buildExtreme,
+		},
+		{
+			definition: Definition{
 				Type:     "boll",
 				Label:    "BOLL",
 				Category: "volatility",

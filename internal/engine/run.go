@@ -69,8 +69,9 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 		if !bar.IsClosed() {
 			return Result{}, fmt.Errorf("bar at open_time_ms=%d is not closed", bar.OpenTimeMS)
 		}
-		riskHalted = riskHalted || drawdownHalted(
-			portfolio.equity(bar.Open),
+		openEquity := portfolio.equity(bar.Open)
+		riskHalted = riskHalted || !isPositiveFinite(openEquity) || drawdownHalted(
+			openEquity,
 			peakEquity,
 			plan.Strategy.Risk.MaxDrawdownHaltPct,
 		)
@@ -185,7 +186,7 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 		if currentEquity > peakEquity {
 			peakEquity = currentEquity
 		}
-		riskHalted = riskHalted || drawdownHalted(
+		riskHalted = riskHalted || !isPositiveFinite(currentEquity) || drawdownHalted(
 			currentEquity,
 			peakEquity,
 			plan.Strategy.Risk.MaxDrawdownHaltPct,
@@ -324,13 +325,13 @@ func eligible(
 	currentSide := portfolio.currentSide()
 	switch action.Type {
 	case strategy.ActionEnter:
-		return !riskHalted && !cooldownActive && currentSide == ""
+		return canFundOpen(portfolio) && !riskHalted && !cooldownActive && currentSide == ""
 	case strategy.ActionAdd:
-		return !riskHalted && !cooldownActive &&
+		return canFundOpen(portfolio) && !riskHalted && !cooldownActive &&
 			additionsAllowed(strategyDef, action.Type) &&
 			currentSide == action.Side && portfolio.entryCount == action.AdditionIndex
 	case strategy.ActionOpen:
-		if riskHalted || cooldownActive {
+		if !canFundOpen(portfolio) || riskHalted || cooldownActive {
 			return false
 		}
 		if currentSide == "" {
@@ -346,6 +347,10 @@ func eligible(
 	default:
 		return false
 	}
+}
+
+func canFundOpen(portfolio portfolio) bool {
+	return isPositiveFinite(portfolio.cash)
 }
 
 func additionsAllowed(def strategy.Definition, actionType strategy.ActionType) bool {

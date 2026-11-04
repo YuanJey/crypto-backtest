@@ -84,18 +84,36 @@ func validateExitPolicies(policies []ExitPolicySpec, outputs indicatorOutputs, m
 		switch policy.Anchor.Type {
 		case ExitAnchorAverageEntry, ExitAnchorFirstEntry, ExitAnchorLastEntry,
 			ExitAnchorHighestSinceEntry, ExitAnchorLowestSinceEntry:
+			if policy.Anchor.Indicator != "" || policy.Anchor.Field != "" {
+				return fmt.Errorf("exit policy %q: position anchor cannot configure an indicator", policy.ID)
+			}
+		case ExitAnchorIndicator:
+			fields, ok := outputs[policy.Anchor.Indicator]
+			if !ok {
+				return fmt.Errorf("exit policy %q: unknown anchor indicator %q", policy.ID, policy.Anchor.Indicator)
+			}
+			output, ok := fields[policy.Anchor.Field]
+			if !ok {
+				return fmt.Errorf("exit policy %q: anchor indicator %q has no field %q", policy.ID, policy.Anchor.Indicator, policy.Anchor.Field)
+			}
+			if output.Semantic != indicator.OutputSemanticPrice && output.Semantic != indicator.OutputSemanticTrendLevel {
+				return fmt.Errorf("exit policy %q: indicator anchor requires a price-level output", policy.ID)
+			}
 		default:
 			return fmt.Errorf("exit policy %q: invalid anchor type %q", policy.ID, policy.Anchor.Type)
 		}
-		if !isFinite(policy.Distance.Value) || policy.Distance.Value <= 0 {
-			return fmt.Errorf("exit policy %q: distance.value must be finite and > 0", policy.ID)
-		}
 		switch policy.Distance.Type {
 		case ExitDistancePercent, ExitDistanceFixedAmount:
+			if !isFinite(policy.Distance.Value) || policy.Distance.Value <= 0 {
+				return fmt.Errorf("exit policy %q: distance.value must be finite and > 0", policy.ID)
+			}
 			if policy.Distance.Indicator != "" || policy.Distance.Field != "" || policy.Distance.Sampling != "" {
 				return fmt.Errorf("exit policy %q: non-ATR distance cannot configure indicator sampling", policy.ID)
 			}
 		case ExitDistanceATRMultiple:
+			if !isFinite(policy.Distance.Value) || policy.Distance.Value <= 0 {
+				return fmt.Errorf("exit policy %q: distance.value must be finite and > 0", policy.ID)
+			}
 			fields, ok := outputs[policy.Distance.Indicator]
 			if !ok {
 				return fmt.Errorf("exit policy %q: unknown ATR indicator %q", policy.ID, policy.Distance.Indicator)
@@ -111,6 +129,13 @@ func validateExitPolicies(policies []ExitPolicySpec, outputs indicatorOutputs, m
 			case ExitSamplingEntry, ExitSamplingEachEntry, ExitSamplingLive:
 			default:
 				return fmt.Errorf("exit policy %q: invalid ATR sampling %q", policy.ID, policy.Distance.Sampling)
+			}
+		case ExitDistanceDirect:
+			if !isFinite(policy.Distance.Value) || policy.Distance.Value != 0 {
+				return fmt.Errorf("exit policy %q: direct distance.value must be 0", policy.ID)
+			}
+			if policy.Distance.Indicator != "" || policy.Distance.Field != "" || policy.Distance.Sampling != "" {
+				return fmt.Errorf("exit policy %q: direct distance cannot configure indicator sampling", policy.ID)
 			}
 		default:
 			return fmt.Errorf("exit policy %q: invalid distance type %q", policy.ID, policy.Distance.Type)

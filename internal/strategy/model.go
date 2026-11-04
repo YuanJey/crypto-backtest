@@ -94,7 +94,9 @@ type ExitPolicySpec struct {
 }
 
 type ExitAnchorSpec struct {
-	Type ExitAnchorType `json:"type"`
+	Type      ExitAnchorType `json:"type"`
+	Indicator string         `json:"indicator,omitempty"`
+	Field     string         `json:"field,omitempty"`
 }
 
 type ExitAnchorType string
@@ -105,6 +107,7 @@ const (
 	ExitAnchorLastEntry         ExitAnchorType = "last_entry_price"
 	ExitAnchorHighestSinceEntry ExitAnchorType = "highest_since_entry"
 	ExitAnchorLowestSinceEntry  ExitAnchorType = "lowest_since_entry"
+	ExitAnchorIndicator         ExitAnchorType = "indicator"
 )
 
 type ExitDistanceSpec struct {
@@ -121,6 +124,7 @@ const (
 	ExitDistancePercent     ExitDistanceType = "percent"
 	ExitDistanceATRMultiple ExitDistanceType = "atr_multiple"
 	ExitDistanceFixedAmount ExitDistanceType = "fixed_amount"
+	ExitDistanceDirect      ExitDistanceType = "direct"
 )
 
 type ExitSampling string

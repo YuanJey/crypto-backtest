@@ -636,6 +636,63 @@ func TestRunSpotOpenKeepsCashNonNegative(t *testing.T) {
 	}
 }
 
+func TestRunDoesNotCreateNewEntryOrdersAfterAccountReachesZero(t *testing.T) {
+	definition := baseDefinition()
+	definition.Account.InitialCash = 100
+	definition.Account.ExchangeLeverage = 1
+	definition.Execution.Fee.TakerRate = 0.5
+	definition.Risk.MaxDrawdownHaltPct = 0
+	definition.Rules = []strategy.RuleSpec{
+		{
+			ID:       "close_long",
+			Priority: 100,
+			When:     strategy.Market("close").EQ(90),
+			Action:   strategy.ActionSpec{Type: strategy.ActionClose, Side: strategy.TradeSideLong, SizePct: 1},
+		},
+		{
+			ID:     "open_long",
+			When:   strategy.Bool(true),
+			Action: strategy.ActionSpec{Type: strategy.ActionOpen, Side: strategy.TradeSideLong, SizePct: 1},
+		},
+	}
+	plan, err := compiler.Compile(definition, indicator.MustBuiltinRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
+	bars := constantPriceBars(4, 100)
+	bars[1].Close = 90
+	result, err := Run(context.Background(), plan, RunRequest{Bars: bars})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Fills) != 2 {
+		t.Fatalf("fills=%d, want one entry and one closing fill", len(result.Fills))
+	}
+	if len(result.Orders) != 2 {
+		t.Fatalf("orders=%d, want no new entry order after capital reaches zero: %+v", len(result.Orders), result.Orders)
+	}
+	if result.FinalEquity != 0 {
+		t.Fatalf("final equity=%f, want 0", result.FinalEquity)
+	}
+}
+
+func TestOpenEligibilityRequiresPositiveCashButStillAllowsClose(t *testing.T) {
+	portfolio := newPortfolio(strategy.MarketTypePerpetual, 0)
+	portfolio.quantity = 1
+	portfolio.avgPrice = 100
+	portfolio.cash = 0
+	definition := baseDefinition()
+
+	open := strategy.ActionSpec{Type: strategy.ActionOpen, Side: strategy.TradeSideLong}
+	if eligible(portfolio, open, definition, false, false) {
+		t.Fatal("open must be ineligible without positive cash")
+	}
+	closeAction := strategy.ActionSpec{Type: strategy.ActionClose, Side: strategy.TradeSideLong}
+	if !eligible(portfolio, closeAction, definition, false, false) {
+		t.Fatal("close must remain eligible without positive cash")
+	}
+}
+
 func TestRunUsesCompletedHigherTimeframeIndicator(t *testing.T) {
 	definition := baseDefinition()
 	definition.Indicators[0].ID = "ema_1h"
