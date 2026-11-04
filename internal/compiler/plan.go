@@ -23,9 +23,10 @@ type IndicatorPlan struct {
 }
 
 type RulePlan struct {
-	ID       string
-	Name     string
-	Priority int
-	When     strategy.Expression
-	Action   strategy.ActionSpec
+	ID           string
+	SourceRuleID string
+	Name         string
+	Priority     int
+	When         strategy.Expression
+	Action       strategy.ActionSpec
 }

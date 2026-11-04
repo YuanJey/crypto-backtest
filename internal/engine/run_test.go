@@ -313,6 +313,137 @@ func TestRunDoesNotApplyPositionLeverageToFixedAddition(t *testing.T) {
 	}
 }
 
+func TestRunDecodesRuleSizeInheritanceAndOverrides(t *testing.T) {
+	cases := []struct {
+		name       string
+		actionJSON string
+		fixedPct   float64
+		want       []float64
+	}{
+		{
+			name:       "omitted size inherits multiplier",
+			actionJSON: `{"type":"open","side":"long"}`,
+			want:       []float64{500, 1_000, 2_000},
+		},
+		{
+			name:       "legacy zero inherits multiplier",
+			actionJSON: `{"type":"open","side":"long","size_pct":0}`,
+			want:       []float64{500, 1_000, 2_000},
+		},
+		{
+			name:       "explicit size overrides initial and addition sizing",
+			actionJSON: `{"type":"open","side":"long","size_pct":0.2}`,
+			want:       []float64{10_000, 2_000, 2_000},
+		},
+		{
+			name:       "omitted size inherits fixed addition without leverage",
+			actionJSON: `{"type":"open","side":"long"}`,
+			fixedPct:   0.03,
+			want:       []float64{500, 300, 300},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			definition := baseDefinition()
+			definition.Account.ExchangeLeverage = 10
+			definition.Behavior.AllowPyramiding = true
+			definition.Execution.Fee.TakerRate = 0
+			definition.Position = strategy.PositionSpec{
+				InitialSizePct:    0.01,
+				PositionLeverage:  5,
+				MaxAdditions:      2,
+				AddSizeMultiplier: 2,
+			}
+			if tc.fixedPct > 0 {
+				definition.Position.AddSizePct = tc.fixedPct
+				definition.Position.AddSizeMultiplier = 0
+			}
+			// Decode the same action JSON the visual editor sends. Inheritance
+			// must work without introducing a new sizing field in the contract.
+			raw, err := json.Marshal(definition)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var payload map[string]json.RawMessage
+			if err := json.Unmarshal(raw, &payload); err != nil {
+				t.Fatal(err)
+			}
+			payload["rules"] = json.RawMessage(
+				`[{"id":"open","when":{"kind":"boolean","bool":true},"action":` + tc.actionJSON + `}]`,
+			)
+			raw, err = json.Marshal(payload)
+			if err != nil {
+				t.Fatal(err)
+			}
+			definition, err = strategy.Decode(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			plan, err := compiler.Compile(definition, indicator.MustBuiltinRegistry())
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := Run(context.Background(), plan, RunRequest{Bars: constantPriceBars(4, 100)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Fills) != len(tc.want) {
+				t.Fatalf("fills=%d, want %d", len(result.Fills), len(tc.want))
+			}
+			for index, fill := range result.Fills {
+				notional := math.Abs(fill.Quantity) * fill.Price
+				if math.Abs(notional-tc.want[index]) > 1e-9 {
+					t.Fatalf("fill %d notional=%f, want %f", index, notional, tc.want[index])
+				}
+			}
+		})
+	}
+}
+
+func TestRunPreservesFullAndPartialCloseSizing(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		size float64
+		want float64
+	}{
+		{name: "legacy default full close", size: 0, want: 20},
+		{name: "explicit full close", size: 1, want: 20},
+		{name: "partial close uses position quantity", size: 0.25, want: 5},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			definition := baseDefinition()
+			definition.Execution.Fee.TakerRate = 0
+			definition.Rules = []strategy.RuleSpec{
+				{
+					ID:       "open",
+					Priority: 100,
+					When:     strategy.PositionFlat(),
+					Action:   strategy.ActionSpec{Type: strategy.ActionOpen, Side: strategy.TradeSideLong, SizePct: 0.2},
+				},
+				{
+					ID:     "close",
+					When:   strategy.Bool(true),
+					Action: strategy.ActionSpec{Type: strategy.ActionClose, Side: strategy.TradeSideLong, SizePct: tc.size},
+				},
+			}
+			plan, err := compiler.Compile(definition, indicator.MustBuiltinRegistry())
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := Run(context.Background(), plan, RunRequest{Bars: constantPriceBars(3, 100)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Fills) != 2 || result.Fills[1].RuleID != "close" {
+				t.Fatalf("expected one entry and one close: %+v", result.Fills)
+			}
+			if math.Abs(result.Fills[1].Quantity-tc.want) > 1e-9 {
+				t.Fatalf("closed quantity=%f, want %f", result.Fills[1].Quantity, tc.want)
+			}
+		})
+	}
+}
+
 func TestRunMultiplierAdditionUsesFirstEntryNotionalWithoutPositionLeverageCap(t *testing.T) {
 	definition := baseDefinition()
 	definition.Account.ExchangeLeverage = 10

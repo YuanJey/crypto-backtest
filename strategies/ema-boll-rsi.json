@@ -17,13 +17,12 @@
     "exchange_leverage": 1
   },
   "behavior": {
+    "allow_additions": false,
     "allow_pyramiding": false,
     "allow_same_bar_reversal": false,
     "cooldown_bars": 0
   },
   "position": {
-    "initial_size_pct": 0.2,
-    "max_additions": 0,
     "position_leverage": 1
   },
   "execution": {
@@ -158,7 +157,7 @@
         ]
       },
       "action": {
-        "type": "open",
+        "type": "enter",
         "side": "long",
         "size_pct": 0.2
       }
@@ -214,7 +213,7 @@
         ]
       },
       "action": {
-        "type": "open",
+        "type": "enter",
         "side": "short",
         "size_pct": 0.2
       }

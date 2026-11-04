@@ -181,8 +181,8 @@ func fillOrder(portfolio *portfolio, result *Result, orderIndex int, bar market.
 	var quantity, fee, realized float64
 	var ok bool
 	switch order.Action.Type {
-	case strategy.ActionOpen:
-		if riskHalted {
+	case strategy.ActionEnter, strategy.ActionAdd, strategy.ActionOpen:
+		if !eligible(*portfolio, order.Action, plan.Strategy, riskHalted, false) {
 			break
 		}
 		notionalPct, sizeOK := resolveOpenNotionalPct(
@@ -201,7 +201,7 @@ func fillOrder(portfolio *portfolio, result *Result, orderIndex int, bar market.
 			price,
 			notionalPct,
 			feeRate,
-			plan.Strategy.Behavior.AllowPyramiding,
+			additionsAllowed(plan.Strategy, order.Action.Type),
 		)
 	case strategy.ActionClose:
 		sizePct := order.Action.SizePct
@@ -234,7 +234,7 @@ func fillPrice(open float64, action strategy.ActionSpec, slippage strategy.Slipp
 	}
 	rate := slippage.Value / 10_000
 	switch action.Type {
-	case strategy.ActionOpen:
+	case strategy.ActionEnter, strategy.ActionAdd, strategy.ActionOpen:
 		if action.Side == strategy.TradeSideLong {
 			return open * (1 + rate)
 		}
@@ -258,6 +258,12 @@ func eligible(
 ) bool {
 	currentSide := portfolio.currentSide()
 	switch action.Type {
+	case strategy.ActionEnter:
+		return !riskHalted && !cooldownActive && currentSide == ""
+	case strategy.ActionAdd:
+		return !riskHalted && !cooldownActive &&
+			additionsAllowed(strategyDef, action.Type) &&
+			currentSide == action.Side && portfolio.entryCount == action.AdditionIndex
 	case strategy.ActionOpen:
 		if riskHalted || cooldownActive {
 			return false
@@ -265,7 +271,7 @@ func eligible(
 		if currentSide == "" {
 			return true
 		}
-		if currentSide != action.Side || !strategyDef.Behavior.AllowPyramiding {
+		if currentSide != action.Side || !additionsAllowed(strategyDef, action.Type) {
 			return false
 		}
 		maxEntries := 1 + strategyDef.Position.MaxAdditions
@@ -275,6 +281,13 @@ func eligible(
 	default:
 		return false
 	}
+}
+
+func additionsAllowed(def strategy.Definition, actionType strategy.ActionType) bool {
+	if def.Behavior.AllowAdditions != nil {
+		return *def.Behavior.AllowAdditions
+	}
+	return actionType == strategy.ActionAdd || def.Behavior.AllowPyramiding
 }
 
 func resolveOpenNotionalPct(
@@ -290,7 +303,23 @@ func resolveOpenNotionalPct(
 	}
 
 	var notionalPct float64
-	if portfolio.entryCount == 0 {
+	if action.Type == strategy.ActionEnter {
+		notionalPct = action.SizePct * position.PositionLeverage
+	} else if action.Type == strategy.ActionAdd {
+		switch action.EffectiveSizingMode() {
+		case strategy.AdditionSizeFirstMultiple:
+			notionalPct = portfolio.firstNotional * action.SizeMultiplier / equity
+		case strategy.AdditionSizeCurrentMultiple:
+			notionalPct = portfolio.positionNotional(price) * action.SizeMultiplier / equity
+		case strategy.AdditionSizeFirstGeometric:
+			notionalPct = portfolio.firstNotional *
+				math.Pow(action.SizeMultiplier, float64(action.AdditionIndex)) / equity
+		case strategy.AdditionSizeEquityPct:
+			notionalPct = action.SizePct
+		default:
+			return 0, false
+		}
+	} else if portfolio.entryCount == 0 {
 		allocationPct := action.SizePct
 		if allocationPct == 0 {
 			allocationPct = position.InitialSizePct
@@ -310,7 +339,7 @@ func resolveOpenNotionalPct(
 			notionalPct = portfolio.firstNotional / equity
 		}
 	}
-	if notionalPct <= 0 {
+	if notionalPct <= 0 || math.IsNaN(notionalPct) || math.IsInf(notionalPct, 0) {
 		return 0, false
 	}
 

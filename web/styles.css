@@ -1273,6 +1273,7 @@ kbd {
 .section-heading-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -1800,16 +1801,107 @@ kbd {
 
 .rule-size-number-wrap {
   display: grid;
-  grid-template-columns: 64px 18px;
+  grid-template-columns: 100px 18px;
   align-items: center;
   color: var(--color-text-dim);
   font-family: var(--font-mono);
   font-size: 10px;
 }
 
-.rule-size-input {
-  width: 64px;
+.rule-size-input,
+.rule-multiplier-input {
+  width: 100px;
   padding-inline: 6px;
+}
+
+.rule-addition-index-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.rule-addition-index {
+  width: 70px;
+}
+
+.additions-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.additions-switch input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent-cyan);
+}
+
+.additions-paused-hint {
+  color: var(--color-text-dim);
+}
+
+.rule-actions-panel .slider-wrapper {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.rule-size-mode {
+  max-width: 180px;
+}
+
+.rule-sizing-hint,
+.condition-history-hint {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.rule-sizing-hint {
+  flex-basis: 100%;
+}
+
+.condition-history-hint {
+  grid-column: 1 / -1;
+}
+
+.preserved-condition {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #28344d;
+  border-radius: 4px;
+  background: #11151f;
+}
+
+.preserved-condition p {
+  margin: 0 0 8px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.preserved-condition pre {
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 8px 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-main);
+}
+
+.condition-readonly-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  align-items: start;
+  gap: 8px;
 }
 
 /* 条件树构建面板 */

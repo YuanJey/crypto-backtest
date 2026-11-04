@@ -81,7 +81,7 @@ class StrategyWorkbench {
               </div>
 
               <div class="visual-section">
-                <h3 class="section-heading">杠杆与仓位 (LEVERAGE & POSITION)</h3>
+                <h3 class="section-heading">杠杆设置 (LEVERAGE)</h3>
                 <div class="visual-grid-cards" id="positionCards">
                   <!-- 动态插入 -->
                 </div>
@@ -104,6 +104,11 @@ class StrategyWorkbench {
                 <div class="section-heading-row">
                   <h3 class="section-heading">交易规则树 (RULES & ACTIONS)</h3>
                   <span class="section-badge" id="ruleCountBadge">0 组</span>
+                  <label class="additions-switch" title="关闭后保留加仓规则配置，仅停止加仓。">
+                    <input type="checkbox" id="formAllowAdditions">
+                    <span>允许加仓</span>
+                    <span class="section-badge" id="additionsSwitchStatus">已关闭</span>
+                  </label>
                   <button class="btn btn-primary-sm" id="btnAddRule" style="margin-left: auto;">+ 添加规则</button>
                 </div>
                 <div class="rules-tree-container" id="rulesTreeContainer">
@@ -142,6 +147,13 @@ class StrategyWorkbench {
     btnNew.addEventListener('click', () => this.createNewStrategy());
     if (btnAddIndicator) btnAddIndicator.addEventListener('click', () => this.showIndicatorModal());
     if (btnAddRule) btnAddRule.addEventListener('click', () => this.addNewRule());
+    document.getElementById('formAllowAdditions').addEventListener('change', (e) => {
+      if (!this.currentStrategy) return;
+      const behavior = this.currentStrategy.behavior || (this.currentStrategy.behavior = {});
+      behavior.allow_additions = e.target.checked;
+      this.renderRulesEditor(this.currentStrategy);
+      this.syncToJson();
+    });
 
     btnModeVisual.addEventListener('click', () => this.switchMode('visual'));
     btnModeJson.addEventListener('click', () => this.switchMode('json'));
@@ -160,6 +172,19 @@ class StrategyWorkbench {
   }
 
   switchMode(mode) {
+    if (mode === 'visual' && this.activeMode === 'json') {
+      const area = document.getElementById('jsonEditorArea');
+      try {
+        const parsed = JSON.parse(area.value);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          throw new Error('策略必须是 JSON 对象');
+        }
+        this.currentStrategy = parsed;
+      } catch (err) {
+        this.showAlert(`JSON 格式无效: ${err.message}`, 'error');
+        return;
+      }
+    }
     this.activeMode = mode;
     const btnVisual = document.getElementById('btnModeVisual');
     const btnJson = document.getElementById('btnModeJson');
@@ -172,12 +197,7 @@ class StrategyWorkbench {
       paneVisual.classList.add('active');
       paneJson.classList.remove('active');
 
-      // 从编辑器文本同步回对象
-      const area = document.getElementById('jsonEditorArea');
-      try {
-        this.currentStrategy = JSON.parse(area.value);
-        this.renderVisualDetail(this.currentStrategy);
-      } catch {}
+      this.renderVisualDetail(this.currentStrategy);
     } else {
       btnJson.classList.add('active');
       btnVisual.classList.remove('active');
@@ -251,7 +271,7 @@ class StrategyWorkbench {
 
     // 默认选中第一个
     if (this.strategies.length > 0) {
-      this.selectStrategy(this.strategies[0].id);
+      await this.selectStrategy(this.strategies[0].id);
     }
   }
 
@@ -305,6 +325,12 @@ class StrategyWorkbench {
 
   renderVisualDetail(def) {
     if (!def) return;
+    try {
+      this.migrateRuleSizing(def);
+    } catch (err) {
+      this.showAlert(`旧仓位配置无法转换：${err.message}，请在 JSON 源码中修正。`, 'error');
+      return;
+    }
     this.renderOverviewForm(def);
     this.renderIndicatorsSection(def);
     this.renderRulesEditor(def);
@@ -340,6 +366,87 @@ class StrategyWorkbench {
     return def;
   }
 
+  migrateRuleSizing(def) {
+    const position = def.position || {};
+    const behavior = def.behavior || {};
+    const rules = def.rules || [];
+    const hasLegacyOpen = rules.some(rule => rule.action?.type === 'open');
+    const allowAdditions = behavior.allow_pyramiding || position.allow_pyramiding;
+    const maxAdditions = position.max_additions ?? 0;
+    if (hasLegacyOpen) {
+      if (!Number.isSafeInteger(maxAdditions) || maxAdditions < 0) {
+        throw new Error('最大加仓次数必须是非负整数');
+      }
+      for (const field of ['initial_size_pct', 'add_size_pct', 'add_size_multiplier']) {
+        const value = position[field] ?? 0;
+        if (!Number.isFinite(value) || value < 0 ||
+            (field !== 'add_size_multiplier' && value > 1)) {
+          throw new Error(`${field} 无效`);
+        }
+      }
+      if (position.add_size_pct > 0 && position.add_size_multiplier > 0) {
+        throw new Error('固定比例与倍增配置不能同时启用');
+      }
+      if (maxAdditions > 0 && !allowAdditions) {
+        throw new Error('加仓次数与加仓开关不一致');
+      }
+      if (maxAdditions === 0 && (position.add_size_pct > 0 || position.add_size_multiplier > 0)) {
+        throw new Error('加仓配置缺少适用次数');
+      }
+      const ids = new Set(rules.map(rule => rule.id));
+      const converted = [];
+      for (const rule of rules) {
+        if (rule.action?.type !== 'open') {
+          converted.push(rule);
+          continue;
+        }
+        const sizePct = rule.action.size_pct || position.initial_size_pct || 0;
+        if (!rule.disabled && (!Number.isFinite(sizePct) || sizePct <= 0 || sizePct > 1)) {
+          throw new Error(`规则 ${rule.id} 缺少有效的开仓比例`);
+        }
+        const sourceID = rule.source_rule_id || rule.id;
+        converted.push({
+          ...this.cloneCondition(rule),
+          source_rule_id: sourceID,
+          action: { ...rule.action, type: 'enter', size_pct: sizePct },
+        });
+        for (let index = 1; allowAdditions && index <= maxAdditions; index++) {
+          const baseID = `${rule.id}__add_${index}`;
+          let id = baseID;
+          for (let suffix = 2; ids.has(id); suffix++) id = `${baseID}_${suffix}`;
+          ids.add(id);
+          const action = { type: 'add', side: rule.action.side, addition_index: index };
+          if (rule.action.size_pct > 0 || position.add_size_pct > 0) {
+            action.size_pct = rule.action.size_pct || position.add_size_pct;
+          } else {
+            action.size_multiplier = position.add_size_multiplier > 0
+              ? Math.pow(position.add_size_multiplier, index) : 1;
+            if (!Number.isFinite(action.size_multiplier) || action.size_multiplier <= 0) {
+              throw new Error(`规则 ${rule.id} 第 ${index} 次加仓倍数超出范围`);
+            }
+          }
+          converted.push({
+            ...this.cloneCondition(rule), id, source_rule_id: sourceID,
+            name: `${rule.name || rule.id} · 第 ${index} 次加仓`, action,
+          });
+        }
+      }
+      // Commit only after every legacy rule has converted successfully.
+      def.rules = converted;
+    }
+    for (const field of [
+      'initial_size_pct', 'allow_pyramiding', 'max_additions',
+      'add_size_pct', 'add_size_multiplier',
+    ]) delete position[field];
+    const migratedBehavior = def.behavior || (def.behavior = {});
+    if (migratedBehavior.allow_additions === undefined || migratedBehavior.allow_additions === null) {
+      migratedBehavior.allow_additions = (def.rules || [])
+        .some(rule => rule.action?.type === 'add' && !rule.disabled);
+    }
+    migratedBehavior.allow_pyramiding = false;
+    return def;
+  }
+
   renderOverviewForm(def) {
     this.migrateLeverageConfig(def);
     document.getElementById('viewStrategyName').textContent = def.name || def.id;
@@ -352,16 +459,9 @@ class StrategyWorkbench {
     const acc = def.account || (def.account = {});
     const data = def.data || {};
     const position = def.position || (def.position = {});
-    const behavior = def.behavior || (def.behavior = {});
     const exchangeLeverage = acc.exchange_leverage || 1;
     const positionLeverage = position.position_leverage || 1;
     const isSpot = acc.market_type === 'spot';
-    const addMode = position.add_size_multiplier > 0
-      ? 'multiplier'
-      : (position.add_size_pct > 0 ? 'fixed' : 'initial');
-    const addValue = addMode === 'multiplier'
-      ? position.add_size_multiplier
-      : ((position.add_size_pct || position.initial_size_pct || 0) * 100);
     overview.innerHTML = `
       <div class="visual-card">
         <label class="vcard-label">策略显示名称</label>
@@ -398,44 +498,6 @@ class StrategyWorkbench {
           <input type="number" class="form-control" id="formPositionLeverage"
             value="${positionLeverage}" min="1" max="${exchangeLeverage}" step="0.1" ${isSpot ? 'disabled' : ''}>
           <span class="input-unit">x</span>
-        </div>
-      </div>
-      <div class="visual-card">
-        <label class="vcard-label">初始仓位分配</label>
-        <div class="input-with-unit">
-          <input type="number" class="form-control" id="formInitialSizePct"
-            value="${((position.initial_size_pct || 0) * 100).toFixed(6)}" min="0" max="100" step="any">
-          <span class="input-unit">%</span>
-        </div>
-      </div>
-      <div class="visual-card">
-        <label class="vcard-label">允许同向加仓</label>
-        <label class="binary-control">
-          <input type="checkbox" id="formAllowPyramiding" ${behavior.allow_pyramiding ? 'checked' : ''}>
-          <span>${behavior.allow_pyramiding ? '已启用' : '已关闭'}</span>
-        </label>
-      </div>
-      <div class="visual-card">
-        <label class="vcard-label">最大加仓次数</label>
-        <input type="number" class="form-control" id="formMaxAdditions"
-          value="${position.max_additions || 0}" min="0" step="1" ${behavior.allow_pyramiding ? '' : 'disabled'}>
-      </div>
-      <div class="visual-card">
-        <label class="vcard-label">加仓计算模式</label>
-        <select class="form-select" id="formAddMode" ${behavior.allow_pyramiding && position.max_additions > 0 ? '' : 'disabled'}>
-          <option value="initial" ${addMode === 'initial' ? 'selected' : ''}>沿用首次名义仓位</option>
-          <option value="fixed" ${addMode === 'fixed' ? 'selected' : ''}>固定比例</option>
-          <option value="multiplier" ${addMode === 'multiplier' ? 'selected' : ''}>倍增模式</option>
-        </select>
-      </div>
-      <div class="visual-card">
-        <label class="vcard-label">${addMode === 'multiplier' ? '加仓倍数' : '固定加仓比例'}</label>
-        <div class="input-with-unit">
-          <input type="number" class="form-control" id="formAddValue"
-            value="${Number(addValue).toFixed(addMode === 'multiplier' ? 2 : 4)}"
-            min="0" step="${addMode === 'multiplier' ? '0.1' : 'any'}"
-            ${behavior.allow_pyramiding && position.max_additions > 0 && addMode !== 'initial' ? '' : 'disabled'}>
-          <span class="input-unit">${addMode === 'multiplier' ? 'x' : '%'}</span>
         </div>
       </div>
     `;
@@ -483,61 +545,6 @@ class StrategyWorkbench {
         exchangeLeverage,
         Math.max(1, parseNumber('formPositionLeverage', 1)),
       );
-      this.syncToJson();
-    });
-    document.getElementById('formInitialSizePct').addEventListener('change', () => {
-      def.position.initial_size_pct = Math.min(
-        100,
-        Math.max(0, parseNumber('formInitialSizePct', 0)),
-      ) / 100;
-      this.syncToJson();
-    });
-    document.getElementById('formAllowPyramiding').addEventListener('change', (e) => {
-      def.behavior.allow_pyramiding = e.target.checked;
-      if (!e.target.checked) {
-        def.position.max_additions = 0;
-        def.position.add_size_pct = 0;
-        def.position.add_size_multiplier = 0;
-      }
-      this.renderOverviewForm(def);
-      this.syncToJson();
-    });
-    document.getElementById('formMaxAdditions').addEventListener('change', () => {
-      def.position.max_additions = Math.max(
-        0,
-        Math.trunc(parseNumber('formMaxAdditions', 0)),
-      );
-      if (def.position.max_additions === 0) {
-        def.position.add_size_pct = 0;
-        def.position.add_size_multiplier = 0;
-      }
-      this.renderOverviewForm(def);
-      this.syncToJson();
-    });
-    document.getElementById('formAddMode').addEventListener('change', (e) => {
-      if (e.target.value === 'fixed') {
-        def.position.add_size_pct = def.position.initial_size_pct || 0;
-        def.position.add_size_multiplier = 0;
-      } else if (e.target.value === 'multiplier') {
-        def.position.add_size_pct = 0;
-        def.position.add_size_multiplier = 2;
-      } else {
-        def.position.add_size_pct = 0;
-        def.position.add_size_multiplier = 0;
-      }
-      this.renderOverviewForm(def);
-      this.syncToJson();
-    });
-    document.getElementById('formAddValue').addEventListener('change', () => {
-      const mode = document.getElementById('formAddMode').value;
-      const value = Math.max(0, parseNumber('formAddValue', 0));
-      if (mode === 'multiplier') {
-        def.position.add_size_multiplier = value;
-        def.position.add_size_pct = 0;
-      } else if (mode === 'fixed') {
-        def.position.add_size_pct = Math.min(100, value) / 100;
-        def.position.add_size_multiplier = 0;
-      }
       this.syncToJson();
     });
   }
@@ -858,6 +865,7 @@ class StrategyWorkbench {
   }
 
   normalizeConditionItem(item, operands) {
+    if (item.readOnly) return item;
     const left = operands.find(option => option.value === item.left) || operands[0];
     item.left = left.value;
     const operatorOptions = this.operatorOptionsFor(item, operands);
@@ -891,18 +899,146 @@ class StrategyWorkbench {
     return item;
   }
 
+  cloneCondition(node) {
+    return node === undefined ? undefined : JSON.parse(JSON.stringify(node));
+  }
+
+  escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[char]));
+  }
+
+  ruleSizeMode(action) {
+    const size = action?.size_pct;
+    if (action?.type === 'close') {
+      return size === undefined || size === null || size === 0 || size === 1 ? 'all' : 'custom';
+    }
+    if (action?.type === 'add') {
+      const modes = {
+        equity_pct: 'custom',
+        first_entry_multiple: 'multiplier',
+        current_position_multiple: 'current_position_multiple',
+        first_entry_geometric: 'first_entry_geometric',
+      };
+      if (action.sizing_mode) return modes[action.sizing_mode] || 'unsupported';
+      if (action.size_multiplier > 0) return 'multiplier';
+    }
+    if (action?.type === 'open' && !size) return 'inherit';
+    return 'custom';
+  }
+
+  setRuleSizeMode(rule, mode) {
+    const action = rule.action;
+    this.ruleSizeOverrides ||= new WeakMap();
+    this.ruleMultiplierOverrides ||= new WeakMap();
+    if (this.ruleSizeMode(action) === 'custom' && action.size_pct > 0) {
+      this.ruleSizeOverrides.set(rule, action.size_pct);
+    }
+    if (action.size_multiplier > 0 && this.isMultiplierMode(this.ruleSizeMode(action))) {
+      const values = this.ruleMultiplierOverrides.get(rule) || {};
+      values[this.ruleSizeMode(action)] = action.size_multiplier;
+      this.ruleMultiplierOverrides.set(rule, values);
+    }
+    if (mode === 'inherit' && action.type === 'open') {
+      delete action.size_pct;
+    } else if (mode === 'all' && action.type === 'close') {
+      action.size_pct = 1;
+    } else if (mode === 'custom') {
+      delete action.size_multiplier;
+      if (action.type === 'add') action.sizing_mode = 'equity_pct';
+      else delete action.sizing_mode;
+      action.size_pct = this.ruleSizeOverrides.get(rule) || 0.25;
+    } else if (this.isMultiplierMode(mode) && action.type === 'add') {
+      delete action.size_pct;
+      action.sizing_mode = mode === 'multiplier' ? 'first_entry_multiple' : mode;
+      action.size_multiplier = this.ruleMultiplierOverrides.get(rule)?.[mode] ??
+        (mode === 'multiplier' ? 1 : 2);
+    }
+  }
+
+  isMultiplierMode(mode) {
+    return ['multiplier', 'current_position_multiple', 'first_entry_geometric'].includes(mode);
+  }
+
+  validGeometricSize(action) {
+    if (this.ruleSizeMode(action) !== 'first_entry_geometric') return true;
+    const multiplier = Math.pow(action.size_multiplier, action.addition_index);
+    return Number.isFinite(multiplier) && multiplier > 0;
+  }
+
+  additionsEnabled(def = this.currentStrategy) {
+    if (typeof def?.behavior?.allow_additions === 'boolean') return def.behavior.allow_additions;
+    return (def?.rules || []).some(rule => rule.action?.type === 'add' && !rule.disabled) ||
+      !!(def?.behavior?.allow_pyramiding || def?.position?.allow_pyramiding);
+  }
+
+  setRuleActionType(rule, type) {
+    const previousMode = this.ruleSizeMode(rule.action);
+    const previousType = rule.action.type;
+    // Remember a custom amount before changing to an incompatible action.
+    if (previousMode === 'custom') this.setRuleSizeMode(rule, 'custom');
+    if (this.isMultiplierMode(previousMode)) this.setRuleSizeMode(rule, previousMode);
+    if (previousMode === 'all' && type !== 'close') delete rule.action.size_pct;
+    rule.action.type = type;
+    if (type !== 'add') {
+      delete rule.action.addition_index;
+      delete rule.action.size_multiplier;
+      delete rule.action.sizing_mode;
+    } else if (!rule.action.addition_index) {
+      const indexes = (this.currentStrategy.rules || [])
+        .filter(other => other !== rule && other.action?.type === 'add' && other.action.side === rule.action.side)
+        .map(other => other.action.addition_index || 0);
+      rule.action.addition_index = Math.max(0, ...indexes) + 1;
+    }
+    this.setRuleSizeMode(rule, type === 'close' && previousType !== 'close'
+      ? 'all' : (type === 'add'
+        ? (previousType === 'add' ? previousMode : 'current_position_multiple') : 'custom'));
+  }
+
+  ruleSizeHint(action) {
+    const mode = this.ruleSizeMode(action);
+    if (mode === 'inherit') {
+      return '旧版兼容开仓配置。进入可视化构建器时转换为首单与逐次加仓规则。';
+    }
+    if (mode === 'all') return '平掉该方向的全部持仓。';
+    if (action.type === 'add') {
+      if (mode === 'current_position_multiple') {
+        return '名义金额 = 加仓前同向总持仓名义金额 × 本规则倍数；按成交时的持仓和价格计算，不重复乘首次开仓杠杆。';
+      }
+      if (mode === 'first_entry_geometric') {
+        return `名义金额 = 本轮首单实际成交名义金额 × 本规则倍数的 n 次方；n = 本次加仓次数（${action.addition_index || '待配置'}），第一次从 1 开始。`;
+      }
+      if (mode === 'unsupported') return '该仓位计算模式暂不支持，请选择已支持的模式或在 JSON 中修正。';
+      return mode === 'multiplier'
+        ? '仅已有同向持仓时触发；名义金额 = 本轮首单实际成交名义金额 × 本规则倍数，不重复乘首次开仓杠杆。'
+        : '仅已有同向持仓时触发；名义金额 = 当前权益 × 本规则比例，不重复乘首次开仓杠杆。';
+    }
+    return action.type === 'close'
+      ? '比例以该方向当前持仓数量为基准。'
+      : '仅空仓时触发；首单名义金额 = 当前权益 × 本规则比例 × 首次开仓杠杆。';
+  }
+
   renderRulesEditor(def) {
     const rulesContainer = document.getElementById('rulesTreeContainer');
     const rules = def.rules || [];
+    const allowAdditions = this.additionsEnabled(def);
+    const allowSwitch = document.getElementById('formAllowAdditions');
+    if (allowSwitch) allowSwitch.checked = allowAdditions;
+    const switchStatus = document.getElementById('additionsSwitchStatus');
+    if (switchStatus) switchStatus.textContent = allowAdditions ? '已开启' : '已关闭';
     document.getElementById('ruleCountBadge').textContent = `${rules.length} 组`;
     const operands = this.getAvailableOperands();
 
     rulesContainer.innerHTML = rules.map((rule, rIdx) => {
       const parsedWhen = this.parseAstWhen(rule.when);
-      parsedWhen.items.forEach(item => this.normalizeConditionItem(item, operands));
-      rule.when = this.compileAstWhen(parsedWhen.gate, parsedWhen.items);
-      const action = rule.action || { type: 'open', side: 'long', size_pct: 0.25 };
-      const sizePct = Number((((action.size_pct ?? 0.25) * 100).toFixed(4)));
+      const action = rule.action || { type: 'enter', side: 'long' };
+      const sizeMode = this.ruleSizeMode(action);
+      const isCustomSize = sizeMode === 'custom';
+      const additionDisabled = action.type === 'add' && !allowAdditions;
+      const sizePct = isCustomSize && action.size_pct > 0
+        ? Number((action.size_pct * 100).toPrecision(15)) : '';
+      const usesConditionString = typeof rule.condition === 'string' && rule.condition.trim() !== '';
 
       return `
         <div class="rule-card-editor" data-ridx="${rIdx}">
@@ -918,26 +1054,71 @@ class StrategyWorkbench {
             <span class="panel-sub-label">执行动作:</span>
             <div class="action-inline-group">
               <select class="form-select rule-action-type" data-ridx="${rIdx}">
-                <option value="open" ${action.type === 'open' ? 'selected' : ''}>开仓 (OPEN)</option>
+                <option value="enter" ${action.type === 'enter' ? 'selected' : ''}>首次开仓 (ENTER)</option>
+                <option value="add" ${action.type === 'add' ? 'selected' : ''} ${allowAdditions ? '' : 'disabled'}>同向加仓 (ADD)</option>
                 <option value="close" ${action.type === 'close' ? 'selected' : ''}>平仓 (CLOSE)</option>
+                ${action.type === 'open' ? '<option value="open" selected>旧版开仓 (OPEN)</option>' : ''}
               </select>
               <select class="form-select rule-action-side" data-ridx="${rIdx}">
                 <option value="long" ${action.side === 'long' ? 'selected' : ''}>多头 (LONG)</option>
                 <option value="short" ${action.side === 'short' ? 'selected' : ''}>空头 (SHORT)</option>
               </select>
             </div>
+            ${action.type === 'add' ? `
+              <label class="rule-addition-index-wrap">
+                <span class="panel-sub-label">适用次数:</span>
+                第 <input type="number" class="form-control rule-addition-index" data-ridx="${rIdx}"
+                  min="1" step="1" value="${action.addition_index || ''}" ${additionDisabled ? 'disabled' : ''}> 次加仓
+              </label>
+            ` : ''}
             <div class="slider-wrapper">
               <span class="panel-sub-label">仓位:</span>
-              <input type="range" class="pct-slider rule-size-slider" data-ridx="${rIdx}" min="0" max="100" step="0.1" value="${sizePct}">
+              <select class="form-select rule-size-mode" data-ridx="${rIdx}" ${additionDisabled ? 'disabled' : ''}>
+                ${action.type === 'close' ? `
+                  <option value="all" ${sizeMode === 'all' ? 'selected' : ''}>全部平仓</option>
+                  <option value="custom" ${isCustomSize ? 'selected' : ''}>按持仓比例平仓</option>
+                ` : action.type === 'add' ? `
+                  <option value="current_position_multiple" ${sizeMode === 'current_position_multiple' ? 'selected' : ''}>当前持仓倍增</option>
+                  <option value="first_entry_geometric" ${sizeMode === 'first_entry_geometric' ? 'selected' : ''}>首仓层级倍增</option>
+                  <option value="custom" ${isCustomSize ? 'selected' : ''}>当前权益比例</option>
+                  <option value="multiplier" ${sizeMode === 'multiplier' ? 'selected' : ''}>首仓固定倍数</option>
+                  ${sizeMode === 'unsupported' ? `<option selected disabled>${this.escapeHtml(action.sizing_mode)}</option>` : ''}
+                ` : action.type === 'open' ? `
+                  <option value="inherit" ${sizeMode === 'inherit' ? 'selected' : ''}>继承策略配置</option>
+                  <option value="custom" ${isCustomSize ? 'selected' : ''}>自定义权益比例</option>
+                ` : `
+                  <option value="custom" selected>首单权益比例</option>
+                `}
+              </select>
+              ${this.isMultiplierMode(sizeMode) ? `
+                <div class="rule-size-number-wrap">
+                  <input type="number" class="form-control rule-multiplier-input" data-ridx="${rIdx}"
+                    min="0" step="any" value="${action.size_multiplier}" ${additionDisabled ? 'disabled' : ''}>
+                  <span>x</span>
+                </div>
+              ` : `
+              <input type="range" class="pct-slider rule-size-slider" data-ridx="${rIdx}" min="0" max="100" step="0.1"
+                value="${isCustomSize ? sizePct : 0}" ${isCustomSize && !additionDisabled ? '' : 'disabled'}>
               <div class="rule-size-number-wrap">
                 <input type="number" class="form-control rule-size-input" data-ridx="${rIdx}"
-                  min="0" max="100" step="any" value="${sizePct}">
+                  min="0" max="100" step="any" value="${sizePct}" ${isCustomSize && !additionDisabled ? '' : 'disabled'}>
                 <span>%</span>
               </div>
+              `}
             </div>
+            <div class="rule-sizing-hint">${this.ruleSizeHint(action)}</div>
+            ${additionDisabled ? '<div class="rule-sizing-hint additions-paused-hint">加仓已关闭，启用“允许加仓”后可选择模式；当前配置已保留。</div>' : ''}
           </div>
 
           <div class="conditions-builder" data-ridx="${rIdx}">
+            ${usesConditionString ? `
+              <div class="preserved-condition">
+                <span class="panel-sub-label">触发条件 (WHEN):</span>
+                <p>链式条件已完整保留，请在 JSON 源码中编辑。</p>
+                <pre>${this.escapeHtml(rule.condition)}</pre>
+                <button class="btn-xs btn-outline btn-edit-condition-json">编辑 JSON 条件</button>
+              </div>
+            ` : `
             <div class="condition-tree-header">
               <span class="panel-sub-label">触发条件 (WHEN):</span>
               <div class="logic-gate-toggle">
@@ -951,6 +1132,7 @@ class StrategyWorkbench {
             </div>
 
             <button class="btn-ctrl btn-add-condition" data-ridx="${rIdx}">＋ 添加条件项</button>
+            `}
           </div>
         </div>
       `;
@@ -960,7 +1142,18 @@ class StrategyWorkbench {
   }
 
   renderConditionRowHtml(item, rIdx, cIdx, operands) {
-    this.normalizeConditionItem(item, operands);
+    if (item.readOnly) {
+      return `
+        <div class="preserved-condition condition-readonly-row">
+          <div>
+            <p>${this.escapeHtml(item.reason)}，原条件已完整保留。</p>
+            <pre>${this.escapeHtml(JSON.stringify(item.originalNode, null, 2) ?? '未配置条件')}</pre>
+            <button class="btn-xs btn-outline btn-edit-condition-json">编辑 JSON 条件</button>
+          </div>
+          <button class="btn-delete-row" data-ridx="${rIdx}" data-cidx="${cIdx}" title="删除此条件">✕</button>
+        </div>
+      `;
+    }
     const isCross = this.isCrossOperator(item.op);
     const isSemantic = this.isSemanticOperator(item.op);
     const operatorOptions = this.operatorOptionsFor(item, operands);
@@ -976,6 +1169,9 @@ class StrategyWorkbench {
       support: 'close ≥ trend line',
       resistance: 'close ≤ trend line',
     };
+    const historicalRefs = (item.originalNode?.args || [])
+      .filter(arg => arg.kind === 'reference' && arg.ref?.offset < 0)
+      .map(arg => `${arg.ref.name}.${arg.ref.field}：前 ${-arg.ref.offset} 根基础 K 线`);
     return `
       <div class="condition-item-row" data-ridx="${rIdx}" data-cidx="${cIdx}">
         <select class="form-select cond-left-select" data-ridx="${rIdx}" data-cidx="${cIdx}">
@@ -1006,12 +1202,23 @@ class StrategyWorkbench {
         </div>
 
         <button class="btn-delete-row" data-ridx="${rIdx}" data-cidx="${cIdx}" title="删除此条件">✕</button>
+        ${historicalRefs.length ? `<div class="condition-history-hint">${this.escapeHtml(historicalRefs.join('；'))}</div>` : ''}
       </div>
     `;
   }
 
   bindRulesEditorEvents(def) {
     const container = document.getElementById('rulesTreeContainer');
+    const commitConditions = (rIdx, parsed) => {
+      def.rules[rIdx].when = this.compileAstWhen(parsed.gate, parsed.items, parsed.sourceWhen);
+      this.syncToJson();
+    };
+    container.querySelectorAll('.btn-edit-condition-json').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.switchMode('json');
+        document.getElementById('jsonEditorArea')?.focus();
+      });
+    });
 
     // 规则ID修改
     container.querySelectorAll('.input-rule-id').forEach(input => {
@@ -1026,7 +1233,14 @@ class StrategyWorkbench {
     container.querySelectorAll('.rule-action-type').forEach(select => {
       select.addEventListener('change', (e) => {
         const rIdx = parseInt(e.target.dataset.ridx, 10);
-        def.rules[rIdx].action.type = e.target.value;
+        const rule = def.rules[rIdx];
+        if (e.target.value === 'add' && !this.additionsEnabled(def)) {
+          e.target.value = rule.action.type;
+          this.showAlert('请先开启交易规则区的“允许加仓”。', 'info');
+          return;
+        }
+        this.setRuleActionType(rule, e.target.value);
+        this.renderRulesEditor(def);
         this.syncToJson();
       });
     });
@@ -1040,13 +1254,72 @@ class StrategyWorkbench {
       });
     });
 
+    container.querySelectorAll('.rule-size-mode').forEach(select => {
+      select.addEventListener('change', () => {
+        const rIdx = parseInt(select.dataset.ridx, 10);
+        if (def.rules[rIdx].action.type === 'add' && !this.additionsEnabled(def)) return;
+        const rule = def.rules[rIdx];
+        const previous = this.cloneCondition(rule.action);
+        this.setRuleSizeMode(rule, select.value);
+        if (!this.validGeometricSize(rule.action)) {
+          rule.action = previous;
+          this.showAlert('倍数的加仓次数次方需为有限的正数，请调整倍数或次数。', 'error');
+        }
+        this.renderRulesEditor(def);
+        this.syncToJson();
+      });
+    });
+
+    container.querySelectorAll('.rule-addition-index').forEach(input => {
+      input.addEventListener('change', () => {
+        const rule = def.rules[Number(input.dataset.ridx)];
+        if (!this.additionsEnabled(def)) return;
+        const value = Number(input.value);
+        if (!Number.isSafeInteger(value) || value < 1 ||
+            !this.validGeometricSize({ ...rule.action, addition_index: value })) {
+          input.value = rule.action.addition_index;
+          this.showAlert('次数需为正整数，且倍数的该次数次方需为有限的正数。', 'error');
+          return;
+        }
+        rule.action.addition_index = value;
+        this.renderRulesEditor(def);
+        this.syncToJson();
+      });
+    });
+    container.querySelectorAll('.rule-multiplier-input').forEach(input => {
+      input.addEventListener('change', () => {
+        const rule = def.rules[Number(input.dataset.ridx)];
+        if (!this.additionsEnabled(def)) return;
+        const value = Number(input.value);
+        if (!Number.isFinite(value) || value <= 0 ||
+            !this.validGeometricSize({ ...rule.action, size_multiplier: value })) {
+          input.value = rule.action.size_multiplier;
+          this.showAlert('加仓倍数及按层级计算的结果必须是有限的正数。', 'error');
+          return;
+        }
+        rule.action.size_multiplier = value;
+        this.renderRulesEditor(def);
+        this.syncToJson();
+      });
+    });
+
     const updateRuleSize = (rIdx, value) => {
-      const normalized = Math.min(100, Math.max(0, Number(value) || 0));
+      const rule = def.rules[rIdx];
+      if (rule.action.type === 'add' && !this.additionsEnabled(def)) return;
+      if (this.ruleSizeMode(rule.action) !== 'custom') return;
+      const normalized = Number(value);
       const slider = container.querySelector(`.rule-size-slider[data-ridx="${rIdx}"]`);
       const input = container.querySelector(`.rule-size-input[data-ridx="${rIdx}"]`);
+      if (!Number.isFinite(normalized) || normalized <= 0 || normalized > 100) {
+        const previous = rule.action.size_pct * 100;
+        if (slider) slider.value = previous;
+        if (input) input.value = previous;
+        this.showAlert('仓位比例需大于 0 且不超过 100%；全部平仓请使用平仓模式。', 'error');
+        return;
+      }
       if (slider) slider.value = normalized;
       if (input) input.value = normalized;
-      def.rules[rIdx].action.size_pct = normalized / 100;
+      rule.action.size_pct = normalized / 100;
       this.syncToJson();
     };
 
@@ -1071,9 +1344,8 @@ class StrategyWorkbench {
         const gate = btn.dataset.gate;
         const parsed = this.parseAstWhen(def.rules[rIdx].when);
         parsed.gate = gate;
-        def.rules[rIdx].when = this.compileAstWhen(parsed.gate, parsed.items);
+        commitConditions(rIdx, parsed);
         this.renderRulesEditor(def);
-        this.syncToJson();
       });
     });
 
@@ -1086,10 +1358,10 @@ class StrategyWorkbench {
         if (parsed.items[cIdx]) {
           const item = parsed.items[cIdx];
           item.left = sel.value;
+          item.dirty = true;
           this.normalizeConditionItem(item, this.getAvailableOperands());
-          def.rules[rIdx].when = this.compileAstWhen(parsed.gate, parsed.items);
+          commitConditions(rIdx, parsed);
           this.renderRulesEditor(def);
-          this.syncToJson();
         }
       });
     });
@@ -1103,10 +1375,10 @@ class StrategyWorkbench {
         if (parsed.items[cIdx]) {
           const item = parsed.items[cIdx];
           item.op = sel.value;
+          item.dirty = true;
           this.normalizeConditionItem(item, this.getAvailableOperands());
-          def.rules[rIdx].when = this.compileAstWhen(parsed.gate, parsed.items);
+          commitConditions(rIdx, parsed);
           this.renderRulesEditor(def);
-          this.syncToJson();
         }
       });
     });
@@ -1119,8 +1391,8 @@ class StrategyWorkbench {
         const parsed = this.parseAstWhen(def.rules[rIdx].when);
         if (parsed.items[cIdx]) {
           parsed.items[cIdx].rightIndicator = sel.value;
-          def.rules[rIdx].when = this.compileAstWhen(parsed.gate, parsed.items);
-          this.syncToJson();
+          parsed.items[cIdx].dirty = true;
+          commitConditions(rIdx, parsed);
         }
       });
     });
@@ -1132,9 +1404,11 @@ class StrategyWorkbench {
         const cIdx = parseInt(input.dataset.cidx, 10);
         const parsed = this.parseAstWhen(def.rules[rIdx].when);
         if (parsed.items[cIdx]) {
-          parsed.items[cIdx].rightNumber = parseFloat(input.value) || 0;
-          def.rules[rIdx].when = this.compileAstWhen(parsed.gate, parsed.items);
-          this.syncToJson();
+          const value = Number(input.value);
+          if (input.value.trim() === '' || !Number.isFinite(value)) return;
+          parsed.items[cIdx].rightNumber = value;
+          parsed.items[cIdx].dirty = true;
+          commitConditions(rIdx, parsed);
         }
       });
     });
@@ -1151,9 +1425,10 @@ class StrategyWorkbench {
             this.isSemanticOperator(parsed.items[cIdx].op)
           ) return;
           parsed.items[cIdx].rightType = parsed.items[cIdx].rightType === 'number' ? 'indicator' : 'number';
-          def.rules[rIdx].when = this.compileAstWhen(parsed.gate, parsed.items);
+          parsed.items[cIdx].dirty = true;
+          this.normalizeConditionItem(parsed.items[cIdx], this.getAvailableOperands());
+          commitConditions(rIdx, parsed);
           this.renderRulesEditor(def);
-          this.syncToJson();
         }
       });
     });
@@ -1165,9 +1440,8 @@ class StrategyWorkbench {
         const cIdx = parseInt(btn.dataset.cidx, 10);
         const parsed = this.parseAstWhen(def.rules[rIdx].when);
         parsed.items.splice(cIdx, 1);
-        def.rules[rIdx].when = this.compileAstWhen(parsed.gate, parsed.items);
+        commitConditions(rIdx, parsed);
         this.renderRulesEditor(def);
-        this.syncToJson();
       });
     });
 
@@ -1184,9 +1458,8 @@ class StrategyWorkbench {
           rightIndicator: operands[0].value,
           rightNumber: 50.0
         });
-        def.rules[rIdx].when = this.compileAstWhen(parsed.gate, parsed.items);
+        commitConditions(rIdx, parsed);
         this.renderRulesEditor(def);
-        this.syncToJson();
       });
     });
 
@@ -1204,7 +1477,10 @@ class StrategyWorkbench {
 
   addNewRule() {
     if (!this.currentStrategy.rules) this.currentStrategy.rules = [];
-    const id = `rule_${this.currentStrategy.rules.length + 1}`;
+    const ids = new Set(this.currentStrategy.rules.map(rule => rule.id));
+    let sequence = this.currentStrategy.rules.length + 1;
+    while (ids.has(`rule_${sequence}`)) sequence++;
+    const id = `rule_${sequence}`;
     const newRule = {
       id: id,
       when: {
@@ -1216,7 +1492,7 @@ class StrategyWorkbench {
         ]
       },
       action: {
-        type: 'open',
+        type: 'enter',
         side: 'long',
         size_pct: 0.25
       }
@@ -1228,28 +1504,45 @@ class StrategyWorkbench {
   }
 
   parseAstWhen(when) {
-    if (!when) return { gate: 'and', items: [] };
-    if (when.kind === 'operator') {
-      if (when.op === 'and' || when.op === 'or') {
-        const items = (when.args || []).map(arg => this.parseConditionItem(arg)).filter(Boolean);
-        return { gate: when.op, items: items };
-      }
-      const item = this.parseConditionItem(when);
-      return { gate: 'and', items: item ? [item] : [] };
+    const sourceWhen = this.cloneCondition(when);
+    if (
+      when?.kind === 'operator' &&
+      (when.op === 'and' || when.op === 'or') &&
+      Array.isArray(when.args)
+    ) {
+      return {
+        gate: when.op,
+        items: when.args.map(arg => this.parseConditionItem(arg)),
+        sourceWhen,
+      };
     }
-    return { gate: 'and', items: [] };
+    return { gate: 'and', items: [this.parseConditionItem(when)], sourceWhen };
   }
 
   parseConditionItem(node) {
-    if (!node || node.kind !== 'operator') return null;
+    const originalNode = this.cloneCondition(node);
+    const preserved = reason => ({ readOnly: true, reason, originalNode });
+    if (node?.kind === 'boolean') return preserved(node.bool ? '此条件始终满足' : '此条件始终不满足');
+    if (!node || node.kind !== 'operator' || !Array.isArray(node.args)) {
+      return preserved('此条件暂不支持可视化编辑');
+    }
+    if (['and', 'or', 'not'].includes(node.op)) {
+      return preserved('嵌套逻辑条件请在 JSON 源码中编辑');
+    }
     const semanticItem = this.parseSemanticCondition(node);
-    if (semanticItem) return semanticItem;
+    if (semanticItem) return { ...semanticItem, originalNode };
 
     const op = node.op;
-    const leftNode = node.args && node.args[0];
-    const rightNode = node.args && node.args[1];
+    const [leftNode, rightNode] = node.args;
+    const operands = this.getAvailableOperands();
+    if (node.args.length !== 2 || !['gt', 'gte', 'lt', 'lte', 'eq', 'cross_up', 'cross_down'].includes(op)) {
+      return preserved('此操作条件暂不支持可视化编辑');
+    }
 
     const leftVal = this.nodeToOperandValue(leftNode);
+    if (!operands.some(operand => operand.value === leftVal)) {
+      return preserved('持仓条件或未识别的引用请在 JSON 源码中编辑');
+    }
     let rightType = 'indicator';
     let rightVal = '';
     let rightNum = 50.0;
@@ -1261,13 +1554,28 @@ class StrategyWorkbench {
       rightVal = this.nodeToOperandValue(rightNode);
     }
 
-    return {
-      left: leftVal || 'market:close',
-      op: op || 'gt',
+    const item = {
+      left: leftVal,
+      op,
       rightType: rightType,
-      rightIndicator: rightVal || 'market:close',
+      rightIndicator: rightVal,
       rightNumber: rightNum,
+      originalNode,
     };
+    if (!this.operatorOptionsFor(item, operands).some(option => option.value === op)) {
+      return preserved('此指标操作条件请在 JSON 源码中编辑');
+    }
+    if (rightType === 'indicator') {
+      const candidates = this.isCrossOperator(op)
+        ? this.compatibleCrossOperands(leftVal, operands)
+        : this.compatibleComparisonOperands(leftVal, operands);
+      if (!candidates.some(operand => operand.value === rightVal)) {
+        return preserved('此引用组合请在 JSON 源码中编辑');
+      }
+    } else if (!Number.isFinite(rightNum) || this.isCrossOperator(op)) {
+      return preserved('此数值操作条件请在 JSON 源码中编辑');
+    }
+    return item;
   }
 
   parseSemanticCondition(node) {
@@ -1337,15 +1645,26 @@ class StrategyWorkbench {
   nodeToOperandValue(node) {
     if (!node) return '';
     if (node.kind === 'reference' && node.ref) {
-      if (node.ref.scope === 'market') return `market:${node.ref.field || 'close'}`;
-      return `indicator:${node.ref.name || node.ref.id}:${node.ref.field || 'value'}`;
+      if (node.ref.scope === 'market') return `market:${node.ref.field}`;
+      if (node.ref.scope === 'position') return `position:${node.ref.field}`;
+      if (node.ref.scope === 'indicator') return `indicator:${node.ref.name}:${node.ref.field}`;
     }
     return '';
   }
 
+  conditionOperandNode(value, item, argIndex) {
+    const args = item.originalNode?.args || [];
+    const preferred = args[argIndex];
+    if (this.nodeToOperandValue(preferred) === value) return this.cloneCondition(preferred);
+    const original = args.find(arg => this.nodeToOperandValue(arg) === value);
+    return original ? this.cloneCondition(original) : this.operandValueToNode(value);
+  }
+
   compileConditionItem(item) {
-    this.normalizeConditionItem(item, this.getAvailableOperands());
-    const leftArg = this.operandValueToNode(item.left);
+    if (item.readOnly || (!item.dirty && Object.hasOwn(item, 'originalNode'))) {
+      return this.cloneCondition(item.originalNode);
+    }
+    const leftArg = this.conditionOperandNode(item.left, item, 0);
     if (item.op === 'bullish_trend' || item.op === 'bearish_trend') {
       return {
         kind: 'operator',
@@ -1368,7 +1687,7 @@ class StrategyWorkbench {
         kind: 'operator',
         op: item.op === 'support' ? 'gte' : 'lte',
         args: [
-          this.operandValueToNode('market:close'),
+          this.conditionOperandNode('market:close', item, 0),
           leftArg
         ]
       };
@@ -1378,9 +1697,10 @@ class StrategyWorkbench {
     if (!this.isCrossOperator(item.op) && item.rightType === 'number') {
       rightArg = { kind: 'number', number: parseFloat(item.rightNumber) || 0 };
     } else {
-      rightArg = this.operandValueToNode(item.rightIndicator);
+      rightArg = this.conditionOperandNode(item.rightIndicator, item, 1);
     }
     return {
+      ...this.cloneCondition(item.originalNode),
       kind: 'operator',
       op: item.op,
       args: [leftArg, rightArg]
@@ -1393,6 +1713,9 @@ class StrategyWorkbench {
       return { kind: 'reference', ref: { scope: 'market', name: 'bar', field: field } };
     }
     const parts = str.split(':');
+    if (parts[0] === 'position') {
+      return { kind: 'reference', ref: { scope: 'position', name: 'current', field: parts[1] } };
+    }
     return {
       kind: 'reference',
       ref: {
@@ -1404,17 +1727,29 @@ class StrategyWorkbench {
     };
   }
 
-  compileAstWhen(gate, items) {
+  compileAstWhen(gate, items, sourceWhen) {
+    const args = (items || []).map(item => this.compileConditionItem(item));
+    const originalItems = sourceWhen?.kind === 'operator' && ['and', 'or'].includes(sourceWhen.op)
+      ? sourceWhen.args
+      : [sourceWhen];
+    if (
+      JSON.stringify(args) === JSON.stringify(originalItems) &&
+      (sourceWhen?.op === gate || !['and', 'or'].includes(sourceWhen?.op))
+    ) {
+      return this.cloneCondition(sourceWhen);
+    }
     if (!items || items.length === 0) {
-      return { kind: 'boolean', bool: true };
+      return { kind: 'boolean', bool: false };
     }
     if (items.length === 1) {
       return this.compileConditionItem(items[0]);
     }
     return {
+      ...(sourceWhen?.kind === 'operator' && ['and', 'or'].includes(sourceWhen.op)
+        ? this.cloneCondition(sourceWhen) : {}),
       kind: 'operator',
       op: gate || 'and',
-      args: items.map(item => this.compileConditionItem(item))
+      args,
     };
   }
 
@@ -1450,16 +1785,16 @@ class StrategyWorkbench {
     } else {
       content = this.currentStrategy;
     }
-    this.migrateLeverageConfig(content);
-
     try {
+      this.migrateRuleSizing(content);
+      this.migrateLeverageConfig(content);
       this.showAlert('正在向 Go 后端提交静态校验与持久化...', 'info');
       const res = await Api.saveStrategy(content);
       this.showAlert(`策略 [${content.id}] 校验通过并保存成功！`, 'success');
 
       // 刷新列表并通知行情回测页刷新策略下拉框
       await this.loadStrategies();
-      this.selectStrategy(content.id);
+      await this.selectStrategy(content.id);
       if (window.App && typeof window.App.refreshStrategies === 'function') {
         window.App.refreshStrategies();
       }
@@ -1502,13 +1837,12 @@ class StrategyWorkbench {
         exchange_leverage: 1
       },
       behavior: {
+        allow_additions: false,
         allow_pyramiding: false,
         allow_same_bar_reversal: false,
         cooldown_bars: 0
       },
       position: {
-        initial_size_pct: 0.25,
-        max_additions: 0,
         position_leverage: 1
       },
       execution: {
@@ -1578,9 +1912,9 @@ class StrategyWorkbench {
             ]
           },
           action: {
-            type: 'open',
+            type: 'enter',
             side: 'long',
-            size_pct: 0.3
+            size_pct: 0.25
           }
         },
         {

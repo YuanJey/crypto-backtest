@@ -45,12 +45,17 @@ const (
 )
 
 type BehaviorSpec struct {
-	AllowPyramiding      bool `json:"allow_pyramiding"`
-	AllowSameBarReversal bool `json:"allow_same_bar_reversal"`
-	CooldownBars         int  `json:"cooldown_bars"`
+	// AllowAdditions is the explicit master switch. Nil preserves the
+	// pre-switch behavior of historical enter/add and legacy open revisions.
+	AllowAdditions       *bool `json:"allow_additions,omitempty"`
+	AllowPyramiding      bool  `json:"allow_pyramiding"`
+	AllowSameBarReversal bool  `json:"allow_same_bar_reversal"`
+	CooldownBars         int   `json:"cooldown_bars"`
 }
 
 type PositionSpec struct {
+	// Legacy sizing fields are retained only for ActionOpen revisions.
+	// New enter/add actions carry their own allocation and addition index.
 	InitialSizePct float64 `json:"initial_size_pct,omitempty"`
 	// AllowPyramiding is a legacy alias. Normalize migrates it to
 	// Behavior.AllowPyramiding so runtime policy has one source of truth.
@@ -147,6 +152,9 @@ type RuleSpec struct {
 	Condition string     `json:"condition,omitempty"`
 	When      Expression `json:"when"`
 	Action    ActionSpec `json:"action"`
+	// SourceRuleID preserves the ordering of rules split from a legacy open.
+	// It is immutable provenance, not a reference to a live rule.
+	SourceRuleID string `json:"source_rule_id,omitempty"`
 }
 
 type Expression struct {
@@ -188,11 +196,39 @@ type ActionSpec struct {
 	Type    ActionType `json:"type"`
 	Side    TradeSide  `json:"side"`
 	SizePct float64    `json:"size_pct"`
+	// AdditionIndex is 1 for the first addition, 2 for the second, etc.
+	AdditionIndex int `json:"addition_index,omitempty"`
+	// SizeMultiplier is the factor used by the selected addition sizing mode.
+	// It is mutually exclusive with SizePct.
+	SizeMultiplier float64            `json:"size_multiplier,omitempty"`
+	SizingMode     AdditionSizingMode `json:"sizing_mode,omitempty"`
+}
+
+type AdditionSizingMode string
+
+const (
+	AdditionSizeEquityPct       AdditionSizingMode = "equity_pct"
+	AdditionSizeFirstMultiple   AdditionSizingMode = "first_entry_multiple"
+	AdditionSizeCurrentMultiple AdditionSizingMode = "current_position_multiple"
+	AdditionSizeFirstGeometric  AdditionSizingMode = "first_entry_geometric"
+)
+
+func (action ActionSpec) EffectiveSizingMode() AdditionSizingMode {
+	if action.SizingMode != "" {
+		return action.SizingMode
+	}
+	if action.SizeMultiplier > 0 {
+		return AdditionSizeFirstMultiple
+	}
+	return AdditionSizeEquityPct
 }
 
 type ActionType string
 
 const (
+	ActionEnter ActionType = "enter"
+	ActionAdd   ActionType = "add"
+	// ActionOpen retains legacy combined entry/pyramiding behavior.
 	ActionOpen  ActionType = "open"
 	ActionClose ActionType = "close"
 )

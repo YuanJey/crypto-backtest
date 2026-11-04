@@ -192,17 +192,19 @@ type AccountSpec struct {
 }
 
 type BehaviorSpec struct {
+	AllowAdditions      *bool `json:"allow_additions,omitempty"`
 	AllowPyramiding      bool `json:"allow_pyramiding"`
 	AllowSameBarReversal bool `json:"allow_same_bar_reversal"`
 	CooldownBars         int  `json:"cooldown_bars"`
 }
 
 type PositionSpec struct {
+	PositionLeverage  float64 `json:"position_leverage,omitempty"`
+	// 下列字段仅供旧 open 动作兼容，新规则的仓位写入 ActionSpec。
 	InitialSizePct     float64 `json:"initial_size_pct,omitempty"`
 	MaxAdditions      int     `json:"max_additions,omitempty"`
 	AddSizePct        float64 `json:"add_size_pct,omitempty"`
 	AddSizeMultiplier float64 `json:"add_size_multiplier,omitempty"`
-	PositionLeverage  float64 `json:"position_leverage,omitempty"`
 }
 
 type ExecutionSpec struct {
@@ -571,12 +573,16 @@ type RuleSpec struct {
 	Condition string    `json:"condition,omitempty"`
 	When     Expression `json:"when"`
 	Action   ActionSpec `json:"action"`
+	SourceRuleID string `json:"source_rule_id,omitempty"`
 }
 
 type ActionSpec struct {
 	Type    ActionType `json:"type"`
 	Side    TradeSide  `json:"side"`
 	SizePct float64    `json:"size_pct"`
+	AdditionIndex int `json:"addition_index,omitempty"`
+	SizeMultiplier float64 `json:"size_multiplier,omitempty"`
+	SizingMode AdditionSizingMode `json:"sizing_mode,omitempty"`
 }
 ```
 
@@ -584,26 +590,42 @@ type ActionSpec struct {
 
 | `type` | 必填字段 | 说明 |
 | --- | --- | --- |
-| `open` | `side`、`size_pct` | 开多或开空 |
+| `enter` | `side`、`size_pct` | 仅空仓时开多或开空 |
+| `add` | `side`、`addition_index`、比例或倍数 | 第 n 次同向加仓 |
 | `close` | `side`、`size_pct` | 平多或平空 |
+| `open` | `side`、规则或旧全局比例 | 兼容旧 revision 的开仓及加仓 |
 
 `open_long`、`close_long` 等名称适合作为 UI 文案，不建议在底层定义为多个动作类型。统一的动作加 `side` 更容易扩展。保护性止损、止盈和减仓将作为 `ActionSpec` 的后续字段扩展。
 
-`ActionSpec.size_pct` 是规则级覆盖值。若开仓 action 不提供 `size_pct`，engine 使用策略级 `PositionSpec`：
+首单和每次加仓规则各自定义条件与仓位参数：
 
-- 首次开仓用 `initial_size_pct`。
-- 加仓优先用 `add_size_pct`。
-- 若未配置 `add_size_pct` 且配置 `add_size_multiplier`，使用
-  `first_entry_notional * add_size_multiplier^entry_count`。
-- `max_additions` 限制当前持仓轮次内的加仓次数，不包含首次开仓。
-- 首次开仓名义金额为 `equity * size_pct * position_leverage`。
-- 规则级或 `add_size_pct` 固定加仓只按当前权益比例计算，不乘
-  `position_leverage`。
+- `enter` 必须显式提供 `size_pct`，仅空仓时执行，名义金额为
+  `equity * size_pct * position_leverage`。
+- `add` 要求加仓开关允许、同向持仓及 `entry_count == addition_index`，首次成交后
+  `entry_count` 为 1，对应第一次加仓；不自动跳过缺失的次数。
+- 固定比例加仓使用 `equity * size_pct`，不重复乘首单杠杆。
+- `current_position_multiple` 使用 `abs(position.quantity) * fill_price * size_multiplier`。
+- `first_entry_geometric` 使用 `first_entry_notional * size_multiplier^addition_index`，
+  第一次加仓的指数为 1，必须检查计算结果有限且大于 0。
+- `first_entry_multiple` 使用 `first_entry_notional * size_multiplier`；无 `sizing_mode`
+  的旧倍数规则仍使用该语义。以上倍数模式均与 `size_pct` 二选一。
+- 全部平仓重置加仓次数和首单基数，部分平仓保留；相同次数的多个规则按优先顺序竞争。
+- `behavior.allow_additions` 是新加仓总开关，关闭时保留规则配置，停止加仓，
+  不影响首单与平仓。模式、比例和次数均来自动作配置。
 - `exchange_leverage` 是总名义仓位的唯一杠杆上限；`position_leverage`
   只用于首次开仓仓位计算，二者未配置时均按 `1x` 兼容。
 - 达到 `risk.max_drawdown_halt_pct` 后禁止新开仓，但仍允许平仓。
 - 每个资金曲线点返回 `position_leverage = abs(position_notional) / equity`，并提供
   `max_position_leverage` 报告指标。该实际杠杆是动态结果，不是策略配置参数。
+
+旧 `open` 保留原行为：规则显式比例优先，否则继承 `initial_size_pct`、
+`add_size_pct` 或 `first_entry_notional * add_size_multiplier^entry_count`，
+加仓受旧 `allow_pyramiding` 和 `max_additions` 控制。编辑器拆分旧规则时不修改条件，
+用 `source_rule_id` 保留来源规则的同优先级排序，避免生成的新 ID 改变成交顺序；
+该字段不是现有规则依赖，来源规则删除后仍可保留。历史 revision 及旧哈希不改写。
+`allow_additions` 使用可空 bool：缺省不改变历史语义，显式配置时统一覆盖
+新旧动作的加仓许可。旧显式 `add` 没有该字段时默认允许，旧 `open` 默认读取
+原 `allow_pyramiding`；新模板显式配置为 false。
 
 规则条件可以直接保存为 AST，也可以保存为公共链式表达式字符串，由后端统一解析为 AST：
 
@@ -612,7 +634,7 @@ type ActionSpec struct {
   "id": "open_long",
   "condition": "and(ema_fast_15m.gte(ema_slow_1h), rsi_14_4h.lt(70))",
   "action": {
-    "type": "open",
+    "type": "enter",
     "side": "long",
     "size_pct": 0.2
   }
@@ -632,18 +654,18 @@ type ActionSpec struct {
 - 顶层支持 `and(...)`、`or(...)`、`not(...)`。
 - 若同时提交 `condition` 和 `when`，服务端拒绝，避免一条规则有两套条件来源。
 
-当前 engine 还保留执行层安全门控：当 `behavior.allow_pyramiding=false` 且当前已有同向持仓时，即使规则信号再次满足也不会继续开仓。策略层推荐显式写状态条件，例如：
+首单的空仓门控由 engine 强制执行，也允许策略层显式写状态条件，例如：
 
 ```json
 {
   "id": "open_long",
   "condition": "and(position.flat(), ema_fast_15m.gte(ema_slow_1h))",
-  "action": {"type": "open", "side": "long", "size_pct": 0.2}
+  "action": {"type": "enter", "side": "long", "size_pct": 0.2}
 }
 ```
 
 `behavior.cooldown_bars` 从最近一次成交所在的基础 K 线开始计数，冷却窗口内禁止
-新开仓但不阻止平仓。当前 next-bar-open 引擎不支持同 Bar 反转，因此
+首单与加仓但不阻止平仓。当前 next-bar-open 引擎不支持同 Bar 反转，因此
 `behavior.allow_same_bar_reversal=true` 会在校验阶段被拒绝，而不是静默忽略。
 
 分层加仓逻辑使用同一状态模型，包括 `position.entry_count`、`position.last_entry_price`、`position.unrealized_pnl_pct` 等字段。它不代表系统内置了某种特定资金管理策略。
@@ -652,9 +674,9 @@ type ActionSpec struct {
 
 ```json
 {
-  "id": "add_long",
-  "condition": "or(position.flat(), and(position.long(), position.entry_count.lt(3), position.avg_entry_price.gte(market.close)))",
-  "action": {"type": "open", "side": "long"}
+  "id": "add_long_1",
+  "condition": "position.avg_entry_price.gte(market.close)",
+  "action": {"type": "add", "side": "long", "addition_index": 1, "size_pct": 0.1}
 }
 ```
 
@@ -798,7 +820,7 @@ type ActionSpec struct {
         ]
       },
       "action": {
-        "type": "open",
+        "type": "enter",
         "side": "long",
         "size_pct": 0.2
       }

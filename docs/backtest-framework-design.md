@@ -279,9 +279,12 @@ indicators:
 and(position.flat(), ema_fast_15m.gte(ema_slow_1h))
 ```
 
-执行层仍保留安全门控：当 `behavior.allow_pyramiding=false` 且当前已有持仓时，开仓信号不会继续生成新仓。加仓逻辑必须使用持仓状态字段和规则表达，不能绕过执行层门控。
+执行层将首单和加仓分开门控：`enter` 仅空仓执行，`add` 仅已有同向持仓且
+`entry_count == action.addition_index` 且允许加仓时执行。
+新总开关 `behavior.allow_additions` 显式设置后统一控制加仓，关闭时保留规则配置，
+不影响首单与平仓；未配置时保留历史行为。
 
-策略级仓位参数：
+策略级只保留两个杠杆，比例与加仓次数随规则配置：
 
 ```json
 {
@@ -289,22 +292,39 @@ and(position.flat(), ema_fast_15m.gte(ema_slow_1h))
     "market_type": "perpetual",
     "exchange_leverage": 10
   },
-  "behavior": {
-    "allow_pyramiding": true
-  },
   "position": {
-    "initial_size_pct": 0.0025,
-    "position_leverage": 5,
-    "max_additions": 2,
-    "add_size_multiplier": 2
-  }
+    "position_leverage": 5
+  },
+  "behavior": {
+    "allow_additions": true
+  },
+  "rules": [
+    {
+      "id": "enter_long",
+      "condition": "ema_fast_15m.gte(ema_slow_1h)",
+      "action": {"type": "enter", "side": "long", "size_pct": 0.0025}
+    },
+    {
+      "id": "add_long_1",
+      "condition": "position.unrealized_pnl_pct.lte(-0.02)",
+      "action": {"type": "add", "side": "long", "addition_index": 1, "sizing_mode": "current_position_multiple", "size_multiplier": 2}
+    },
+    {
+      "id": "add_long_2",
+      "condition": "position.unrealized_pnl_pct.lte(-0.04)",
+      "action": {"type": "add", "side": "long", "addition_index": 2, "sizing_mode": "first_entry_geometric", "size_multiplier": 2}
+    }
+  ]
 }
 ```
 
-规则级 `action.size_pct` 可以覆盖策略默认仓位；不填写时由 `PositionSpec` 计算。
+新首单和固定比例加仓必须显式声明 `action.size_pct`。倍数加仓使用
+`action.size_multiplier`，它与 `size_pct` 二选一。
 比例字段没有 5% 的业务下限；`0.0025` 表示分配权益的 `0.25%`。
 首次开仓名义金额为 `equity * size_pct * position_leverage`。固定比例加仓不再乘
-`position_leverage`；倍增加仓以本轮首次订单的实际名义金额为基数。
+`position_leverage`；`current_position_multiple` 以成交前总持仓名义金额为基数，
+`first_entry_geometric` 以本轮首单实际名义金额为基数乘以倍数的加仓次数次方。
+旧固定首仓倍数模式为 `first_entry_multiple`，不计算指数。
 总名义仓位只受 `account.exchange_leverage` 限制，实际杠杆仅作为回测结果展示。
 
 当前持仓状态字段：
@@ -318,11 +338,16 @@ and(position.flat(), ema_fast_15m.gte(ema_slow_1h))
 - `position.side`
 - `position.actual_leverage`
 
-通用的分层加仓条件可以表达为：
+每次加仓的条件可以独立表达为：
 
 ```text
-or(position.flat(), and(position.long(), position.entry_count.lt(3), position.avg_entry_price.gte(market.close)))
+position.avg_entry_price.gte(market.close)
 ```
+
+每轮首次成交后 `entry_count` 为 1，第一次加仓使用 `addition_index: 1`；
+全部平仓重置次数和首仓基准，部分平仓不重置。模式、比例和次数各自配置在规则中。
+后端保留旧 revision 的执行和哈希语义；编辑器将旧全局比例转换到规则，
+并通过 `source_rule_id` 保留拆分前同优先级排序和不可变历史来源。
 
 ### 7.3 操作符
 

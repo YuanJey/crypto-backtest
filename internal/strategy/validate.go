@@ -146,7 +146,7 @@ func validatePosition(position PositionSpec, behavior BehaviorSpec, account Acco
 			"position.position_leverage must be finite and in [1, account.exchange_leverage]",
 		)
 	}
-	if position.MaxAdditions > 0 && !behavior.AllowPyramiding {
+	if position.MaxAdditions > 0 && behavior.AllowAdditions == nil && !behavior.AllowPyramiding {
 		return fmt.Errorf("position.max_additions requires behavior.allow_pyramiding=true")
 	}
 	if position.AddSizePct > 0 && position.AddSizeMultiplier > 0 {
@@ -372,9 +372,9 @@ func validateRules(rules []RuleSpec, indicatorOutputs indicatorOutputs, marketTy
 
 func validateAction(action ActionSpec, marketType MarketType, position PositionSpec) error {
 	switch action.Type {
-	case ActionOpen, ActionClose:
+	case ActionEnter, ActionAdd, ActionOpen, ActionClose:
 	default:
-		return fmt.Errorf("type must be open or close")
+		return fmt.Errorf("type must be enter, add, open or close")
 	}
 	switch action.Side {
 	case TradeSideLong:
@@ -385,11 +385,45 @@ func validateAction(action ActionSpec, marketType MarketType, position PositionS
 	default:
 		return fmt.Errorf("side must be long or short")
 	}
-	if action.SizePct < 0 || action.SizePct > 1 {
-		return fmt.Errorf("size_pct must be in [0, 1]")
+	if !isFinite(action.SizePct) || action.SizePct < 0 || action.SizePct > 1 {
+		return fmt.Errorf("size_pct must be finite and in [0, 1]")
 	}
 	if action.Type == ActionOpen && action.SizePct == 0 && position.InitialSizePct <= 0 {
 		return fmt.Errorf("open action requires size_pct or position.initial_size_pct")
+	}
+	if action.Type == ActionEnter && action.SizePct <= 0 {
+		return fmt.Errorf("enter action requires size_pct > 0")
+	}
+	if action.Type == ActionAdd {
+		if action.AdditionIndex < 1 {
+			return fmt.Errorf("add action requires addition_index >= 1")
+		}
+		if !isFinite(action.SizeMultiplier) || action.SizeMultiplier < 0 {
+			return fmt.Errorf("size_multiplier must be finite and >= 0")
+		}
+		if (action.SizePct > 0) == (action.SizeMultiplier > 0) {
+			return fmt.Errorf("add action requires exactly one of size_pct or size_multiplier")
+		}
+		switch action.EffectiveSizingMode() {
+		case AdditionSizeEquityPct:
+			if action.SizePct <= 0 || action.SizeMultiplier != 0 {
+				return fmt.Errorf("equity_pct requires size_pct and cannot specify size_multiplier")
+			}
+		case AdditionSizeFirstMultiple, AdditionSizeCurrentMultiple, AdditionSizeFirstGeometric:
+			if action.SizeMultiplier <= 0 || action.SizePct != 0 {
+				return fmt.Errorf("multiplier sizing requires size_multiplier and cannot specify size_pct")
+			}
+			if action.EffectiveSizingMode() == AdditionSizeFirstGeometric {
+				power := math.Pow(action.SizeMultiplier, float64(action.AdditionIndex))
+				if !isFinite(power) || power <= 0 {
+					return fmt.Errorf("size_multiplier raised to addition_index must be finite and > 0")
+				}
+			}
+		default:
+			return fmt.Errorf("unknown addition sizing_mode %q", action.SizingMode)
+		}
+	} else if action.AdditionIndex != 0 || action.SizeMultiplier != 0 || action.SizingMode != "" {
+		return fmt.Errorf("addition sizing fields are only valid for add actions")
 	}
 	return nil
 }
