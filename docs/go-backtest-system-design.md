@@ -200,11 +200,25 @@ type BehaviorSpec struct {
 
 type PositionSpec struct {
 	PositionLeverage  float64 `json:"position_leverage,omitempty"`
+	LongCapitalDecayPower  float64 `json:"long_capital_decay_power,omitempty"`
+	ShortCapitalDecayPower float64 `json:"short_capital_decay_power,omitempty"`
 	// 下列字段仅供旧 open 动作兼容，新规则的仓位写入 ActionSpec。
 	InitialSizePct     float64 `json:"initial_size_pct,omitempty"`
 	MaxAdditions      int     `json:"max_additions,omitempty"`
 	AddSizePct        float64 `json:"add_size_pct,omitempty"`
 	AddSizeMultiplier float64 `json:"add_size_multiplier,omitempty"`
+}
+
+type ExitPolicySpec struct {
+	ID           string           `json:"id"`
+	Side         TradeSide        `json:"side"`
+	Purpose      ExitPurpose      `json:"purpose"`
+	Anchor       ExitAnchorSpec   `json:"anchor"`
+	Distance     ExitDistanceSpec `json:"distance"`
+	TriggerPrice ExitTriggerPrice `json:"trigger_price,omitempty"`
+	ClosePct     float64          `json:"close_pct,omitempty"`
+	Priority     int              `json:"priority,omitempty"`
+	Execution    ExitExecution    `json:"execution,omitempty"`
 }
 
 type ExecutionSpec struct {
@@ -600,23 +614,34 @@ type ActionSpec struct {
 首单和每次加仓规则各自定义条件与仓位参数：
 
 - `enter` 必须显式提供 `size_pct`，仅空仓时执行，名义金额为
-  `equity * size_pct * position_leverage`。
+  `min(equity, equity * size_pct * position_leverage) * decay`。
+- 根据开仓方向使用 `long_capital_decay_power` 或 `short_capital_decay_power`：
+  `decay = min(1, (initial_cash / equity) ^ power)`。默认幂次为 `0.5`；
+  盈利后缩仓，亏损时不放大。
 - `add` 要求加仓开关允许、同向持仓及 `entry_count == addition_index`，首次成交后
   `entry_count` 为 1，对应第一次加仓；不自动跳过缺失的次数。
 - 固定比例加仓使用 `equity * size_pct`，不重复乘首单杠杆。
 - `current_position_multiple` 使用 `abs(position.quantity) * fill_price * size_multiplier`。
 - `first_entry_geometric` 使用 `first_entry_notional * size_multiplier^addition_index`，
-  第一次加仓的指数为 1，必须检查计算结果有限且大于 0。
+  第一次加仓的指数为 1，必须检查计算结果有限且大于 0；
+  首单基数为实际成交名义金额，包含杠杆和资金衰减的结果。
 - `first_entry_multiple` 使用 `first_entry_notional * size_multiplier`；无 `sizing_mode`
   的旧倍数规则仍使用该语义。以上倍数模式均与 `size_pct` 二选一。
 - 全部平仓重置加仓次数和首单基数，部分平仓保留；相同次数的多个规则按优先顺序竞争。
 - `behavior.allow_additions` 是新加仓总开关，关闭时保留规则配置，停止加仓，
   不影响首单与平仓。模式、比例和次数均来自动作配置。
 - `exchange_leverage` 是总名义仓位的唯一杠杆上限；`position_leverage`
-  只用于首次开仓仓位计算，二者未配置时均按 `1x` 兼容。
+  用于首仓规模计算，二者未配置时均按 `1x` 兼容。
 - 达到 `risk.max_drawdown_halt_pct` 后禁止新开仓，但仍允许平仓。
 - 每个资金曲线点返回 `position_leverage = abs(position_notional) / equity`，并提供
   `max_position_leverage` 报告指标。该实际杠杆是动态结果，不是策略配置参数。
+- `exit_policies` 是独立的持仓退出层。价格锚点、距离、指标采样、触发字段与执行
+  方式正交组合，避免为每一种止盈止损新增动作类型。
+- ATR 采样 `entry` 使用首次开仓前最新的已闭合指标值；`each_entry` 在每次成交
+  加仓后刷新；`live` 每根闭合 K 线刷新并从下一根 K 线起生效，不使用未来数据。
+- `trigger_price` 执行在 K 线触及目标时成交；发生跳空时使用该根 K 线开盘价。
+- 同根 K 线有多个退出策略命中时，按 `priority` 从高到低选择一个；同优先级采用
+  保守原则让止损优先。
 
 旧 `open` 保留原行为：规则显式比例优先，否则继承 `initial_size_pct`、
 `add_size_pct` 或 `first_entry_notional * add_size_multiplier^entry_count`，

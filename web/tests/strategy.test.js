@@ -171,7 +171,11 @@ test('visual and JSON switches preserve complex conditions', () => {
 
 test('default and newly added entry rules explicitly declare their own sizing', () => {
   const { wb } = workbench();
-  assert.deepEqual(copy(wb.currentStrategy.position), { position_leverage: 1 });
+  assert.deepEqual(copy(wb.currentStrategy.position), {
+    position_leverage: 1,
+    long_capital_decay_power: 0.5,
+    short_capital_decay_power: 0.5,
+  });
   assert.deepEqual(copy(wb.currentStrategy.rules[0].action), { type: 'enter', side: 'long', size_pct: 0.25 });
   wb.addNewRule();
   assert.deepEqual(copy(wb.currentStrategy.rules.at(-1).action), { type: 'enter', side: 'long', size_pct: 0.25 });
@@ -337,11 +341,17 @@ test('invalid or overflowing legacy migration leaves the full definition untouch
   }
 });
 
-test('overview contains only two leverage settings and new entry has no inheritance option', () => {
+test('overview separates leverage and capital decay from rule allocation', () => {
   const { wb, document } = workbench();
   wb.renderVisualDetail(wb.currentStrategy);
+  const leverage = document.getElementById('leverageCards').innerHTML;
+  assert.equal((leverage.match(/class="visual-card"/g) || []).length, 2);
+  assert.ok(leverage.includes('formExchangeLeverage'));
+  assert.ok(leverage.includes('formPositionLeverage'));
   const overview = document.getElementById('positionCards').innerHTML;
   assert.equal((overview.match(/class="visual-card"/g) || []).length, 2);
+  assert.ok(overview.includes('formLongCapitalDecayPower'));
+  assert.ok(overview.includes('formShortCapitalDecayPower'));
   assert.ok(!overview.includes('formInitialSizePct'));
   assert.ok(!overview.includes('formMaxAdditions'));
   assert.ok(!document.getElementById('rulesTreeContainer').innerHTML.includes('value="inherit"'));
@@ -406,7 +416,11 @@ test('saving legacy JSON sends explicit action sizing without global allocation 
   wb.loadStrategies = async () => {};
   wb.selectStrategy = async () => {};
   await wb.handleSave();
-  assert.deepEqual(payload.position, { position_leverage: 1 });
+  assert.deepEqual(payload.position, {
+    position_leverage: 1,
+    long_capital_decay_power: 0.5,
+    short_capital_decay_power: 0.5,
+  });
   assert.equal(payload.rules[0].action.type, 'enter');
   assert.equal(payload.rules[1].action.size_pct, 0.01);
   assert.deepEqual(payload.rules[2].when, conditions.nested);

@@ -13,6 +13,12 @@ func Normalize(definition Definition) (Definition, error) {
 			definition.Position.PositionLeverage = 1
 		}
 	}
+	if definition.Position.LongCapitalDecayPower == 0 {
+		definition.Position.LongCapitalDecayPower = DefaultCapitalDecayPower
+	}
+	if definition.Position.ShortCapitalDecayPower == 0 {
+		definition.Position.ShortCapitalDecayPower = DefaultCapitalDecayPower
+	}
 	definition.Position.TargetLeverage = 0
 	definition.Position.MaxPositionPct = 0
 	// Exposure caps are legacy configuration. The exchange leverage is the
@@ -23,6 +29,29 @@ func Normalize(definition Definition) (Definition, error) {
 		definition.Behavior.AllowPyramiding = true
 	}
 	definition.Position.AllowPyramiding = false
+	for index := range definition.ExitPolicies {
+		policy := &definition.ExitPolicies[index]
+		if policy.Anchor.Type == "" {
+			policy.Anchor.Type = ExitAnchorAverageEntry
+		}
+		if policy.ClosePct == 0 {
+			policy.ClosePct = 1
+		}
+		if policy.Execution == "" {
+			policy.Execution = ExitExecutionNextOpen
+		}
+		if policy.TriggerPrice == "" {
+			policy.TriggerPrice = defaultExitTriggerPrice(policy.Side, policy.Purpose)
+		}
+		if policy.Distance.Type == ExitDistanceATRMultiple {
+			if policy.Distance.Field == "" {
+				policy.Distance.Field = "value"
+			}
+			if policy.Distance.Sampling == "" {
+				policy.Distance.Sampling = ExitSamplingLive
+			}
+		}
+	}
 
 	for index, rule := range definition.Rules {
 		condition := strings.TrimSpace(rule.Condition)
@@ -59,6 +88,14 @@ func Normalize(definition Definition) (Definition, error) {
 	}
 
 	return definition, nil
+}
+
+func defaultExitTriggerPrice(side TradeSide, purpose ExitPurpose) ExitTriggerPrice {
+	if (side == TradeSideLong && purpose == ExitPurposeTakeProfit) ||
+		(side == TradeSideShort && purpose == ExitPurposeStopLoss) {
+		return ExitTriggerHigh
+	}
+	return ExitTriggerLow
 }
 
 func errRuleConditionConflict(ruleID string) error {

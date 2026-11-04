@@ -10,6 +10,7 @@ type Plan struct {
 	BaseTimeframeMS int64
 	Indicators      []IndicatorPlan
 	Rules           []RulePlan
+	ExitPolicies    []strategy.ExitPolicySpec
 }
 
 type IndicatorPlan struct {

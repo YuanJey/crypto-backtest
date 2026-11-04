@@ -10,7 +10,7 @@
 - **纯原生高性能多视口终端**：原生 HTML5 + Vanilla CSS + 2D Canvas 实现，零外部重型依赖，同屏 2x2 网格分屏（15m/1h/4h/1d），支持 Crosshair 十字光标跨视口联动与平滑拖拽缩放。
 - **动态行情回放系统**：支持播放、暂停、单步步退（←）、单步步进（→）、多档调速（0.5x ~ 20x）与时间轴任意位置拖拽（Scrubbing）。
 - **静态强类型策略编译**：声明式 JSON 策略格式，支持嵌套 `AND/OR/NOT` 逻辑与交叉算子（`cross_up`/`cross_down`），由 Go 编译器在回测前完成静态类型检查与 DAG 构建。
-- **杠杆与分层仓位**：交易所杠杆控制总名义仓位上限，首次开仓杠杆仅计算首单仓位；支持任意精度仓位、固定加仓、倍增加仓和实际杠杆报告。
+- **杠杆、仓位与退出策略**：交易所杠杆控制总名义仓位上限，实际仓位杠杆和资金衰减控制首仓；结构化退出策略支持开仓/加仓快照 ATR、实时 ATR、百分比、固定价差、分批止盈止损及触发价成交。
 - **列式数据流水线**：集成币安 K 线数据下载、清洗去重、按 `exchange/symbol/timeframe` 分区的 Parquet 存储与 `manifest.json` 元数据管理。
 
 ---
@@ -161,3 +161,21 @@ go run ./cmd/backtest -strategy-id ema-boll-rsi -run -data-root data/market
   - 新增回放同步资金曲线，当前权益、收益、回撤和持仓随 15m 驱动时钟逐点更新。
   - 指标和资金数据严格截断到当前回放 Bar，高周期形成中阶段只读取最近已完成周期值。
   - 界面统一为中性深色量化终端风格，压缩结果卡片层级并优化 1080px 与窄屏布局。
+- **回测后资金曲线不刷新修复 (Equity Curve Visibility Fix)**：
+  - 根因：`ReplayEngine.loadData` 默认游标停在索引 80，回测完成后仅 `emitTick()`，资金曲线按游标截断只显示前 81 点；策略预热期（1h EMA60 / 4h RSI14）内无成交，曲线恒为初始资金，表现为“修改策略后曲线不变”。
+  - 修复：回测完成后执行 `replay.pause()` + `replay.seek(末尾)`，完整展示资金曲线与指标，同时保留按回放游标截断的防未来函数语义（拖动进度条或回放仍逐点可见）。
+  - 影响范围：`web/src/app.js`、`README.md`。
+- **资金曲线大样本栈溢出修复 (Equity Curve Stack Overflow Fix)**：
+  - 根因：全量数据集回测（239,800 点）跳至回放末尾后，`Math.min(...equities)` 参数展开超出 V8 参数栈上限，抛出 `Maximum call stack size exceeded`。
+  - `web/src/chart.js`：新增 `finiteExtent` 单次循环求最值，替换副图指标与资金曲线共 4 处展开调用；新增 `downsampleEquityPoints` 按像素桶保留 min/max 与首尾点，绘制点数由 239,800 降至约 1,500，极值与时间顺序无损。
+  - `web/src/app.js`：回测返回后一次性预计算累计峰值 `peakEquity`（`Float64Array`），回放 tick 内回撤计算由 O(n) `slice + reduce` 降为 O(1)。
+  - 验证：ETH 全量回测资金曲线全量/降采样最值一致，计算耗时 79ms。
+  - 影响范围：`web/src/chart.js`、`web/src/app.js`、`README.md`。
+- **资金曲线固定全局时间轴与生长模式 (Equity Curve Growth Mode)**：
+  - 根因：原 X 轴分母使用当前回放点数（`visibleCount - 1`），导致任意时刻折线均被 100% 强行拉伸铺满全屏，单位时间物理像素持续变化，缺乏全局时间参照且纵轴网格缩放晃动。
+  - `web/src/chart.js`：
+    - X 轴坐标映射分母锁定为回测全生命周期总点数 `this.points.length - 1`，画布 100% 对应回测完整起止区间；
+    - 折线随回放平滑向右生长，未走到的未来区间右侧留空；
+    - Y 轴刻度锁定为全周期收益极值 `this.globalExtent`，消除回放中纵轴刻度的频繁跳动；
+    - 当前点附带发光指示标记与垂直指示虚线，底轴呈现起始日期、结束日期与当前时刻标签。
+  - 影响范围：`web/src/chart.js`、`README.md`。

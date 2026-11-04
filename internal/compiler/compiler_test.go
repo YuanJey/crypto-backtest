@@ -70,3 +70,42 @@ func TestCompileOrdersIndicatorsByDependency(t *testing.T) {
 		t.Fatalf("dependency order is invalid: %+v", indexByID)
 	}
 }
+
+func TestCompileOrdersExitPoliciesByPriorityAndConservativeTieBreak(t *testing.T) {
+	raw, err := os.ReadFile("../../strategies/ema-boll-rsi.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition, err := strategy.Decode(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := func(id string, purpose strategy.ExitPurpose, priority int) strategy.ExitPolicySpec {
+		return strategy.ExitPolicySpec{
+			ID:           id,
+			Side:         strategy.TradeSideLong,
+			Purpose:      purpose,
+			Anchor:       strategy.ExitAnchorSpec{Type: strategy.ExitAnchorAverageEntry},
+			Distance:     strategy.ExitDistanceSpec{Type: strategy.ExitDistancePercent, Value: 0.03},
+			TriggerPrice: strategy.ExitTriggerClose,
+			ClosePct:     1,
+			Priority:     priority,
+			Execution:    strategy.ExitExecutionNextOpen,
+		}
+	}
+	definition.ExitPolicies = []strategy.ExitPolicySpec{
+		policy("low_priority", strategy.ExitPurposeStopLoss, 1),
+		policy("take_profit", strategy.ExitPurposeTakeProfit, 10),
+		policy("stop_loss", strategy.ExitPurposeStopLoss, 10),
+	}
+	plan, err := Compile(definition, indicator.MustBuiltinRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
+	wants := []string{"stop_loss", "take_profit", "low_priority"}
+	for index, want := range wants {
+		if plan.ExitPolicies[index].ID != want {
+			t.Fatalf("exit policy %d=%q, want %q", index, plan.ExitPolicies[index].ID, want)
+		}
+	}
+}

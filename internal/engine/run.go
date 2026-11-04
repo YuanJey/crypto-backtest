@@ -54,6 +54,7 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 	}
 
 	portfolio := newPortfolio(plan.Strategy.Account.MarketType, plan.Strategy.Account.InitialCash)
+	exitPolicies := newExitPolicyRuntimes(plan.ExitPolicies)
 	result := Result{}
 	pendingOrderIndexes := make([]int, 0)
 	orderSequence := 0
@@ -75,11 +76,70 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 		)
 		if len(pendingOrderIndexes) > 0 {
 			for _, orderIndex := range pendingOrderIndexes {
+				previousEntryCount := portfolio.entryCount
+				hadPosition := portfolio.quantity != 0
 				if fillOrder(&portfolio, &result, orderIndex, bar, plan, riskHalted) {
 					lastFillBarIndex = index
+					if portfolio.entryCount > previousEntryCount {
+						snapshotExitPolicies(exitPolicies, states, previousEntryCount == 0)
+					}
+					if hadPosition && portfolio.quantity == 0 {
+						resetExitPolicyRuntimes(exitPolicies)
+					}
 				}
 			}
 			pendingOrderIndexes = pendingOrderIndexes[:0]
+		}
+
+		exitHandled := false
+		if candidate := selectExitCandidate(portfolio, bar, exitPolicies, states); candidate != nil {
+			candidate.runtime.fired = true
+			orderSequence++
+			action := strategy.ActionSpec{
+				Type:    strategy.ActionClose,
+				Side:    candidate.runtime.spec.Side,
+				SizePct: candidate.runtime.spec.ClosePct,
+			}
+			result.Orders = append(result.Orders, Order{
+				ID:           fmt.Sprintf("order-%d", orderSequence),
+				RuleID:       candidate.runtime.spec.ID,
+				SignalTimeMS: bar.OpenTimeMS + plan.BaseTimeframeMS,
+				Action:       action,
+				Status:       OrderStatusPending,
+			})
+			orderIndex := len(result.Orders) - 1
+			if candidate.runtime.spec.Execution == strategy.ExitExecutionNextOpen {
+				pendingOrderIndexes = append(pendingOrderIndexes, orderIndex)
+			} else {
+				rawPrice := exitTriggerFillPrice(candidate.runtime.spec, candidate.target, bar)
+				price := fillPrice(rawPrice, action, plan.Strategy.Execution.Slippage)
+				quantity, fee, realized, ok := portfolio.close(
+					action.Side,
+					price,
+					action.SizePct,
+					plan.Strategy.Execution.Fee.TakerRate,
+				)
+				if ok {
+					result.Orders[orderIndex].Status = OrderStatusFilled
+					result.Fills = append(result.Fills, Fill{
+						OrderID:     result.Orders[orderIndex].ID,
+						RuleID:      candidate.runtime.spec.ID,
+						TimeMS:      bar.OpenTimeMS + plan.BaseTimeframeMS,
+						Price:       price,
+						Quantity:    quantity,
+						Fee:         fee,
+						RealizedPNL: realized,
+						Side:        action.Side,
+					})
+					lastFillBarIndex = index
+					if portfolio.quantity == 0 {
+						resetExitPolicyRuntimes(exitPolicies)
+					}
+				} else {
+					result.Orders[orderIndex].Status = OrderStatusSkipped
+				}
+			}
+			exitHandled = true
 		}
 
 		for stateIndex := range states {
@@ -119,6 +179,7 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 				indicatorSeries[state.plan.ID][outputName] = append(indicatorSeries[state.plan.ID][outputName], state.last[outputName])
 			}
 		}
+		portfolio.updateExtremes(bar.High, bar.Low)
 
 		currentEquity := portfolio.equity(bar.Close)
 		if currentEquity > peakEquity {
@@ -134,6 +195,9 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 		cooldownActive := lastFillBarIndex >= 0 &&
 			index-lastFillBarIndex < plan.Strategy.Behavior.CooldownBars
 		for _, rule := range plan.Rules {
+			if exitHandled {
+				break
+			}
 			matched, err := evalBool(rule.When, evalCtx)
 			if err != nil {
 				return Result{}, fmt.Errorf("rule %q: %w", rule.ID, err)
@@ -189,6 +253,7 @@ func fillOrder(portfolio *portfolio, result *Result, orderIndex int, bar market.
 			*portfolio,
 			order.Action,
 			plan.Strategy.Position,
+			plan.Strategy.Account.InitialCash,
 			plan.Strategy.Account.ExchangeLeverage,
 			price,
 		)
@@ -294,6 +359,7 @@ func resolveOpenNotionalPct(
 	portfolio portfolio,
 	action strategy.ActionSpec,
 	position strategy.PositionSpec,
+	initialCash float64,
 	exchangeLeverage float64,
 	price float64,
 ) (float64, bool) {
@@ -339,6 +405,18 @@ func resolveOpenNotionalPct(
 			notionalPct = portfolio.firstNotional / equity
 		}
 	}
+	if portfolio.entryCount == 0 {
+		// Keep the same safety cap as the martingale position sizing model:
+		// a single initial entry cannot exceed the current account equity.
+		if notionalPct > 1 {
+			notionalPct = 1
+		}
+		decayPower := position.LongCapitalDecayPower
+		if action.Side == strategy.TradeSideShort {
+			decayPower = position.ShortCapitalDecayPower
+		}
+		notionalPct *= capitalDecayFactor(initialCash, equity, decayPower)
+	}
 	if notionalPct <= 0 || math.IsNaN(notionalPct) || math.IsInf(notionalPct, 0) {
 		return 0, false
 	}
@@ -352,6 +430,16 @@ func resolveOpenNotionalPct(
 		notionalPct = availableNotional / equity
 	}
 	return notionalPct, notionalPct > 0
+}
+
+func capitalDecayFactor(initialEquity, currentEquity, power float64) float64 {
+	if initialEquity <= 0 || currentEquity <= 0 {
+		return 1
+	}
+	if power <= 0 {
+		power = strategy.DefaultCapitalDecayPower
+	}
+	return math.Min(1, math.Pow(initialEquity/currentEquity, power))
 }
 
 func drawdownHalted(equity, peak, limit float64) bool {

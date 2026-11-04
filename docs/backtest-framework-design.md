@@ -293,7 +293,9 @@ and(position.flat(), ema_fast_15m.gte(ema_slow_1h))
     "exchange_leverage": 10
   },
   "position": {
-    "position_leverage": 5
+    "position_leverage": 5,
+    "long_capital_decay_power": 0.5,
+    "short_capital_decay_power": 0.5
   },
   "behavior": {
     "allow_additions": true
@@ -321,11 +323,61 @@ and(position.flat(), ema_fast_15m.gte(ema_slow_1h))
 新首单和固定比例加仓必须显式声明 `action.size_pct`。倍数加仓使用
 `action.size_multiplier`，它与 `size_pct` 二选一。
 比例字段没有 5% 的业务下限；`0.0025` 表示分配权益的 `0.25%`。
-首次开仓名义金额为 `equity * size_pct * position_leverage`。固定比例加仓不再乘
-`position_leverage`；`current_position_multiple` 以成交前总持仓名义金额为基数，
-`first_entry_geometric` 以本轮首单实际名义金额为基数乘以倍数的加仓次数次方。
-旧固定首仓倍数模式为 `first_entry_multiple`，不计算指数。
+首仓基础名义金额为 `min(equity, equity * size_pct * position_leverage)`。
+随后按方向选择 `long_capital_decay_power` 或 `short_capital_decay_power`，计算
+`decay = min(1, (initial_cash / equity) ^ power)`，实际首仓为基础名义金额乘以
+`decay`。因此盈利后新首仓逐步缩小，亏损时不会反向放大；未配置时幂次默认
+为 `0.5`。固定比例加仓直接按当前权益比例计算，不再乘首单杠杆或衰减系数。
+`current_position_multiple` 以成交前总持仓名义金额为基数；
+`first_entry_geometric` 以本轮首单实际名义金额为基数乘以倍数的加仓次数次方，
+因此会继承首仓杠杆和资金衰减的结果。旧固定首仓倍数模式为
+`first_entry_multiple`，不计算指数。
 总名义仓位只受 `account.exchange_leverage` 限制，实际杠杆仅作为回测结果展示。
+
+结构化止盈止损使用 `exit_policies`，与普通信号规则分离：
+
+```json
+{
+  "exit_policies": [
+    {
+      "id": "long_tp_entry_atr",
+      "side": "long",
+      "purpose": "take_profit",
+      "anchor": { "type": "avg_entry_price" },
+      "distance": {
+        "type": "atr_multiple",
+        "value": 2,
+        "indicator": "atr_15m",
+        "field": "value",
+        "sampling": "entry"
+      },
+      "trigger_price": "high",
+      "close_pct": 1,
+      "priority": 100,
+      "execution": "trigger_price"
+    },
+    {
+      "id": "long_sl_3pct",
+      "side": "long",
+      "purpose": "stop_loss",
+      "anchor": { "type": "avg_entry_price" },
+      "distance": { "type": "percent", "value": 0.03 },
+      "trigger_price": "low",
+      "close_pct": 1,
+      "priority": 200,
+      "execution": "trigger_price"
+    }
+  ]
+}
+```
+
+锚点支持持仓均价、首次开仓价、最后加仓价以及入场后的最高/最低价。距离支持
+`percent`、`atr_multiple` 和 `fixed_amount`。ATR 的 `sampling` 可设为首次开仓
+冻结（`entry`）、每次加仓刷新（`each_entry`）或逐根闭合 K 线刷新（`live`）。
+`live` 在下一根 K 线生效，避免用当前 K 线最终 ATR 反推当前 K 线内的触发结果。
+`next_open` 沿用下一根开盘成交；`trigger_price` 在 OHLC 触及目标时按目标价成交，
+若开盘已越过目标则按开盘跳空价成交。多策略同根触发时优先级数值大的先执行；
+相同优先级默认止损优先于止盈。
 
 当前持仓状态字段：
 

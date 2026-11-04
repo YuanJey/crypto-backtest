@@ -3,6 +3,64 @@
  * Supports Multi-Timeframe, Retina HiDPI, Zoom, Pan, Synchronized Crosshair & Forming State.
  */
 
+// 单次循环求有限值最值，避免 Math.min(...arr) 在大数组上触发参数栈溢出
+function finiteExtent(values) {
+  let min = Infinity;
+  let max = -Infinity;
+  for (let i = 0; i < values.length; i++) {
+    const value = values[i];
+    if (!Number.isFinite(value)) continue;
+    if (value < min) min = value;
+    if (value > max) max = value;
+  }
+  return min <= max ? { min, max } : null;
+}
+
+// 按像素桶保留每桶的最小/最大值（保持时间顺序）及首尾点，曲线形态与极值无损
+function downsampleEquityPoints(points, count, buckets) {
+  const result = [];
+  if (count <= buckets * 2) {
+    for (let i = 0; i < count; i++) {
+      const equity = points[i].equity;
+      if (Number.isFinite(equity)) result.push({ index: i, equity });
+    }
+    return result;
+  }
+
+  const size = count / buckets;
+  for (let bucket = 0; bucket < buckets; bucket++) {
+    const start = Math.floor(bucket * size);
+    const end = Math.min(count, Math.floor((bucket + 1) * size));
+    let minIndex = -1;
+    let maxIndex = -1;
+    for (let i = start; i < end; i++) {
+      const equity = points[i].equity;
+      if (!Number.isFinite(equity)) continue;
+      if (minIndex < 0 || equity < points[minIndex].equity) minIndex = i;
+      if (maxIndex < 0 || equity > points[maxIndex].equity) maxIndex = i;
+    }
+    if (minIndex < 0) continue;
+    if (minIndex === maxIndex) {
+      result.push({ index: minIndex, equity: points[minIndex].equity });
+    } else {
+      const first = Math.min(minIndex, maxIndex);
+      const second = Math.max(minIndex, maxIndex);
+      result.push({ index: first, equity: points[first].equity });
+      result.push({ index: second, equity: points[second].equity });
+    }
+  }
+
+  const head = points[0];
+  if (Number.isFinite(head.equity) && (result.length === 0 || result[0].index !== 0)) {
+    result.unshift({ index: 0, equity: head.equity });
+  }
+  const tail = points[count - 1];
+  if (Number.isFinite(tail.equity) && result[result.length - 1].index !== count - 1) {
+    result.push({ index: count - 1, equity: tail.equity });
+  }
+  return result;
+}
+
 class CandleChart {
   constructor(canvasId, options = {}) {
     this.canvas = document.getElementById(canvasId);
@@ -384,13 +442,11 @@ class CandleChart {
     const oscillatorHeight = Math.max(1, oscillatorBottom - oscillatorTop);
 
     for (const series of oscillatorSeries) {
-      const visibleValues = series.values
-        .slice(startIndex, endIndex)
-        .filter(Number.isFinite);
-      if (visibleValues.length === 0) continue;
+      const extent = finiteExtent(series.values.slice(startIndex, endIndex));
+      if (!extent) continue;
 
-      let minValue = Number.isFinite(series.min) ? series.min : Math.min(...visibleValues);
-      let maxValue = Number.isFinite(series.max) ? series.max : Math.max(...visibleValues);
+      let minValue = Number.isFinite(series.min) ? series.min : extent.min;
+      let maxValue = Number.isFinite(series.max) ? series.max : extent.max;
       if (maxValue === minValue) {
         minValue -= 1;
         maxValue += 1;
@@ -669,6 +725,7 @@ class EquityCurveChart {
 
   setPoints(points, visibleCount = null) {
     this.points = Array.isArray(points) ? points : [];
+    this.globalExtent = finiteExtent(this.points.map(point => point.equity));
     this.visibleCount = visibleCount === null
       ? this.points.length
       : Math.max(0, Math.min(this.points.length, visibleCount));
@@ -685,21 +742,29 @@ class EquityCurveChart {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.width, this.height);
 
-    const points = this.points.slice(0, this.visibleCount);
-    if (points.length === 0) return;
+    const total = Math.min(this.visibleCount, this.points.length);
+    if (total === 0 || this.points.length === 0) return;
 
     const padding = { top: 10, right: 82, bottom: 20, left: 10 };
     const plotWidth = Math.max(1, this.width - padding.left - padding.right);
     const plotHeight = Math.max(1, this.height - padding.top - padding.bottom);
-    const equities = points.map(point => point.equity).filter(Number.isFinite);
-    if (equities.length === 0) return;
 
-    let minEquity = Math.min(...equities);
-    let maxEquity = Math.max(...equities);
+    // X 轴固定映射回测全生命周期 [0, points.length - 1]
+    const maxIndex = Math.max(1, this.points.length - 1);
+    const xFor = index => padding.left + (index / maxIndex) * plotWidth;
+
+    // 当前已回放部分对应的像素宽度进行动态桶降采样
+    const activeWidth = Math.max(1, Math.floor((total / maxIndex) * plotWidth));
+    const points = downsampleEquityPoints(this.points, total, activeWidth);
+    if (points.length === 0) return;
+
+    // Y 轴使用全局锁定极值，避免回放中纵轴刻度上下跳动
+    const extent = this.globalExtent || finiteExtent(points.map(point => point.equity));
+    let minEquity = extent ? extent.min : 0;
+    let maxEquity = extent ? extent.max : 10000;
     const range = maxEquity - minEquity || Math.max(1, Math.abs(maxEquity) * 0.01);
     minEquity -= range * 0.12;
     maxEquity += range * 0.12;
-    const xFor = index => padding.left + (index / Math.max(1, points.length - 1)) * plotWidth;
     const yFor = value => padding.top + (1 - (value - minEquity) / (maxEquity - minEquity)) * plotHeight;
 
     ctx.save();
@@ -722,45 +787,84 @@ class EquityCurveChart {
     const finalEquity = points[points.length - 1].equity;
     const positive = finalEquity >= initialEquity;
     const lineColor = positive ? '#2ad3a3' : '#ff6278';
+    const tracePath = () => {
+      points.forEach((point, order) => {
+        const x = xFor(point.index);
+        const y = yFor(point.equity);
+        if (order === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+    };
+    const firstX = xFor(points[0].index);
+    const lastX = xFor(points[points.length - 1].index);
 
+    // 半透明面积填充：从折线向下垂直闭合到底部
     ctx.beginPath();
-    points.forEach((point, index) => {
-      const x = xFor(index);
-      const y = yFor(point.equity);
-      if (index === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.lineTo(xFor(points.length - 1), padding.top + plotHeight);
-    ctx.lineTo(xFor(0), padding.top + plotHeight);
+    tracePath();
+    ctx.lineTo(lastX, padding.top + plotHeight);
+    ctx.lineTo(firstX, padding.top + plotHeight);
     ctx.closePath();
     ctx.fillStyle = positive ? 'rgba(42, 211, 163, 0.09)' : 'rgba(255, 98, 120, 0.09)';
     ctx.fill();
 
+    // 实体折线
     ctx.beginPath();
-    points.forEach((point, index) => {
-      const x = xFor(index);
-      const y = yFor(point.equity);
-      if (index === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
+    tracePath();
     ctx.strokeStyle = lineColor;
     ctx.lineWidth = 1.6;
     ctx.lineJoin = 'round';
     ctx.stroke();
 
-    const lastX = xFor(points.length - 1);
+    // 若当前未回放到末尾，绘制当前生长末端的垂直游标指示虚线
+    if (total < this.points.length) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.moveTo(lastX, padding.top);
+      ctx.lineTo(lastX, padding.top + plotHeight);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 当前最新点高亮外晕与实心圆点
     const lastY = yFor(finalEquity);
     ctx.beginPath();
-    ctx.arc(lastX, lastY, 3, 0, Math.PI * 2);
+    ctx.arc(lastX, lastY, 5, 0, Math.PI * 2);
+    ctx.fillStyle = positive ? 'rgba(42, 211, 163, 0.25)' : 'rgba(255, 98, 120, 0.25)';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, 2.5, 0, Math.PI * 2);
     ctx.fillStyle = lineColor;
     ctx.fill();
 
-    const lastPoint = points[points.length - 1];
-    const timeLabel = new Date(lastPoint.time_ms).toISOString().substring(5, 16).replace('T', ' ');
+    // 底部时间轴指示：起止时间与当前时点
     ctx.fillStyle = '#64748b';
-    ctx.textAlign = 'right';
     ctx.textBaseline = 'bottom';
-    ctx.fillText(timeLabel, this.width - padding.right, this.height - 3);
+
+    const startPoint = this.points[0];
+    if (startPoint && startPoint.time_ms) {
+      const startTimeStr = new Date(startPoint.time_ms).toISOString().substring(5, 10);
+      ctx.textAlign = 'left';
+      ctx.fillText(startTimeStr, padding.left, this.height - 3);
+    }
+
+    const endPoint = this.points[this.points.length - 1];
+    if (endPoint && endPoint.time_ms) {
+      const endTimeStr = new Date(endPoint.time_ms).toISOString().substring(5, 10);
+      ctx.textAlign = 'right';
+      ctx.fillText(endTimeStr, this.width - padding.right, this.height - 3);
+    }
+
+    const lastPoint = this.points[points[points.length - 1].index];
+    if (lastPoint && lastPoint.time_ms && total < this.points.length) {
+      const curTimeStr = new Date(lastPoint.time_ms).toISOString().substring(5, 16).replace('T', ' ');
+      ctx.textAlign = 'center';
+      const safeLabelX = Math.max(padding.left + 50, Math.min(this.width - padding.right - 50, lastX));
+      ctx.fillText(curTimeStr, safeLabelX, this.height - 3);
+    }
+
     ctx.restore();
   }
 }

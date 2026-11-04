@@ -1301,6 +1301,10 @@ kbd {
   gap: 12px;
 }
 
+.visual-grid-cards--compact {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 380px));
+}
+
 .visual-card {
   padding: 12px 14px;
   background: var(--bg-card);
@@ -1432,6 +1436,30 @@ kbd {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.exit-policies-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.exit-policy-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 12px;
+}
+
+.exit-enabled-control {
+  min-height: auto;
+}
+
+.empty-state-hint {
+  padding: 18px;
+  border: 1px dashed var(--border-subtle);
+  border-radius: 6px;
+  color: var(--color-text-dim);
+  text-align: center;
 }
 
 .rule-block-card {

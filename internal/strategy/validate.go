@@ -50,7 +50,86 @@ func Validate(definition Definition, registry *indicator.Registry) error {
 	if err != nil {
 		return err
 	}
+	if err := validateExitPolicies(definition.ExitPolicies, indicatorOutputs, definition.Account.MarketType); err != nil {
+		return err
+	}
 	return validateRules(definition.Rules, indicatorOutputs, definition.Account.MarketType, definition.Position)
+}
+
+func validateExitPolicies(policies []ExitPolicySpec, outputs indicatorOutputs, marketType MarketType) error {
+	ids := map[string]struct{}{}
+	for _, policy := range policies {
+		if strings.TrimSpace(policy.ID) == "" {
+			return fmt.Errorf("exit policy id is required")
+		}
+		if _, exists := ids[policy.ID]; exists {
+			return fmt.Errorf("duplicate exit policy id %q", policy.ID)
+		}
+		ids[policy.ID] = struct{}{}
+		if policy.Disabled {
+			continue
+		}
+		switch policy.Side {
+		case TradeSideLong:
+		case TradeSideShort:
+			if marketType == MarketTypeSpot {
+				return fmt.Errorf("exit policy %q: short side requires perpetual market", policy.ID)
+			}
+		default:
+			return fmt.Errorf("exit policy %q: side must be long or short", policy.ID)
+		}
+		if policy.Purpose != ExitPurposeTakeProfit && policy.Purpose != ExitPurposeStopLoss {
+			return fmt.Errorf("exit policy %q: purpose must be take_profit or stop_loss", policy.ID)
+		}
+		switch policy.Anchor.Type {
+		case ExitAnchorAverageEntry, ExitAnchorFirstEntry, ExitAnchorLastEntry,
+			ExitAnchorHighestSinceEntry, ExitAnchorLowestSinceEntry:
+		default:
+			return fmt.Errorf("exit policy %q: invalid anchor type %q", policy.ID, policy.Anchor.Type)
+		}
+		if !isFinite(policy.Distance.Value) || policy.Distance.Value <= 0 {
+			return fmt.Errorf("exit policy %q: distance.value must be finite and > 0", policy.ID)
+		}
+		switch policy.Distance.Type {
+		case ExitDistancePercent, ExitDistanceFixedAmount:
+			if policy.Distance.Indicator != "" || policy.Distance.Field != "" || policy.Distance.Sampling != "" {
+				return fmt.Errorf("exit policy %q: non-ATR distance cannot configure indicator sampling", policy.ID)
+			}
+		case ExitDistanceATRMultiple:
+			fields, ok := outputs[policy.Distance.Indicator]
+			if !ok {
+				return fmt.Errorf("exit policy %q: unknown ATR indicator %q", policy.ID, policy.Distance.Indicator)
+			}
+			output, ok := fields[policy.Distance.Field]
+			if !ok {
+				return fmt.Errorf("exit policy %q: indicator %q has no field %q", policy.ID, policy.Distance.Indicator, policy.Distance.Field)
+			}
+			if output.Semantic != indicator.OutputSemanticVolatility {
+				return fmt.Errorf("exit policy %q: ATR distance requires a volatility output", policy.ID)
+			}
+			switch policy.Distance.Sampling {
+			case ExitSamplingEntry, ExitSamplingEachEntry, ExitSamplingLive:
+			default:
+				return fmt.Errorf("exit policy %q: invalid ATR sampling %q", policy.ID, policy.Distance.Sampling)
+			}
+		default:
+			return fmt.Errorf("exit policy %q: invalid distance type %q", policy.ID, policy.Distance.Type)
+		}
+		switch policy.TriggerPrice {
+		case ExitTriggerClose, ExitTriggerHigh, ExitTriggerLow:
+		default:
+			return fmt.Errorf("exit policy %q: invalid trigger price %q", policy.ID, policy.TriggerPrice)
+		}
+		if !isFinite(policy.ClosePct) || policy.ClosePct <= 0 || policy.ClosePct > 1 {
+			return fmt.Errorf("exit policy %q: close_pct must be finite and in (0, 1]", policy.ID)
+		}
+		switch policy.Execution {
+		case ExitExecutionNextOpen, ExitExecutionTriggerPrice:
+		default:
+			return fmt.Errorf("exit policy %q: invalid execution %q", policy.ID, policy.Execution)
+		}
+	}
+	return nil
 }
 
 func validateData(data DataSelection) error {
@@ -119,10 +198,12 @@ func validateBehavior(behavior BehaviorSpec) error {
 
 func validatePosition(position PositionSpec, behavior BehaviorSpec, account AccountSpec) error {
 	for field, value := range map[string]float64{
-		"initial_size_pct":    position.InitialSizePct,
-		"add_size_pct":        position.AddSizePct,
-		"add_size_multiplier": position.AddSizeMultiplier,
-		"position_leverage":   position.PositionLeverage,
+		"initial_size_pct":          position.InitialSizePct,
+		"add_size_pct":              position.AddSizePct,
+		"add_size_multiplier":       position.AddSizeMultiplier,
+		"position_leverage":         position.PositionLeverage,
+		"long_capital_decay_power":  position.LongCapitalDecayPower,
+		"short_capital_decay_power": position.ShortCapitalDecayPower,
 	} {
 		if !isFinite(value) {
 			return fmt.Errorf("position.%s must be finite", field)
@@ -145,6 +226,12 @@ func validatePosition(position PositionSpec, behavior BehaviorSpec, account Acco
 		return fmt.Errorf(
 			"position.position_leverage must be finite and in [1, account.exchange_leverage]",
 		)
+	}
+	if position.LongCapitalDecayPower <= 0 {
+		return fmt.Errorf("position.long_capital_decay_power must be finite and > 0")
+	}
+	if position.ShortCapitalDecayPower <= 0 {
+		return fmt.Errorf("position.short_capital_decay_power must be finite and > 0")
 	}
 	if position.MaxAdditions > 0 && behavior.AllowAdditions == nil && !behavior.AllowPyramiding {
 		return fmt.Errorf("position.max_additions requires behavior.allow_pyramiding=true")
@@ -681,6 +768,21 @@ func referenceDomain(expression Expression, outputs indicatorOutputs) string {
 			return "volatility"
 		case indicator.OutputSemanticTrendDirection:
 			return "trend_direction"
+		}
+	case ValueScopePosition:
+		switch ref.Field {
+		case "entry_price", "avg_entry_price", "last_entry_price":
+			return "price"
+		case "quantity", "abs_quantity":
+			return "quantity"
+		case "entry_count":
+			return "count"
+		case "unrealized_pnl_pct":
+			return "ratio"
+		case "side":
+			return "side"
+		case "actual_leverage":
+			return "leverage"
 		}
 	}
 	return ""

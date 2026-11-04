@@ -81,8 +81,26 @@ class StrategyWorkbench {
               </div>
 
               <div class="visual-section">
-                <h3 class="section-heading">杠杆设置 (LEVERAGE)</h3>
+                <h3 class="section-heading">杠杆管理 (LEVERAGE)</h3>
+                <div class="visual-grid-cards visual-grid-cards--compact" id="leverageCards">
+                  <!-- 动态插入 -->
+                </div>
+              </div>
+
+              <div class="visual-section">
+                <h3 class="section-heading">首仓资金衰减 (CAPITAL DECAY)</h3>
                 <div class="visual-grid-cards" id="positionCards">
+                  <!-- 动态插入 -->
+                </div>
+              </div>
+
+              <div class="visual-section">
+                <div class="section-heading-row">
+                  <h3 class="section-heading">止盈止损策略 (EXIT POLICIES)</h3>
+                  <span class="section-badge" id="exitPolicyCountBadge">0 个</span>
+                  <button class="btn btn-primary-sm" id="btnAddExitPolicy" style="margin-left: auto;">+ 添加退出策略</button>
+                </div>
+                <div class="exit-policies-container" id="exitPoliciesCards">
                   <!-- 动态插入 -->
                 </div>
               </div>
@@ -143,6 +161,7 @@ class StrategyWorkbench {
     const btnFormat = document.getElementById('btnFormatJson');
     const btnAddIndicator = document.getElementById('btnAddIndicator');
     const btnAddRule = document.getElementById('btnAddRule');
+    const btnAddExitPolicy = document.getElementById('btnAddExitPolicy');
 
     btnNew.addEventListener('click', () => this.createNewStrategy());
     if (btnAddIndicator) btnAddIndicator.addEventListener('click', () => this.showIndicatorModal());
@@ -154,6 +173,7 @@ class StrategyWorkbench {
       this.renderRulesEditor(this.currentStrategy);
       this.syncToJson();
     });
+    if (btnAddExitPolicy) btnAddExitPolicy.addEventListener('click', () => this.addExitPolicy());
 
     btnModeVisual.addEventListener('click', () => this.switchMode('visual'));
     btnModeJson.addEventListener('click', () => this.switchMode('json'));
@@ -332,6 +352,7 @@ class StrategyWorkbench {
       return;
     }
     this.renderOverviewForm(def);
+    this.renderExitPoliciesSection(def);
     this.renderIndicatorsSection(def);
     this.renderRulesEditor(def);
   }
@@ -353,6 +374,16 @@ class StrategyWorkbench {
     }
     if (position.position_leverage === undefined || position.position_leverage === null) {
       position.position_leverage = position.target_leverage ?? 1;
+    }
+    if (position.long_capital_decay_power === undefined ||
+        position.long_capital_decay_power === null ||
+        position.long_capital_decay_power === 0) {
+      position.long_capital_decay_power = 0.5;
+    }
+    if (position.short_capital_decay_power === undefined ||
+        position.short_capital_decay_power === null ||
+        position.short_capital_decay_power === 0) {
+      position.short_capital_decay_power = 0.5;
     }
     if (account.market_type === 'spot') {
       account.exchange_leverage = 1;
@@ -455,6 +486,7 @@ class StrategyWorkbench {
     document.getElementById('viewStrategyDesc').textContent = def.description || '无策略描述说明';
 
     const overview = document.getElementById('overviewCards');
+    const leverageCards = document.getElementById('leverageCards');
     const positionCards = document.getElementById('positionCards');
     const acc = def.account || (def.account = {});
     const data = def.data || {};
@@ -483,7 +515,7 @@ class StrategyWorkbench {
         <input type="text" class="form-control" id="formSymbols" value="${(data.symbols || ['BTC-USDT']).join(', ')}">
       </div>
     `;
-    positionCards.innerHTML = `
+    leverageCards.innerHTML = `
       <div class="visual-card">
         <label class="vcard-label">交易所配置杠杆</label>
         <div class="input-with-unit">
@@ -499,6 +531,18 @@ class StrategyWorkbench {
             value="${positionLeverage}" min="1" max="${exchangeLeverage}" step="0.1" ${isSpot ? 'disabled' : ''}>
           <span class="input-unit">x</span>
         </div>
+      </div>
+    `;
+    positionCards.innerHTML = `
+      <div class="visual-card">
+        <label class="vcard-label">做多资金衰减系数</label>
+        <input type="number" class="form-control" id="formLongCapitalDecayPower"
+          value="${position.long_capital_decay_power}" min="0.01" step="0.05">
+      </div>
+      <div class="visual-card">
+        <label class="vcard-label">做空资金衰减系数</label>
+        <input type="number" class="form-control" id="formShortCapitalDecayPower"
+          value="${position.short_capital_decay_power}" min="0.01" step="0.05">
       </div>
     `;
 
@@ -547,6 +591,268 @@ class StrategyWorkbench {
       );
       this.syncToJson();
     });
+    document.getElementById('formLongCapitalDecayPower').addEventListener('change', () => {
+      def.position.long_capital_decay_power = Math.max(
+        0.01,
+        parseNumber('formLongCapitalDecayPower', 0.5),
+      );
+      this.syncToJson();
+    });
+    document.getElementById('formShortCapitalDecayPower').addEventListener('change', () => {
+      def.position.short_capital_decay_power = Math.max(
+        0.01,
+        parseNumber('formShortCapitalDecayPower', 0.5),
+      );
+      this.syncToJson();
+    });
+  }
+
+  getVolatilityOperands() {
+    const items = [];
+    const indicators = (this.currentStrategy && this.currentStrategy.indicators) || [];
+    for (const ind of indicators) {
+      const definition = this.catalog.find(item => item.type === ind.type);
+      const outputs = definition?.outputs || (ind.type === 'atr' ? [{ name: 'value', semantic: 'volatility_series' }] : []);
+      for (const output of outputs) {
+        if (output.semantic !== 'volatility_series') continue;
+        items.push({
+          value: `${ind.id}:${output.name}`,
+          label: `${definition?.label || ind.type.toUpperCase()}: ${ind.id}.${output.name}`,
+          indicator: ind.id,
+          field: output.name,
+        });
+      }
+    }
+    return items;
+  }
+
+  defaultExitTrigger(side, purpose) {
+    return (side === 'long' && purpose === 'take_profit') ||
+      (side === 'short' && purpose === 'stop_loss') ? 'high' : 'low';
+  }
+
+  normalizeExitPolicy(policy) {
+    policy.anchor = policy.anchor || { type: 'avg_entry_price' };
+    policy.anchor.type = policy.anchor.type || 'avg_entry_price';
+    policy.distance = policy.distance || { type: 'percent', value: 0.03 };
+    policy.distance.type = policy.distance.type || 'percent';
+    policy.distance.value = Number(policy.distance.value) || (policy.distance.type === 'percent' ? 0.03 : 2);
+    policy.side = policy.side || 'long';
+    policy.purpose = policy.purpose || 'take_profit';
+    policy.trigger_price = policy.trigger_price || this.defaultExitTrigger(policy.side, policy.purpose);
+    policy.close_pct = Number(policy.close_pct) || 1;
+    policy.execution = policy.execution || 'next_open';
+    policy.priority = Number(policy.priority) || 0;
+    if (policy.distance.type === 'atr_multiple') {
+      policy.distance.field = policy.distance.field || 'value';
+      policy.distance.sampling = policy.distance.sampling || 'live';
+    } else {
+      delete policy.distance.indicator;
+      delete policy.distance.field;
+      delete policy.distance.sampling;
+    }
+    return policy;
+  }
+
+  renderExitPoliciesSection(def) {
+    const container = document.getElementById('exitPoliciesCards');
+    if (!container) return;
+    const policies = def.exit_policies || (def.exit_policies = []);
+    const volatilityOperands = this.getVolatilityOperands();
+    document.getElementById('exitPolicyCountBadge').textContent = `${policies.length} 个`;
+
+    if (policies.length === 0) {
+      container.innerHTML = '<div class="empty-state-hint">暂无退出策略，可添加 ATR、百分比或固定价差止盈止损。</div>';
+      return;
+    }
+
+    container.innerHTML = policies.map((rawPolicy, index) => {
+      const policy = this.normalizeExitPolicy(rawPolicy);
+      const isATR = policy.distance.type === 'atr_multiple';
+      const selectedIndicator = `${policy.distance.indicator || ''}:${policy.distance.field || 'value'}`;
+      const indicatorExists = volatilityOperands.some(item => item.value === selectedIndicator);
+      const indicatorOptions = [
+        ...(!indicatorExists && policy.distance.indicator ? [{
+          value: selectedIndicator,
+          label: `缺失指标: ${policy.distance.indicator}.${policy.distance.field || 'value'}`,
+        }] : []),
+        ...volatilityOperands,
+      ];
+      return `
+        <div class="rule-card-editor exit-policy-card" data-exit-idx="${index}">
+          <div class="rule-top-bar">
+            <div class="rule-top-inputs">
+              <span class="panel-sub-label">策略ID:</span>
+              <input type="text" class="form-control exit-policy-field" data-exit-idx="${index}" data-exit-field="id" value="${policy.id || ''}">
+              <label class="binary-control exit-enabled-control">
+                <input type="checkbox" class="exit-policy-field" data-exit-idx="${index}" data-exit-field="enabled" ${policy.disabled ? '' : 'checked'}>
+                <span>${policy.disabled ? '已停用' : '已启用'}</span>
+              </label>
+            </div>
+            <button class="btn-xs btn-danger btn-del-exit-policy" data-exit-idx="${index}">✕ 删除策略</button>
+          </div>
+          <div class="exit-policy-grid">
+            <div class="form-group">
+              <label class="form-label">持仓方向</label>
+              <select class="form-select exit-policy-field" data-exit-idx="${index}" data-exit-field="side">
+                <option value="long" ${policy.side === 'long' ? 'selected' : ''}>多头</option>
+                <option value="short" ${policy.side === 'short' ? 'selected' : ''}>空头</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">用途</label>
+              <select class="form-select exit-policy-field" data-exit-idx="${index}" data-exit-field="purpose">
+                <option value="take_profit" ${policy.purpose === 'take_profit' ? 'selected' : ''}>止盈</option>
+                <option value="stop_loss" ${policy.purpose === 'stop_loss' ? 'selected' : ''}>止损</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">价格锚点</label>
+              <select class="form-select exit-policy-field" data-exit-idx="${index}" data-exit-field="anchor">
+                <option value="avg_entry_price" ${policy.anchor.type === 'avg_entry_price' ? 'selected' : ''}>持仓均价</option>
+                <option value="first_entry_price" ${policy.anchor.type === 'first_entry_price' ? 'selected' : ''}>首次开仓价</option>
+                <option value="last_entry_price" ${policy.anchor.type === 'last_entry_price' ? 'selected' : ''}>最后加仓价</option>
+                <option value="highest_since_entry" ${policy.anchor.type === 'highest_since_entry' ? 'selected' : ''}>入场后最高价</option>
+                <option value="lowest_since_entry" ${policy.anchor.type === 'lowest_since_entry' ? 'selected' : ''}>入场后最低价</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">距离类型</label>
+              <select class="form-select exit-policy-field" data-exit-idx="${index}" data-exit-field="distance_type">
+                <option value="percent" ${policy.distance.type === 'percent' ? 'selected' : ''}>百分比</option>
+                <option value="atr_multiple" ${isATR ? 'selected' : ''}>ATR 倍数</option>
+                <option value="fixed_amount" ${policy.distance.type === 'fixed_amount' ? 'selected' : ''}>固定价差</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">${policy.distance.type === 'percent' ? '距离（0.03 = 3%）' : isATR ? 'ATR 倍数' : '价格距离'}</label>
+              <input type="number" class="form-control exit-policy-field" data-exit-idx="${index}" data-exit-field="distance_value"
+                value="${policy.distance.value}" min="0.000001" step="any">
+            </div>
+            <div class="form-group">
+              <label class="form-label">波动率指标</label>
+              <select class="form-select exit-policy-field" data-exit-idx="${index}" data-exit-field="indicator" ${isATR ? '' : 'disabled'}>
+                ${indicatorOptions.length > 0
+                  ? indicatorOptions.map(item => `<option value="${item.value}" ${item.value === selectedIndicator ? 'selected' : ''}>${item.label}</option>`).join('')
+                  : '<option value=":value">请先添加 ATR 指标</option>'}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">ATR 采样方式</label>
+              <select class="form-select exit-policy-field" data-exit-idx="${index}" data-exit-field="sampling" ${isATR ? '' : 'disabled'}>
+                <option value="entry" ${policy.distance.sampling === 'entry' ? 'selected' : ''}>首次开仓时冻结</option>
+                <option value="each_entry" ${policy.distance.sampling === 'each_entry' ? 'selected' : ''}>每次加仓后刷新</option>
+                <option value="live" ${policy.distance.sampling === 'live' ? 'selected' : ''}>逐 K 更新（下一根生效）</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">触发价格</label>
+              <select class="form-select exit-policy-field" data-exit-idx="${index}" data-exit-field="trigger_price">
+                <option value="high" ${policy.trigger_price === 'high' ? 'selected' : ''}>最高价</option>
+                <option value="low" ${policy.trigger_price === 'low' ? 'selected' : ''}>最低价</option>
+                <option value="close" ${policy.trigger_price === 'close' ? 'selected' : ''}>收盘价</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">成交方式</label>
+              <select class="form-select exit-policy-field" data-exit-idx="${index}" data-exit-field="execution">
+                <option value="next_open" ${policy.execution === 'next_open' ? 'selected' : ''}>下一根开盘</option>
+                <option value="trigger_price" ${policy.execution === 'trigger_price' ? 'selected' : ''}>触发价 / 跳空价</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">平仓比例（%）</label>
+              <input type="number" class="form-control exit-policy-field" data-exit-idx="${index}" data-exit-field="close_pct"
+                value="${Number(policy.close_pct * 100).toFixed(4)}" min="0.0001" max="100" step="any">
+            </div>
+            <div class="form-group">
+              <label class="form-label">优先级</label>
+              <input type="number" class="form-control exit-policy-field" data-exit-idx="${index}" data-exit-field="priority"
+                value="${policy.priority}" step="1">
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    container.querySelectorAll('.exit-policy-field').forEach(field => {
+      field.addEventListener('change', () => {
+        const index = parseInt(field.dataset.exitIdx, 10);
+        const policy = policies[index];
+        const key = field.dataset.exitField;
+        if (!policy) return;
+        switch (key) {
+          case 'id': policy.id = field.value.trim(); break;
+          case 'enabled': policy.disabled = !field.checked; break;
+          case 'side':
+          case 'purpose':
+            policy[key] = field.value;
+            policy.trigger_price = this.defaultExitTrigger(policy.side, policy.purpose);
+            break;
+          case 'anchor': policy.anchor.type = field.value; break;
+          case 'distance_type': {
+            policy.distance.type = field.value;
+            policy.distance.value = field.value === 'percent' ? 0.03 : field.value === 'atr_multiple' ? 2 : 100;
+            if (field.value === 'atr_multiple') {
+              const first = volatilityOperands[0];
+              policy.distance.indicator = first?.indicator || '';
+              policy.distance.field = first?.field || 'value';
+              policy.distance.sampling = 'live';
+            } else {
+              delete policy.distance.indicator;
+              delete policy.distance.field;
+              delete policy.distance.sampling;
+            }
+            break;
+          }
+          case 'distance_value': policy.distance.value = Math.max(0.000001, Number(field.value) || 0); break;
+          case 'indicator': {
+            const [indicator, outputField] = field.value.split(':');
+            policy.distance.indicator = indicator;
+            policy.distance.field = outputField || 'value';
+            break;
+          }
+          case 'sampling': policy.distance.sampling = field.value; break;
+          case 'trigger_price': policy.trigger_price = field.value; break;
+          case 'execution': policy.execution = field.value; break;
+          case 'close_pct': policy.close_pct = Math.min(100, Math.max(0.0001, Number(field.value) || 0)) / 100; break;
+          case 'priority': policy.priority = Math.trunc(Number(field.value) || 0); break;
+        }
+        this.renderExitPoliciesSection(def);
+        this.syncToJson();
+      });
+    });
+    container.querySelectorAll('.btn-del-exit-policy').forEach(button => {
+      button.addEventListener('click', () => {
+        const index = parseInt(button.dataset.exitIdx, 10);
+        policies.splice(index, 1);
+        this.renderExitPoliciesSection(def);
+        this.syncToJson();
+      });
+    });
+  }
+
+  addExitPolicy() {
+    if (!this.currentStrategy) return;
+    const policies = this.currentStrategy.exit_policies || (this.currentStrategy.exit_policies = []);
+    const volatility = this.getVolatilityOperands()[0];
+    const useATR = Boolean(volatility);
+    const sequence = policies.length + 1;
+    policies.push({
+      id: `exit_${sequence}`,
+      side: 'long',
+      purpose: 'take_profit',
+      anchor: { type: 'avg_entry_price' },
+      distance: useATR
+        ? { type: 'atr_multiple', value: 2, indicator: volatility.indicator, field: volatility.field, sampling: 'live' }
+        : { type: 'percent', value: 0.03 },
+      trigger_price: 'high',
+      close_pct: 1,
+      priority: 0,
+      execution: 'next_open',
+    });
+    this.renderExitPoliciesSection(this.currentStrategy);
+    this.syncToJson();
   }
 
   renderIndicatorsSection(def) {
@@ -757,6 +1063,11 @@ class StrategyWorkbench {
       { label: '行情: 最高价 (high)', value: 'market:high', semantic: 'price_series', domain: 'price' },
       { label: '行情: 最低价 (low)', value: 'market:low', semantic: 'price_series', domain: 'price' },
       { label: '行情: 成交量 (volume)', value: 'market:volume', semantic: 'volume_series', domain: 'volume' },
+      { label: '持仓: 持仓均价', value: 'position:avg_entry_price', semantic: 'position_price', domain: 'price' },
+      { label: '持仓: 最新开仓/加仓价', value: 'position:last_entry_price', semantic: 'position_price', domain: 'price' },
+      { label: '持仓: 未实现盈亏率 (0.02 = 2%)', value: 'position:unrealized_pnl_pct', semantic: 'position_ratio', domain: 'ratio' },
+      { label: '持仓: 开仓次数', value: 'position:entry_count', semantic: 'position_count', domain: 'count' },
+      { label: '持仓: 当前实际杠杆', value: 'position:actual_leverage', semantic: 'position_leverage', domain: 'leverage' },
     ];
     const indicators = (this.currentStrategy && this.currentStrategy.indicators) || [];
     for (const ind of indicators) {
@@ -1195,8 +1506,8 @@ class StrategyWorkbench {
             </select>
           `}
           ${isCross ? '<span class="operand-kind-label">同类指标</span>' : isSemantic ? '' : `
-            <button class="btn-toggle-operand" data-ridx="${rIdx}" data-cidx="${cIdx}" title="切换右操作数模式 (常数/序列)">
-              ${isNum ? '常数' : '序列'}
+            <button class="btn-toggle-operand" data-ridx="${rIdx}" data-cidx="${cIdx}" title="切换右操作数模式 (常数/变量)">
+              ${isNum ? '常数' : '变量'}
             </button>
           `}
         </div>
@@ -1843,8 +2154,11 @@ class StrategyWorkbench {
         cooldown_bars: 0
       },
       position: {
-        position_leverage: 1
+        position_leverage: 1,
+        long_capital_decay_power: 0.5,
+        short_capital_decay_power: 0.5
       },
+      exit_policies: [],
       execution: {
         signal_time: 'bar_close',
         market_fill_time: 'next_bar_open',

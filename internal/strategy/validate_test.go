@@ -2,6 +2,7 @@ package strategy
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
 
 	"github.com/YuanJey/crypto-backtest/internal/indicator"
@@ -76,6 +77,82 @@ func TestValidateRejectsExpressionTypeMismatch(t *testing.T) {
 	}}
 	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
 		t.Fatal("expected boolean operand in numeric comparison to fail")
+	}
+}
+
+func TestValidateAcceptsMarketPriceComparedWithAverageEntryPrice(t *testing.T) {
+	definition := validDefinition()
+	definition.Rules = []RuleSpec{{
+		ID:     "close_above_average_entry",
+		When:   Market("close").GTE(Position("avg_entry_price")),
+		Action: ActionSpec{Type: ActionClose, Side: TradeSideLong, SizePct: 1},
+	}}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err != nil {
+		t.Fatalf("expected market price and average entry price comparison to pass: %v", err)
+	}
+}
+
+func TestValidateRejectsMarketPriceComparedWithPositionRatio(t *testing.T) {
+	definition := validDefinition()
+	definition.Rules = []RuleSpec{{
+		ID:     "invalid_price_ratio_comparison",
+		When:   Market("close").GTE(Position("unrealized_pnl_pct")),
+		Action: ActionSpec{Type: ActionClose, Side: TradeSideLong, SizePct: 1},
+	}}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected price and position ratio comparison to fail")
+	}
+}
+
+func TestValidateAcceptsATRExitPolicy(t *testing.T) {
+	definition := validDefinition()
+	definition.Indicators = append(definition.Indicators, IndicatorSpec{
+		ID:     "atr_15m",
+		Type:   "atr",
+		Inputs: []ValueRef{{Scope: ValueScopeMarket, Name: "bar", Field: "high"}, {Scope: ValueScopeMarket, Name: "bar", Field: "low"}, {Scope: ValueScopeMarket, Name: "bar", Field: "close"}},
+		Params: json.RawMessage(`{"period":14}`),
+	})
+	definition.ExitPolicies = []ExitPolicySpec{{
+		ID:      "long_tp_atr",
+		Side:    TradeSideLong,
+		Purpose: ExitPurposeTakeProfit,
+		Anchor:  ExitAnchorSpec{Type: ExitAnchorAverageEntry},
+		Distance: ExitDistanceSpec{
+			Type:      ExitDistanceATRMultiple,
+			Value:     2,
+			Indicator: "atr_15m",
+			Field:     "value",
+			Sampling:  ExitSamplingEntry,
+		},
+		TriggerPrice: ExitTriggerHigh,
+		ClosePct:     1,
+		Execution:    ExitExecutionTriggerPrice,
+	}}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err != nil {
+		t.Fatalf("expected ATR exit policy to pass: %v", err)
+	}
+}
+
+func TestValidateRejectsATRExitPolicyWithNonVolatilityIndicator(t *testing.T) {
+	definition := validDefinition()
+	definition.ExitPolicies = []ExitPolicySpec{{
+		ID:      "invalid_atr_source",
+		Side:    TradeSideLong,
+		Purpose: ExitPurposeTakeProfit,
+		Anchor:  ExitAnchorSpec{Type: ExitAnchorAverageEntry},
+		Distance: ExitDistanceSpec{
+			Type:      ExitDistanceATRMultiple,
+			Value:     2,
+			Indicator: "ema_fast",
+			Field:     "value",
+			Sampling:  ExitSamplingLive,
+		},
+		TriggerPrice: ExitTriggerHigh,
+		ClosePct:     1,
+		Execution:    ExitExecutionNextOpen,
+	}}
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected non-volatility ATR source to fail")
 	}
 }
 
@@ -307,6 +384,53 @@ func TestNormalizeDefaultsLeverageToOne(t *testing.T) {
 			normalized.Account.ExchangeLeverage,
 			normalized.Position.PositionLeverage,
 		)
+	}
+}
+
+func TestNormalizeDefaultsCapitalDecayPower(t *testing.T) {
+	definition := validDefinition()
+	normalized, err := Normalize(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if normalized.Position.LongCapitalDecayPower != DefaultCapitalDecayPower ||
+		normalized.Position.ShortCapitalDecayPower != DefaultCapitalDecayPower {
+		t.Fatalf("unexpected capital decay defaults: %+v", normalized.Position)
+	}
+}
+
+func TestNormalizeDefaultsExitPolicy(t *testing.T) {
+	definition := validDefinition()
+	definition.ExitPolicies = []ExitPolicySpec{{
+		ID:       "long_tp",
+		Side:     TradeSideLong,
+		Purpose:  ExitPurposeTakeProfit,
+		Distance: ExitDistanceSpec{Type: ExitDistancePercent, Value: 0.03},
+	}}
+	normalized, err := Normalize(definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := normalized.ExitPolicies[0]
+	if policy.Anchor.Type != ExitAnchorAverageEntry ||
+		policy.TriggerPrice != ExitTriggerHigh ||
+		policy.ClosePct != 1 ||
+		policy.Execution != ExitExecutionNextOpen {
+		t.Fatalf("unexpected exit policy defaults: %+v", policy)
+	}
+}
+
+func TestValidateRejectsInvalidCapitalDecayPower(t *testing.T) {
+	definition := validDefinition()
+	definition.Position.LongCapitalDecayPower = -0.1
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected negative long capital decay power to fail")
+	}
+
+	definition = validDefinition()
+	definition.Position.ShortCapitalDecayPower = math.Inf(1)
+	if err := Validate(definition, indicator.MustBuiltinRegistry()); err == nil {
+		t.Fatal("expected infinite short capital decay power to fail")
 	}
 }
 

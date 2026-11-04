@@ -5,21 +5,25 @@ import (
 	"time"
 )
 
-const SchemaVersion = 1
+const (
+	SchemaVersion            = 1
+	DefaultCapitalDecayPower = 0.5
+)
 
 type Definition struct {
-	SchemaVersion int             `json:"schema_version"`
-	ID            string          `json:"id"`
-	Name          string          `json:"name"`
-	Description   string          `json:"description,omitempty"`
-	Data          DataSelection   `json:"data"`
-	Account       AccountSpec     `json:"account"`
-	Behavior      BehaviorSpec    `json:"behavior"`
-	Position      PositionSpec    `json:"position,omitempty"`
-	Execution     ExecutionSpec   `json:"execution"`
-	Risk          RiskSpec        `json:"risk"`
-	Indicators    []IndicatorSpec `json:"indicators"`
-	Rules         []RuleSpec      `json:"rules,omitempty"`
+	SchemaVersion int              `json:"schema_version"`
+	ID            string           `json:"id"`
+	Name          string           `json:"name"`
+	Description   string           `json:"description,omitempty"`
+	Data          DataSelection    `json:"data"`
+	Account       AccountSpec      `json:"account"`
+	Behavior      BehaviorSpec     `json:"behavior"`
+	Position      PositionSpec     `json:"position,omitempty"`
+	ExitPolicies  []ExitPolicySpec `json:"exit_policies,omitempty"`
+	Execution     ExecutionSpec    `json:"execution"`
+	Risk          RiskSpec         `json:"risk"`
+	Indicators    []IndicatorSpec  `json:"indicators"`
+	Rules         []RuleSpec       `json:"rules,omitempty"`
 }
 
 type DataSelection struct {
@@ -63,13 +67,91 @@ type PositionSpec struct {
 	MaxAdditions      int     `json:"max_additions,omitempty"`
 	AddSizePct        float64 `json:"add_size_pct,omitempty"`
 	AddSizeMultiplier float64 `json:"add_size_multiplier,omitempty"`
-	// PositionLeverage only scales the first entry allocation.
+	// PositionLeverage scales the initial allocation. Multiplier additions
+	// inherit it through the actual first-entry notional.
 	PositionLeverage float64 `json:"position_leverage,omitempty"`
+	// Capital decay reduces new initial positions as equity grows. It never
+	// enlarges positions when equity is below the initial account balance.
+	LongCapitalDecayPower  float64 `json:"long_capital_decay_power,omitempty"`
+	ShortCapitalDecayPower float64 `json:"short_capital_decay_power,omitempty"`
 	// MaxPositionPct and TargetLeverage are legacy aliases retained for
 	// decoding old revisions. Normalize clears both fields.
 	MaxPositionPct float64 `json:"max_position_pct,omitempty"`
 	TargetLeverage float64 `json:"target_leverage,omitempty"`
 }
+
+type ExitPolicySpec struct {
+	ID           string           `json:"id"`
+	Disabled     bool             `json:"disabled,omitempty"`
+	Side         TradeSide        `json:"side"`
+	Purpose      ExitPurpose      `json:"purpose"`
+	Anchor       ExitAnchorSpec   `json:"anchor"`
+	Distance     ExitDistanceSpec `json:"distance"`
+	TriggerPrice ExitTriggerPrice `json:"trigger_price,omitempty"`
+	ClosePct     float64          `json:"close_pct,omitempty"`
+	Priority     int              `json:"priority,omitempty"`
+	Execution    ExitExecution    `json:"execution,omitempty"`
+}
+
+type ExitAnchorSpec struct {
+	Type ExitAnchorType `json:"type"`
+}
+
+type ExitAnchorType string
+
+const (
+	ExitAnchorAverageEntry      ExitAnchorType = "avg_entry_price"
+	ExitAnchorFirstEntry        ExitAnchorType = "first_entry_price"
+	ExitAnchorLastEntry         ExitAnchorType = "last_entry_price"
+	ExitAnchorHighestSinceEntry ExitAnchorType = "highest_since_entry"
+	ExitAnchorLowestSinceEntry  ExitAnchorType = "lowest_since_entry"
+)
+
+type ExitDistanceSpec struct {
+	Type      ExitDistanceType `json:"type"`
+	Value     float64          `json:"value"`
+	Indicator string           `json:"indicator,omitempty"`
+	Field     string           `json:"field,omitempty"`
+	Sampling  ExitSampling     `json:"sampling,omitempty"`
+}
+
+type ExitDistanceType string
+
+const (
+	ExitDistancePercent     ExitDistanceType = "percent"
+	ExitDistanceATRMultiple ExitDistanceType = "atr_multiple"
+	ExitDistanceFixedAmount ExitDistanceType = "fixed_amount"
+)
+
+type ExitSampling string
+
+const (
+	ExitSamplingEntry     ExitSampling = "entry"
+	ExitSamplingEachEntry ExitSampling = "each_entry"
+	ExitSamplingLive      ExitSampling = "live"
+)
+
+type ExitPurpose string
+
+const (
+	ExitPurposeTakeProfit ExitPurpose = "take_profit"
+	ExitPurposeStopLoss   ExitPurpose = "stop_loss"
+)
+
+type ExitTriggerPrice string
+
+const (
+	ExitTriggerClose ExitTriggerPrice = "close"
+	ExitTriggerHigh  ExitTriggerPrice = "high"
+	ExitTriggerLow   ExitTriggerPrice = "low"
+)
+
+type ExitExecution string
+
+const (
+	ExitExecutionNextOpen     ExitExecution = "next_open"
+	ExitExecutionTriggerPrice ExitExecution = "trigger_price"
+)
 
 type ExecutionSpec struct {
 	SignalTime       SignalTime       `json:"signal_time"`

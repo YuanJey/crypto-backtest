@@ -145,9 +145,16 @@ go run ./cmd/backtest -strategy-id ema-boll-rsi -run \
 比例和倍数必须二选一；新首单、固定比例加仓均要求比例在 `(0, 1]`，
 允许任意小的正数。
 
-全局只配置 `account.exchange_leverage` 和 `position.position_leverage` 两个杠杆；
+全局杠杆配置为 `account.exchange_leverage` 和 `position.position_leverage`；
 现货固定为 1x。首单和加仓均受交易所杠杆的总名义金额上限约束，
 实际杠杆由报告动态计算。比例、模式和次数仍配置在各条交易规则中。
+
+首仓基础名义金额为 `min(equity, equity * size_pct * position_leverage)`。
+`position.long_capital_decay_power` 和 `position.short_capital_decay_power`
+分别控制多空首仓的盈利衰减，实际首仓再乘以
+`min(1, (initial_cash / current_equity) ^ power)`；默认值均为 `0.5`，
+权益低于初始资金时不会放大仓位。首仓倍数模式继承实际首单金额，
+固定比例加仓不重复应用杠杆或衰减系数。
 
 平仓 `close` 使用当前持仓数量为基准，`size_pct: 1` 表示全部平仓，
 例如 `size_pct: 0.25` 表示平掉四分之一。旧 `close` 的缺省或 0 仍表示全部平仓。
@@ -166,6 +173,11 @@ go run ./cmd/backtest -strategy-id ema-boll-rsi -run \
 打开可视化编辑器不会重写 `when`。嵌套 AND/OR、NOT、持仓引用及暂不支持的条件
 以原样预览保留，可切换 JSON 源码编辑；修改简单条件时保留其他节点和原历史偏移。
 链式 `condition` 原样保存，不会自动补入一个与它冲突的 `when`。
+
+止盈止损建议使用顶层 `exit_policies`。它支持持仓均价、首次价、最后加仓价和
+入场后高低点锚点，支持百分比、固定价差与 ATR 倍数距离。ATR 可以在首次开仓
+冻结、每次加仓刷新或随最新闭合 K 线更新（下一根 K 线生效）；`close_pct` 可用于分批退出，
+`execution` 可选下一根开盘或触发价/跳空价成交。
 
 当前内置指标参数：
 
