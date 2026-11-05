@@ -478,6 +478,14 @@ func validateRules(rules []RuleSpec, indicatorOutputs indicatorOutputs, marketTy
 		if err := validateAction(rule.Action, marketType, position); err != nil {
 			return fmt.Errorf("rule %q action: %w", rule.ID, err)
 		}
+		if rule.AdditionTrigger != nil {
+			if rule.Action.Type != ActionAdd {
+				return fmt.Errorf("rule %q: addition_trigger is only valid for add actions", rule.ID)
+			}
+			if err := validateAdditionTrigger(*rule.AdditionTrigger, rule.Action.AdditionIndex, indicatorOutputs); err != nil {
+				return fmt.Errorf("rule %q addition_trigger: %w", rule.ID, err)
+			}
+		}
 	}
 	return nil
 }

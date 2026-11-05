@@ -54,6 +54,27 @@ func Normalize(definition Definition) (Definition, error) {
 	}
 
 	for index, rule := range definition.Rules {
+		if rule.AdditionTrigger != nil {
+			trigger := *rule.AdditionTrigger
+			if trigger.Anchor.Type == "" {
+				trigger.Anchor.Type = ExitAnchorAverageEntry
+			}
+			if trigger.Direction == "" {
+				trigger.Direction = AdditionAdverse
+			}
+			if trigger.TriggerPrice == "" {
+				trigger.TriggerPrice = ExitTriggerClose
+			}
+			if trigger.Distance.Type == ExitDistanceATRMultiple {
+				if trigger.Distance.Field == "" {
+					trigger.Distance.Field = "value"
+				}
+				if trigger.Distance.Sampling == "" {
+					trigger.Distance.Sampling = ExitSamplingLive
+				}
+			}
+			definition.Rules[index].AdditionTrigger = &trigger
+		}
 		condition := strings.TrimSpace(rule.Condition)
 		if condition == "" {
 			continue

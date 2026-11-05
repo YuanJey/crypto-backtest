@@ -3212,3 +3212,39 @@ body {
   background: #188966;
   border-color: #32b488;
 }
+
+.addition-trigger-panel {
+  padding: 16px;
+  background: rgba(91, 131, 246, 0.05);
+  border-block: 1px solid #303b4b;
+}
+
+.addition-trigger-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px 16px;
+}
+
+.addition-trigger-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  color: #a6b3c5;
+  font-size: 12px;
+}
+
+.addition-trigger-control .form-control,
+.addition-trigger-control .form-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.addition-trigger-panel .rule-sizing-hint {
+  margin-top: 12px;
+  line-height: 1.7;
+}
+
+.section-heading-row:has(#btnAddAdditionRule) {
+  flex-wrap: wrap;
+}

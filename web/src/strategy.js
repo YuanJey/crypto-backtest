@@ -134,7 +134,8 @@ class StrategyWorkbench {
                     <span>允许加仓</span>
                     <span class="section-badge" id="additionsSwitchStatus">已关闭</span>
                   </label>
-                  <button class="btn btn-primary-sm" id="btnAddRule" style="margin-left: auto;">+ 添加规则</button>
+                  <button class="btn btn-primary-sm" id="btnAddAdditionRule" style="margin-left: auto;">+ 添加加仓规则</button>
+                  <button class="btn btn-primary-sm" id="btnAddRule">+ 添加规则</button>
                 </div>
                 <div class="rules-tree-container" id="rulesTreeContainer">
                   <!-- 动态插入 -->
@@ -173,6 +174,7 @@ class StrategyWorkbench {
     btnNew.addEventListener('click', () => this.createNewStrategy());
     if (btnAddIndicator) btnAddIndicator.addEventListener('click', () => this.showIndicatorModal());
     if (btnAddRule) btnAddRule.addEventListener('click', () => this.addNewRule());
+    document.getElementById('btnAddAdditionRule').addEventListener('click', () => this.addNewRule('add'));
     document.getElementById('formAllowAdditions').addEventListener('change', (e) => {
       if (!this.currentStrategy) return;
       const behavior = this.currentStrategy.behavior || (this.currentStrategy.behavior = {});
@@ -1415,6 +1417,7 @@ class StrategyWorkbench {
       delete rule.action.addition_index;
       delete rule.action.size_multiplier;
       delete rule.action.sizing_mode;
+      delete rule.addition_trigger;
     } else if (!rule.action.addition_index) {
       const indexes = (this.currentStrategy.rules || [])
         .filter(other => other !== rule && other.action?.type === 'add' && other.action.side === rule.action.side)
@@ -1449,10 +1452,110 @@ class StrategyWorkbench {
       : '仅空仓时触发；首单名义金额 = 当前权益 × 本规则比例 × 首次开仓杠杆。';
   }
 
+  defaultAdditionTrigger() {
+    return {
+      anchor: { type: 'avg_entry_price' },
+      distance: { type: 'percent', value: 0.01 },
+      direction: 'adverse',
+      trigger_price: 'close',
+    };
+  }
+
+  additionDistanceAt(rule) {
+    const trigger = rule.addition_trigger;
+    if (!trigger) return null;
+    let value = trigger.distance.value;
+    const n = rule.action.addition_index || 1;
+    if (trigger.spacing?.mode === 'linear') value += (n - 1) * trigger.spacing.value;
+    if (trigger.spacing?.mode === 'geometric') value *= Math.pow(trigger.spacing.value, n - 1);
+    return value;
+  }
+
+  validAdditionDistance(rule) {
+    if (!rule.addition_trigger) return true;
+    const trigger = rule.addition_trigger;
+    const base = trigger.distance.value;
+    const value = this.additionDistanceAt(rule);
+    const spacing = trigger.spacing;
+    return Number.isFinite(base) && base > 0 && Number.isFinite(value) && value > 0 &&
+      (trigger.distance.type !== 'percent' || value < 1) &&
+      (!spacing || (spacing.mode === 'fixed' ? !spacing.value :
+        Number.isFinite(spacing.value) && (spacing.mode === 'linear' ? spacing.value > 0 : spacing.value >= 1)));
+  }
+
+  additionTriggerHint(rule) {
+    const spec = rule.addition_trigger;
+    if (!spec) return '按下方自定义条件加仓，可切换为价格间距触发。';
+    const anchors = { avg_entry_price: '当前持仓均价', first_entry_price: '首仓成交价', last_entry_price: '最近一次开仓 / 加仓成交价' };
+    const unit = spec.distance.type === 'percent' ? '%' : spec.distance.type === 'atr_multiple' ? ' × ATR' : ' 价格单位';
+    const display = value => Number((value * (spec.distance.type === 'percent' ? 100 : 1)).toPrecision(8));
+    const spacing = spec.spacing;
+    const sequence = spacing?.mode === 'linear' ? '基础间距 + (n − 1) × 每层增量'
+      : spacing?.mode === 'geometric' ? '基础间距 × 间距倍数^(n − 1)' : '基础间距';
+    const above = (rule.action.side === 'short') === ((spec.direction || 'adverse') === 'adverse');
+    const distance = spec.distance.type === 'percent' ? '锚点 × 本次百分比'
+      : spec.distance.type === 'atr_multiple' ? 'ATR × 本次倍数' : '本次价差';
+    const sampling = { entry: 'ATR 固定为首仓成交时可见的值；首仓前需完成 ATR 预热，缺值时本轮不触发。', each_entry: 'ATR 在每次开仓 / 加仓成交时刷新，缺值时不触发。', live: 'ATR 使用当前已闭合 K 线的值。' };
+    return `阈值 = ${anchors[spec.anchor.type]} ${above ? '+' : '−'} ${distance}；价格${above ? '≥' : '≤'}阈值触发。` +
+      `间距 = ${sequence}；第 ${rule.action.addition_index || 1} 次为 ${display(this.additionDistanceAt(rule))}${unit}。` +
+      (spec.distance.type === 'atr_multiple' ? sampling[spec.distance.sampling || 'live'] : '') +
+      '与下方附加条件同时满足时发出信号，下一根 K 线开盘成交。';
+  }
+
+  renderAdditionTrigger(rule, rIdx, disabled) {
+    if (rule.action?.type !== 'add') return '';
+    const trigger = rule.addition_trigger;
+    const disabledAttr = disabled ? 'disabled' : '';
+    const select = (field, label, value, options) => `
+      <label class="addition-trigger-control"><span>${label}</span>
+        <select class="form-select rule-addition-field" data-ridx="${rIdx}" data-addition-field="${field}" ${disabledAttr}>
+          ${options.map(([key, text]) => `<option value="${this.escapeHtml(key)}" ${key === value ? 'selected' : ''}>${this.escapeHtml(text)}</option>`).join('')}
+        </select>
+      </label>`;
+    const input = (field, label, value, min) => `
+      <label class="addition-trigger-control"><span>${label}</span>
+        <input type="number" class="form-control rule-addition-field" data-ridx="${rIdx}" data-addition-field="${field}"
+          value="${value}" min="${min}" step="any" ${disabledAttr}>
+      </label>`;
+    const unit = trigger?.distance.type === 'percent' ? '%' : trigger?.distance.type === 'atr_multiple' ? 'ATR 倍数' : '价格单位';
+    const scale = trigger?.distance.type === 'percent' ? 100 : 1;
+    const volatility = this.getVolatilityOperands();
+    const currentATR = trigger ? `${trigger.distance.indicator}:${trigger.distance.field || 'value'}` : '';
+    const atrOptions = volatility.map(item => [item.value, item.label]);
+    if (!atrOptions.some(([key]) => key === currentATR)) {
+      atrOptions.unshift([currentATR, trigger?.distance.indicator ? `未找到指标：${currentATR}` : '请先添加 ATR 指标']);
+    }
+    return `
+      <div class="addition-trigger-panel">
+        <div class="addition-trigger-grid">
+          ${select('mode', '加仓触发方式', trigger ? 'distance' : 'condition', [['distance', '价格间距触发'], ['condition', '自定义条件触发']])}
+          ${trigger ? `
+            ${select('anchor', '价格锚点', trigger.anchor.type, [['avg_entry_price', '当前持仓均价'], ['first_entry_price', '首仓成交价'], ['last_entry_price', '最近开仓 / 加仓成交价']])}
+            ${select('direction', '加仓方向', trigger.direction || 'adverse', [['adverse', '逆势加仓'], ['favorable', '顺势加仓']])}
+            ${select('trigger_price', '判断价格', trigger.trigger_price || 'close', [['close', '收盘价'], ['low', '本根最低价'], ['high', '本根最高价']])}
+            ${select('distance_type', '间距计算', trigger.distance.type, [['percent', '锚点价格百分比'], ['atr_multiple', 'ATR 倍数'], ['fixed_amount', '固定价差']])}
+            ${input('distance_value', `基础间距（${unit}）`, Number((trigger.distance.value * scale).toPrecision(15)), 0)}
+            ${trigger.distance.type === 'atr_multiple' ? `
+              ${select('indicator', 'ATR 指标', currentATR, atrOptions)}
+              ${select('sampling', 'ATR 取值', trigger.distance.sampling || 'live', [['entry', '首仓固定 ATR'], ['each_entry', '每次成交固定 ATR'], ['live', '实时 ATR（已闭合 K 线）']])}
+            ` : ''}
+            ${select('spacing_mode', '间距递增', trigger.spacing?.mode || 'fixed', [['fixed', '固定间距'], ['linear', '等差递增'], ['geometric', '等比递增']])}
+            ${trigger.spacing && trigger.spacing.mode !== 'fixed' ? input('spacing_value',
+              trigger.spacing.mode === 'linear' ? `每层增量（${unit}）` : '间距倍数',
+              Number((trigger.spacing.value * (trigger.spacing.mode === 'linear' ? scale : 1)).toPrecision(15)),
+              trigger.spacing.mode === 'geometric' ? 1 : 0) : ''}
+          ` : ''}
+        </div>
+        <div class="rule-sizing-hint">${this.escapeHtml(this.additionTriggerHint(rule))}</div>
+      </div>`;
+  }
+
   renderRulesEditor(def) {
     const rulesContainer = document.getElementById('rulesTreeContainer');
     const rules = def.rules || [];
     const allowAdditions = this.additionsEnabled(def);
+    const addButton = document.getElementById('btnAddAdditionRule');
+    if (addButton) addButton.disabled = !allowAdditions;
     const allowSwitch = document.getElementById('formAllowAdditions');
     if (allowSwitch) allowSwitch.checked = allowAdditions;
     const switchStatus = document.getElementById('additionsSwitchStatus');
@@ -1540,17 +1643,22 @@ class StrategyWorkbench {
             ${additionDisabled ? '<div class="rule-sizing-hint additions-paused-hint">加仓已关闭，启用“允许加仓”后可选择模式；当前配置已保留。</div>' : ''}
           </div>
 
+          ${this.renderAdditionTrigger(rule, rIdx, additionDisabled)}
           <div class="conditions-builder" data-ridx="${rIdx}">
-            ${usesConditionString ? `
+            ${rule.addition_trigger && rule.when?.kind === 'boolean' && rule.when.bool === true && !usesConditionString ? `
+              <span class="panel-sub-label">附加条件 (AND):</span>
+              <p class="rule-sizing-hint">无附加限制，达到加仓间距即可触发。</p>
+              <button class="btn-ctrl btn-add-condition" data-ridx="${rIdx}">＋ 添加附加条件</button>
+            ` : usesConditionString ? `
               <div class="preserved-condition">
-                <span class="panel-sub-label">触发条件 (WHEN):</span>
+                <span class="panel-sub-label">${rule.addition_trigger ? '附加条件 (AND)' : '触发条件 (WHEN)'}:</span>
                 <p>链式条件已完整保留，请在 JSON 源码中编辑。</p>
                 <pre>${this.escapeHtml(rule.condition)}</pre>
                 <button class="btn-xs btn-outline btn-edit-condition-json">编辑 JSON 条件</button>
               </div>
             ` : `
             <div class="condition-tree-header">
-              <span class="panel-sub-label">触发条件 (WHEN):</span>
+              <span class="panel-sub-label">${rule.addition_trigger ? '附加条件 (AND)' : '触发条件 (WHEN)'}:</span>
               <div class="logic-gate-toggle">
                 <button class="logic-btn ${parsedWhen.gate === 'and' ? 'active' : ''}" data-gate="and" data-ridx="${rIdx}">AND (全满足)</button>
                 <button class="logic-btn ${parsedWhen.gate === 'or' ? 'active' : ''}" data-gate="or" data-ridx="${rIdx}">OR (任一满足)</button>
@@ -1643,6 +1751,52 @@ class StrategyWorkbench {
       def.rules[rIdx].when = this.compileAstWhen(parsed.gate, parsed.items, parsed.sourceWhen);
       this.syncToJson();
     };
+    container.querySelectorAll('.rule-addition-field').forEach(field => {
+      field.addEventListener('change', () => {
+        if (!this.additionsEnabled(def)) return;
+        const rule = def.rules[Number(field.dataset.ridx)];
+        const key = field.dataset.additionField;
+        const previous = this.cloneCondition(rule.addition_trigger);
+        if (key === 'mode') {
+          if (field.value === 'condition') delete rule.addition_trigger;
+          else rule.addition_trigger ||= this.defaultAdditionTrigger();
+        } else if (rule.addition_trigger) {
+          const trigger = rule.addition_trigger;
+          const scale = trigger.distance.type === 'percent' ? 100 : 1;
+          if (key === 'anchor') trigger.anchor = { type: field.value };
+          if (key === 'direction' || key === 'trigger_price') trigger[key] = field.value;
+          if (key === 'distance_type') {
+            trigger.distance = { type: field.value, value: field.value === 'percent' ? 0.01 : 1 };
+            delete trigger.spacing;
+            if (field.value === 'atr_multiple') {
+              const first = this.getVolatilityOperands()[0];
+              Object.assign(trigger.distance, { indicator: first?.indicator || '', field: first?.field || 'value', sampling: 'entry' });
+            }
+          }
+          if (key === 'distance_value') trigger.distance.value = field.value.trim() === '' ? NaN : Number(field.value) / scale;
+          if (key === 'indicator') {
+            const selected = this.getVolatilityOperands().find(item => item.value === field.value);
+            if (selected) Object.assign(trigger.distance, { indicator: selected.indicator, field: selected.field });
+          }
+          if (key === 'sampling') trigger.distance.sampling = field.value;
+          if (key === 'spacing_mode') {
+            if (field.value === 'fixed') delete trigger.spacing;
+            else trigger.spacing = { mode: field.value, value: field.value === 'linear' ? trigger.distance.value : 1.5 };
+          }
+          if (key === 'spacing_value') {
+            trigger.spacing.value = field.value.trim() === '' ? NaN :
+              Number(field.value) / (trigger.spacing.mode === 'linear' ? scale : 1);
+          }
+        }
+        if (!this.validAdditionDistance(rule)) {
+          if (previous) rule.addition_trigger = previous;
+          else delete rule.addition_trigger;
+          this.showAlert('基础间距及本次间距需为有限正数，百分比需小于 100%；等差增量需大于 0，等比倍数需不小于 1。', 'error');
+        }
+        this.renderRulesEditor(def);
+        this.syncToJson();
+      });
+    });
     container.querySelectorAll('.btn-edit-condition-json').forEach(btn => {
       btn.addEventListener('click', () => {
         this.switchMode('json');
@@ -1680,6 +1834,7 @@ class StrategyWorkbench {
       select.addEventListener('change', (e) => {
         const rIdx = parseInt(e.target.dataset.ridx, 10);
         def.rules[rIdx].action.side = e.target.value;
+        this.renderRulesEditor(def);
         this.syncToJson();
       });
     });
@@ -1706,9 +1861,10 @@ class StrategyWorkbench {
         if (!this.additionsEnabled(def)) return;
         const value = Number(input.value);
         if (!Number.isSafeInteger(value) || value < 1 ||
-            !this.validGeometricSize({ ...rule.action, addition_index: value })) {
+            !this.validGeometricSize({ ...rule.action, addition_index: value }) ||
+            !this.validAdditionDistance({ ...rule, action: { ...rule.action, addition_index: value } })) {
           input.value = rule.action.addition_index;
-          this.showAlert('次数需为正整数，且倍数的该次数次方需为有限的正数。', 'error');
+          this.showAlert('次数需为正整数，且该层级的仓位和间距计算结果需有效，百分比间距需小于 100%。', 'error');
           return;
         }
         rule.action.addition_index = value;
@@ -1881,6 +2037,9 @@ class StrategyWorkbench {
         const rIdx = parseInt(btn.dataset.ridx, 10);
         const parsed = this.parseAstWhen(def.rules[rIdx].when);
         const operands = this.getAvailableOperands();
+        if (def.rules[rIdx].addition_trigger && def.rules[rIdx].when?.kind === 'boolean' && def.rules[rIdx].when.bool === true) {
+          parsed.items = [];
+        }
         parsed.items.push({
           left: operands[0].value,
           op: 'gt',
@@ -1905,7 +2064,9 @@ class StrategyWorkbench {
     });
   }
 
-  addNewRule() {
+  addNewRule(type = 'enter') {
+    if (!this.currentStrategy) return;
+    if (type === 'add' && !this.additionsEnabled()) return;
     if (!this.currentStrategy.rules) this.currentStrategy.rules = [];
     const ids = new Set(this.currentStrategy.rules.map(rule => rule.id));
     let sequence = this.currentStrategy.rules.length + 1;
@@ -1927,6 +2088,11 @@ class StrategyWorkbench {
         size_pct: 0.25
       }
     };
+    if (type === 'add') {
+      newRule.when = { kind: 'boolean', bool: true };
+      newRule.addition_trigger = this.defaultAdditionTrigger();
+      this.setRuleActionType(newRule, 'add');
+    }
     this.currentStrategy.rules.push(newRule);
     this.renderRulesEditor(this.currentStrategy);
     this.syncToJson();

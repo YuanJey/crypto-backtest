@@ -238,10 +238,40 @@ type RuleSpec struct {
 	Condition string     `json:"condition,omitempty"`
 	When      Expression `json:"when"`
 	Action    ActionSpec `json:"action"`
+	// AdditionTrigger is ANDed with When and only applies to an add action.
+	AdditionTrigger *AdditionTriggerSpec `json:"addition_trigger,omitempty"`
 	// SourceRuleID preserves the ordering of rules split from a legacy open.
 	// It is immutable provenance, not a reference to a live rule.
 	SourceRuleID string `json:"source_rule_id,omitempty"`
 }
+
+type AdditionTriggerSpec struct {
+	Anchor       ExitAnchorSpec       `json:"anchor"`
+	Distance     ExitDistanceSpec     `json:"distance"`
+	Direction    AdditionDirection    `json:"direction,omitempty"`
+	TriggerPrice ExitTriggerPrice     `json:"trigger_price,omitempty"`
+	Spacing      *AdditionSpacingSpec `json:"spacing,omitempty"`
+}
+
+type AdditionDirection string
+
+const (
+	AdditionAdverse   AdditionDirection = "adverse"
+	AdditionFavorable AdditionDirection = "favorable"
+)
+
+type AdditionSpacingSpec struct {
+	Mode  AdditionSpacingMode `json:"mode"`
+	Value float64             `json:"value,omitempty"`
+}
+
+type AdditionSpacingMode string
+
+const (
+	AdditionSpacingFixed     AdditionSpacingMode = "fixed"
+	AdditionSpacingLinear    AdditionSpacingMode = "linear"
+	AdditionSpacingGeometric AdditionSpacingMode = "geometric"
+)
 
 type Expression struct {
 	Kind   ExprKind     `json:"kind"`

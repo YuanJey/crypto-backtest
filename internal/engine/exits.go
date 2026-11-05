@@ -140,7 +140,10 @@ func exitAnchorValue(portfolio portfolio, anchor strategy.ExitAnchorSpec, states
 }
 
 func exitDistanceValue(anchor float64, runtime exitPolicyRuntime, states []indicatorState) (float64, bool) {
-	spec := runtime.spec.Distance
+	return distanceValue(anchor, runtime.spec.Distance, runtime.sampledDistance, runtime.hasSample, states)
+}
+
+func distanceValue(anchor float64, spec strategy.ExitDistanceSpec, sample float64, hasSample bool, states []indicatorState) (float64, bool) {
 	switch spec.Type {
 	case strategy.ExitDistancePercent:
 		return anchor * spec.Value, true
@@ -152,7 +155,7 @@ func exitDistanceValue(anchor float64, runtime exitPolicyRuntime, states []indic
 		if spec.Sampling == strategy.ExitSamplingLive {
 			indicatorValue, ok = latestIndicatorValue(states, spec.Indicator, spec.Field)
 		} else {
-			indicatorValue, ok = runtime.sampledDistance, runtime.hasSample
+			indicatorValue, ok = sample, hasSample
 		}
 		if !ok || !isUsableExitNumber(indicatorValue) || indicatorValue <= 0 {
 			return 0, false

@@ -30,9 +30,10 @@ type IndicatorSummary struct {
 }
 
 type RuleSummary struct {
-	ID       string     `json:"id"`
-	Disabled bool       `json:"disabled,omitempty"`
-	Action   ActionSpec `json:"action"`
+	ID              string               `json:"id"`
+	Disabled        bool                 `json:"disabled,omitempty"`
+	Action          ActionSpec           `json:"action"`
+	AdditionTrigger *AdditionTriggerSpec `json:"addition_trigger,omitempty"`
 }
 
 func Summarize(definition Definition) Summary {
@@ -71,9 +72,10 @@ func Summarize(definition Definition) Summary {
 	rules := make([]RuleSummary, 0, len(definition.Rules))
 	for _, rule := range definition.Rules {
 		rules = append(rules, RuleSummary{
-			ID:       rule.ID,
-			Disabled: rule.Disabled,
-			Action:   rule.Action,
+			ID:              rule.ID,
+			Disabled:        rule.Disabled,
+			Action:          rule.Action,
+			AdditionTrigger: rule.AdditionTrigger,
 		})
 	}
 	return Summary{

@@ -628,6 +628,48 @@ type ActionSpec struct {
 - `first_entry_multiple` 使用 `first_entry_notional * size_multiplier`；无 `sizing_mode`
   的旧倍数规则仍使用该语义。以上倍数模式均与 `size_pct` 二选一。
 - 全部平仓重置加仓次数和首单基数，部分平仓保留；相同次数的多个规则按优先顺序竞争。
+
+`add` 规则可配置类型化的 `addition_trigger`，与 `when` 表达式按 AND 结合。
+历史规则缺省此字段时继续按原条件执行；只允许 `add` 动作使用该字段。
+可视化编辑器提供独立的“添加加仓规则”入口，新规则默认以持仓均价逆势偏离 1%
+触发，`when = true` 表示没有附加限制；已有表达式或链式条件不会被自动改写。
+
+```json
+{
+  "id": "add_2",
+  "when": {"kind": "boolean", "bool": true},
+  "addition_trigger": {
+    "anchor": {"type": "avg_entry_price"},
+    "distance": {
+      "type": "atr_multiple", "value": 2,
+      "indicator": "atr_30m", "field": "value", "sampling": "entry"
+    },
+    "direction": "adverse",
+    "trigger_price": "close",
+    "spacing": {"mode": "geometric", "value": 1.5}
+  },
+  "action": {
+    "type": "add", "side": "long", "addition_index": 2,
+    "sizing_mode": "current_position_multiple", "size_multiplier": 2
+  }
+}
+```
+
+- 锚点限定 `avg_entry_price`、`first_entry_price`、`last_entry_price`。均价随成交动态更新。
+- 距离限定 `percent`（JSON 中 0.01 = 1%）、`fixed_amount`、`atr_multiple`；
+  ATR 引用必须指向已声明指标的波动率输出。
+- `entry` 在首仓实际成交时冻结最近可见 ATR，`each_entry` 在每次开仓/加仓成交时刷新，
+  `live` 使用当前已闭合 K 线的最新 ATR。高周期 ATR 仅在高周期 K 线完成后可见。
+  首仓冻结时若 ATR 尚未预热则本轮不触发，不用后来的值补造首仓快照。
+- 第 n 次间距：固定为基础值；等差为 `base + (n - 1) * spacing.value`；
+  等比为 `base * spacing.value^(n - 1)`。n 取动作的 `addition_index`。
+  等差增量与基础值单位一致，等比倍数至少为 1；每条规则独立配置。
+- 多头逆势阈值为 `anchor - distance`，空头逆势为 `anchor + distance`，顺势反向；
+  百分比距离乘锚点，ATR 距离乘采样值。价格跨过阈值或等于阈值即可触发。
+- `trigger_price` 可选 `close`（默认）、`high`、`low`；统一在本根收盘评估，
+  最早下一根开盘成交，不以本根触发价补成交。间距触发后仍遵守次数、总开关和账户约束。
+- 拒绝未知字段、非法引用、不兼容配置和非有限间距；该层级百分比距离必须小于 100%。
+  全部平仓后清除 ATR 快照及加仓层级，部分平仓保留；间距递增与金额倍增独立计算。
 - `behavior.allow_additions` 是新加仓总开关，关闭时保留规则配置，停止加仓，
   不影响首单与平仓。模式、比例和次数均来自动作配置。
 - `exchange_leverage` 是总名义仓位的唯一杠杆上限；`position_leverage`

@@ -55,6 +55,7 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 
 	portfolio := newPortfolio(plan.Strategy.Account.MarketType, plan.Strategy.Account.InitialCash)
 	exitPolicies := newExitPolicyRuntimes(plan.ExitPolicies)
+	additions := newAdditionRuntimes(plan.Rules)
 	result := Result{}
 	pendingOrderIndexes := make([]int, 0)
 	orderSequence := 0
@@ -83,9 +84,11 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 					lastFillBarIndex = index
 					if portfolio.entryCount > previousEntryCount {
 						snapshotExitPolicies(exitPolicies, states, previousEntryCount == 0)
+						snapshotAdditions(additions, states, previousEntryCount == 0)
 					}
 					if hadPosition && portfolio.quantity == 0 {
 						resetExitPolicyRuntimes(exitPolicies)
+						resetAdditionRuntimes(additions)
 					}
 				}
 			}
@@ -135,6 +138,7 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 					lastFillBarIndex = index
 					if portfolio.quantity == 0 {
 						resetExitPolicyRuntimes(exitPolicies)
+						resetAdditionRuntimes(additions)
 					}
 				} else {
 					result.Orders[orderIndex].Status = OrderStatusSkipped
@@ -195,7 +199,7 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 		evalCtx := evalContext{bars: bars, barIndex: index, indicators: indicatorSeries, portfolio: portfolio}
 		cooldownActive := lastFillBarIndex >= 0 &&
 			index-lastFillBarIndex < plan.Strategy.Behavior.CooldownBars
-		for _, rule := range plan.Rules {
+		for ruleIndex, rule := range plan.Rules {
 			if exitHandled {
 				break
 			}
@@ -204,6 +208,9 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 				return Result{}, fmt.Errorf("rule %q: %w", rule.ID, err)
 			}
 			if !matched || !eligible(portfolio, rule.Action, plan.Strategy, riskHalted, cooldownActive) {
+				continue
+			}
+			if !additionHit(portfolio, rule.Action, additions[ruleIndex], bar, states) {
 				continue
 			}
 			orderSequence++

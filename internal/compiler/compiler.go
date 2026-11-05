@@ -75,12 +75,13 @@ func Compile(definition strategy.Definition, registry *indicator.Registry) (Plan
 			continue
 		}
 		rules = append(rules, RulePlan{
-			ID:           rule.ID,
-			SourceRuleID: rule.SourceRuleID,
-			Name:         rule.Name,
-			Priority:     rule.Priority,
-			When:         rule.When,
-			Action:       rule.Action,
+			ID:              rule.ID,
+			SourceRuleID:    rule.SourceRuleID,
+			Name:            rule.Name,
+			Priority:        rule.Priority,
+			When:            rule.When,
+			Action:          rule.Action,
+			AdditionTrigger: rule.AdditionTrigger,
 		})
 	}
 	sort.SliceStable(rules, func(i, j int) bool {

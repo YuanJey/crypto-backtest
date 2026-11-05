@@ -560,3 +560,184 @@ test('saving new modes includes the master switch and selected formula', async (
     assert.deepEqual(payload.rules.at(-1).when, conditions.nested);
   }
 });
+
+function changeAdditionField(wb, document, key, value, ridx = 0) {
+  const field = new Element();
+  field.dataset = { ridx: String(ridx), additionField: key };
+  field.value = String(value);
+  document.getElementById('rulesTreeContainer').selectors.set('.rule-addition-field', [field]);
+  wb.bindRulesEditorEvents(wb.currentStrategy);
+  field.emit('change');
+}
+
+test('dedicated addition button requires the switch and creates sequential price rules', () => {
+  const { wb, document } = workbench();
+  const count = wb.currentStrategy.rules.length;
+  wb.addNewRule('add');
+  assert.equal(wb.currentStrategy.rules.length, count);
+  wb.currentStrategy.behavior.allow_additions = true;
+  wb.addNewRule('add');
+  wb.addNewRule('add');
+  const rules = wb.currentStrategy.rules.slice(-2);
+  assert.deepEqual(copy(rules.map(rule => rule.action.addition_index)), [1, 2]);
+  assert.equal(rules[0].action.sizing_mode, 'current_position_multiple');
+  assert.deepEqual(copy(rules[0].when), conditions.true);
+  assert.equal(rules[0].addition_trigger.distance.value, 0.01);
+  assert.equal(rules[0].addition_trigger.anchor.type, 'avg_entry_price');
+  assert.ok(document.getElementById('rulesTreeContainer').innerHTML.includes('无附加限制'));
+});
+
+test('old add rules preserve custom conditions until price mode is selected', () => {
+  const { wb, document } = workbench();
+  wb.currentStrategy.behavior.allow_additions = true;
+  wb.currentStrategy.rules = [{
+    id: 'add', when: copy(conditions.nested),
+    action: { type: 'add', side: 'long', addition_index: 1, size_multiplier: 2 },
+  }];
+  wb.renderRulesEditor(wb.currentStrategy);
+  const rule = wb.currentStrategy.rules[0];
+  assert.equal(rule.addition_trigger, undefined);
+  changeAdditionField(wb, document, 'mode', 'distance');
+  assert.ok(rule.addition_trigger);
+  assert.deepEqual(copy(rule.when), conditions.nested);
+  changeAdditionField(wb, document, 'mode', 'condition');
+  assert.equal(rule.addition_trigger, undefined);
+  assert.deepEqual(copy(rule.when), conditions.nested);
+});
+
+test('percentage spacing uses human percentages and updates each rule independently', () => {
+  const { wb, document } = workbench();
+  wb.currentStrategy.behavior.allow_additions = true;
+  wb.currentStrategy.rules = [];
+  wb.addNewRule('add');
+  wb.addNewRule('add');
+  const first = copy(wb.currentStrategy.rules[0]);
+  changeAdditionField(wb, document, 'distance_value', 2, 1);
+  changeAdditionField(wb, document, 'spacing_mode', 'linear', 1);
+  changeAdditionField(wb, document, 'spacing_value', 0.5, 1);
+  const second = wb.currentStrategy.rules[1];
+  assert.equal(second.addition_trigger.distance.value, 0.02);
+  assert.equal(second.addition_trigger.spacing.value, 0.005);
+  assert.equal(wb.additionDistanceAt(second), 0.025);
+  assert.ok(wb.additionTriggerHint(second).includes('第 2 次为 2.5%'));
+  assert.deepEqual(copy(wb.currentStrategy.rules[0]), first);
+  changeAdditionField(wb, document, 'spacing_mode', 'geometric', 1);
+  changeAdditionField(wb, document, 'spacing_value', 2, 1);
+  assert.equal(wb.additionDistanceAt(second), 0.04);
+  changeAdditionField(wb, document, 'spacing_mode', 'fixed', 1);
+  assert.equal(second.addition_trigger.spacing, undefined);
+});
+
+test('ATR trigger selects fixed entry, each fill and live sampling with geometric spacing', () => {
+  const { wb, document } = workbench();
+  wb.currentStrategy.behavior.allow_additions = true;
+  wb.currentStrategy.indicators.push({ id: 'atr_30m', type: 'atr', timeframe: '30m' });
+  wb.currentStrategy.rules = [];
+  wb.addNewRule('add');
+  changeAdditionField(wb, document, 'distance_type', 'atr_multiple');
+  const rule = wb.currentStrategy.rules[0];
+  assert.deepEqual(copy(rule.addition_trigger.distance),
+    { type: 'atr_multiple', value: 1, indicator: 'atr_30m', field: 'value', sampling: 'entry' });
+  changeAdditionField(wb, document, 'distance_value', 2);
+  changeAdditionField(wb, document, 'sampling', 'each_entry');
+  assert.equal(rule.addition_trigger.distance.sampling, 'each_entry');
+  changeAdditionField(wb, document, 'sampling', 'live');
+  changeAdditionField(wb, document, 'spacing_mode', 'geometric');
+  changeAdditionField(wb, document, 'spacing_value', 2);
+  changeAdditionField(wb, document, 'anchor', 'last_entry_price');
+  changeAdditionField(wb, document, 'direction', 'favorable');
+  changeAdditionField(wb, document, 'trigger_price', 'high');
+  assert.ok(wb.additionTriggerHint(rule).includes('最近一次开仓 / 加仓成交价 +'));
+  assert.ok(document.getElementById('rulesTreeContainer').innerHTML.includes('首仓固定 ATR'));
+  assert.equal(rule.addition_trigger.trigger_price, 'high');
+  const before = copy(rule);
+  wb.renderRulesEditor(wb.currentStrategy);
+  assert.deepEqual(copy(rule), before);
+});
+
+test('distance type switches clear incompatible ATR fields and spacing units', () => {
+  const { wb, document } = workbench();
+  wb.currentStrategy.behavior.allow_additions = true;
+  wb.currentStrategy.rules = [];
+  wb.addNewRule('add');
+  changeAdditionField(wb, document, 'distance_type', 'atr_multiple');
+  changeAdditionField(wb, document, 'spacing_mode', 'linear');
+  changeAdditionField(wb, document, 'distance_type', 'fixed_amount');
+  const rule = wb.currentStrategy.rules[0];
+  assert.deepEqual(copy(rule.addition_trigger.distance), { type: 'fixed_amount', value: 1 });
+  assert.equal(rule.addition_trigger.spacing, undefined);
+  wb.setRuleActionType(rule, 'close');
+  assert.equal(rule.addition_trigger, undefined);
+});
+
+test('invalid distance and excessive layer spacing retain the last valid configuration', () => {
+  const { wb, document } = workbench();
+  wb.currentStrategy.behavior.allow_additions = true;
+  wb.currentStrategy.rules = [];
+  wb.addNewRule('add');
+  const rule = wb.currentStrategy.rules[0];
+  for (const value of ['', 0, -1, 100, 'Infinity']) {
+    const before = copy(rule);
+    changeAdditionField(wb, document, 'distance_value', value);
+    assert.deepEqual(copy(rule), before);
+  }
+  changeAdditionField(wb, document, 'spacing_mode', 'geometric');
+  changeAdditionField(wb, document, 'spacing_value', 2);
+  const before = copy(rule);
+  const index = new Element();
+  index.dataset = { ridx: '0' };
+  index.value = '100';
+  document.getElementById('rulesTreeContainer').selectors.set('.rule-addition-index', [index]);
+  wb.bindRulesEditorEvents(wb.currentStrategy);
+  index.emit('change');
+  assert.deepEqual(copy(rule), before);
+});
+
+test('paused additions preserve price settings and prevent edits', () => {
+  const { wb, document } = workbench();
+  wb.currentStrategy.behavior.allow_additions = true;
+  wb.currentStrategy.rules = [];
+  wb.addNewRule('add');
+  const before = copy(wb.currentStrategy.rules);
+  wb.currentStrategy.behavior.allow_additions = false;
+  wb.renderRulesEditor(wb.currentStrategy);
+  assert.equal(document.getElementById('btnAddAdditionRule').disabled, true);
+  changeAdditionField(wb, document, 'anchor', 'first_entry_price');
+  assert.deepEqual(copy(wb.currentStrategy.rules), before);
+});
+
+test('adding an extra condition replaces the new rule unconditional expression', () => {
+  const { wb, document } = workbench();
+  wb.currentStrategy.behavior.allow_additions = true;
+  wb.currentStrategy.rules = [];
+  wb.addNewRule('add');
+  const button = new Element();
+  button.dataset = { ridx: '0' };
+  document.getElementById('rulesTreeContainer').selectors.set('.btn-add-condition', [button]);
+  wb.bindRulesEditorEvents(wb.currentStrategy);
+  button.emit('click');
+  const when = wb.currentStrategy.rules[0].when;
+  assert.equal(when.kind, 'operator');
+  assert.equal(when.op, 'gt');
+  assert.equal(when.args.some(arg => arg.kind === 'boolean'), false);
+});
+
+test('price triggers survive saving and JSON visual round trips with complex conditions', async () => {
+  const { wb, document, context } = workbench();
+  wb.currentStrategy.behavior.allow_additions = true;
+  wb.currentStrategy.rules = [];
+  wb.addNewRule('add');
+  const rule = wb.currentStrategy.rules[0];
+  rule.when = copy(conditions.nested);
+  changeAdditionField(wb, document, 'spacing_mode', 'linear');
+  const before = copy(rule);
+  wb.switchMode('json');
+  wb.switchMode('visual');
+  assert.deepEqual(copy(wb.currentStrategy.rules[0]), before);
+  let payload;
+  context.Api = { saveStrategy: async value => { payload = copy(value); return {}; } };
+  wb.loadStrategies = async () => {};
+  wb.selectStrategy = async () => {};
+  await wb.handleSave();
+  assert.deepEqual(payload.rules[0], before);
+});
