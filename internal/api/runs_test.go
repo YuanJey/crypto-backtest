@@ -157,3 +157,71 @@ func TestRunAPIRejectsUnknownFieldsAndInvalidRunLookups(t *testing.T) {
 		callRunAPI(t, server, "GET", "/api/v1/backtest-runs/missing"+suffix, nil, 404, nil)
 	}
 }
+
+func TestRunAPIMMROverrideArchivesLiquidationWithoutChangingStrategy(t *testing.T) {
+	server, repository := runAPI(t)
+	def := strategySummaryFixture()
+	def.Data.DatasetID = "__sample__"
+	def.Data.End = def.Data.Start.Add(24 * time.Hour)
+	def.Account.ExchangeLeverage = 10
+	def.Risk.MaxDrawdownHaltPct = 0
+	def.Rules = []strategy.RuleSpec{
+		{ID: "entry", When: strategy.Bool(true), Action: strategy.ActionSpec{
+			Type: strategy.ActionEnter, Side: strategy.TradeSideLong, SizePct: 1}},
+		{ID: "addition", When: strategy.Bool(true), Action: strategy.ActionSpec{
+			Type: strategy.ActionAdd, Side: strategy.TradeSideLong, AdditionIndex: 1,
+			SizingMode: strategy.AdditionSizeCurrentMultiple, SizeMultiplier: 4}},
+	}
+	if err := repository.Save(context.Background(), def, nil); err != nil {
+		t.Fatal(err)
+	}
+	var snapshot struct {
+		Version strategy.RevisionMetadata `json:"strategy_version"`
+		Config  strategy.RunConfig        `json:"default_run_config"`
+	}
+	callRunAPI(t, server, "GET", "/api/v1/strategies/ema-boll-rsi/snapshot", nil, 200, &snapshot)
+	snapshot.Config.Account.MaintenanceMarginRate = 0.5
+	report := engine.DefaultReportSpec()
+	report.Ledger = true
+	var response backtest.Response
+	callRunAPI(t, server, "POST", "/api/v1/backtests", backtest.Request{
+		StrategyID: def.ID, StrategyRevision: snapshot.Version.Revision, RunConfig: &snapshot.Config, Report: report,
+	}, 200, &response)
+	if response.Report.Margin == nil || !response.Report.Margin.Liquidated || response.Report.Margin.LiquidationCount != 1 {
+		t.Fatalf("MMR not enforced: %+v", response.Report.Margin)
+	}
+	minimum := response.Report.Margin.MinimumMMR
+	if minimum == nil || *minimum > 1 || response.Report.Margin.MMRDefinition != "equity_over_maintenance_margin" {
+		t.Fatal("API did not report E/M minimum MMR")
+	}
+	if _, err := engine.ReplayLedger(snapshot.Config.Account, response.Report.Ledger); err != nil {
+		t.Fatal(err)
+	}
+	var archived backtest.Response
+	callRunAPI(t, server, "GET", "/api/v1/backtest-runs/"+response.RunID+"/result", nil, 200, &archived)
+	if !reflect.DeepEqual(response.Report, archived.Report) {
+		t.Fatal("liquidation archive differs")
+	}
+	var input backtest.RunInput
+	callRunAPI(t, server, "GET", "/api/v1/backtest-runs/"+response.RunID+"/snapshot", nil, 200, &input)
+	if input.Config.Account.MaintenanceMarginRate != 0.5 {
+		t.Fatal("MMR missing from archived config")
+	}
+	var replay runstore.Record
+	callRunAPI(t, server, "POST", "/api/v1/backtest-runs/"+response.RunID+"/replay", nil, 202, &replay)
+	awaitRunAPI(t, server, replay.ID)
+	var replayed backtest.Response
+	callRunAPI(t, server, "GET", "/api/v1/backtest-runs/"+replay.ID+"/result", nil, 200, &replayed)
+	if !reflect.DeepEqual(response.Report, replayed.Report) {
+		t.Fatal("MMR replay changed")
+	}
+	snapshot.Config = strategy.RunConfig{}
+	callRunAPI(t, server, "GET", "/api/v1/strategies/ema-boll-rsi/snapshot", nil, 200, &snapshot)
+	if snapshot.Config.Account.MaintenanceMarginRate != 0 {
+		t.Fatal("experiment MMR modified source strategy")
+	}
+	snapshot.Config.Account.MaintenanceMarginRate = 1
+	callRunAPI(t, server, "POST", "/api/v1/backtest-runs", backtest.Request{
+		StrategyID: def.ID, RunConfig: &snapshot.Config,
+	}, 400, nil)
+}

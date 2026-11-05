@@ -102,6 +102,14 @@
               <span class="m-label">最终权益</span>
               <strong class="m-val" id="bmEquity">--</strong>
             </div>
+            <div class="mini-metric">
+              <span class="m-label">爆仓检查</span>
+              <strong class="m-val" id="bmLiquidation">--</strong>
+            </div>
+            <div class="mini-metric">
+              <span class="m-label">最低 MMR (E/M)</span>
+              <strong class="m-val" id="bmMinimumMMR">--</strong>
+            </div>
           </div>
         </div>
 
@@ -112,12 +120,14 @@
             <label>吃单手续费 (%)<input id="btTakerFee" type="number" min="0" step="0.01" class="form-control"></label>
             <label>滑点 (bps)<input id="btSlippageBps" type="number" min="0" step="0.1" class="form-control"></label>
             <label>交易所杠杆<input id="btExchangeLeverage" type="number" min="1" step="0.1" class="form-control"></label>
+            <label>维持保证金率 (%)，0 为关闭<input id="btMaintenanceMarginRate" type="number" min="0" max="99.99" step="0.01" class="form-control"></label>
             <label>总敞口 / 权益上限<input id="btExposureLimit" type="number" min="0" step="0.1" class="form-control"></label>
             <label>单标的敞口 / 权益上限<input id="btSymbolLimit" type="number" min="0" step="0.1" class="form-control"></label>
             <label>回撤停机 (%)，0 为关闭<input id="btDrawdownLimit" type="number" min="0" max="100" step="0.1" class="form-control"></label>
             <label>开始时间 (UTC)<input id="btRunStart" type="datetime-local" step="900" class="form-control"></label>
             <label>结束时间 (UTC)<input id="btRunEnd" type="datetime-local" step="900" class="form-control"></label>
           </div>
+          <p class="run-model-hint">维持保证金 = 名义价值 × 维持保证金率；账户 MMR = 权益 / 维持保证金，≤100% 触发强平。OHLC 近似标记价格，不包含交易所风险分档。</p>
           <div class="run-settings-actions">
             <button class="btn btn-outline btn-xs" id="btnRefreshRunRevision">加载最新策略版本与默认配置</button>
             <button class="btn btn-outline btn-xs" id="btnRefreshRuns">刷新运行历史</button>
@@ -128,6 +138,7 @@
           <span id="btRunStatus" role="status">运行就绪</span>
           <button class="btn btn-outline btn-xs" id="btnCancelBacktest" disabled>取消当前任务</button>
         </div>
+        <div id="btMarginDetails" class="run-margin-details" role="status" hidden></div>
 
         <div class="backtest-workspace" id="backtestWorkspace">
         <main class="charts-grid-layout" id="chartsGrid">
@@ -248,6 +259,14 @@
             <span class="equity-live-label">实际杠杆</span>
             <strong class="equity-live-value" id="liveLeverage">--</strong>
           </div>
+          <div class="equity-live-item">
+            <span class="equity-live-label">当前 MMR (E/M)</span>
+            <strong class="equity-live-value" id="liveMarginRatio">--</strong>
+          </div>
+          <div class="equity-live-item">
+            <span class="equity-live-label">预估强平价</span>
+            <strong class="equity-live-value" id="liveLiquidationPrice">--</strong>
+          </div>
         </div>
       </div>
       <div class="equity-canvas-wrapper">
@@ -327,11 +346,12 @@
   <script src="src/strategy-contract-adapter.js?v=20261105-2"></script>
   <script src="src/strategy-store.js?v=20261105-3"></script>
   <script src="src/capability-catalog.js?v=20261105-3"></script>
-  <script src="src/strategy-editors.js?v=20261105-3"></script>
+  <script src="src/strategy-editors.js?v=20261105-5"></script>
   <script src="src/strategy.js?v=20261105-3"></script>
   <script src="src/backtest-run-controller.js?v=20261105-3"></script>
-  <script src="src/backtest-run-panel.js?v=20261105-3"></script>
+  <script src="src/backtest-run-panel.js?v=20261105-5"></script>
+  <script src="src/margin-view.js?v=20261105-5"></script>
   <script src="src/data.js?v=20261103-8"></script>
-  <script src="src/app.js?v=20261105-3"></script>
+  <script src="src/app.js?v=20261105-5"></script>
 </body>
 </html>

@@ -12,6 +12,7 @@
 - **静态强类型策略编译**：声明式 JSON 策略格式，支持嵌套 `AND/OR/NOT` 逻辑与交叉算子（`cross_up`/`cross_down`），由 Go 编译器在回测前完成静态类型检查与 DAG 构建。
 - **杠杆、仓位与退出策略**：交易所杠杆控制总名义仓位上限，实际仓位杠杆和资金衰减控制首仓；结构化退出策略支持开仓/加仓快照 ATR、实时 ATR、百分比、固定价差、分批止盈止损及触发价成交。
 - **可视化加仓间距**：开启“允许加仓”后可直接添加加仓规则，独立选择持仓均价、首仓价或最近成交价作为锚点，使用百分比、首仓固定 ATR、每次成交 ATR 或实时 ATR；间距支持固定、等差和等比递增，并可叠加指标条件。
+- **维持保证金率与最低 MMR**：永续回测配置维持保证金率，账户 MMR 采用权益 / 维持保证金，统计最低 MMR 并以 100% 为强平边界；支持跳空、盘中强平、账本与快照重跑。
 - **列式数据流水线**：集成币安 K 线数据下载、清洗去重、按 `exchange/symbol/timeframe` 分区的 Parquet 存储与 `manifest.json` 元数据管理。
 
 ---
@@ -85,6 +86,7 @@ go run ./cmd/backtest -strategy-id ema-boll-rsi -run -data-root data/market
 - 行情回测页支持独立资金、区间、费用、滑点及风险配置，任务进度、取消、归档查看与快照重跑。
 - CLI 支持 `-run-config <JSON文件>`、`-report ledger`；API 异步入口为 `POST /api/v1/backtest-runs`。
 - [实施与验证记录](strategy-architecture-completion-report.md)；[架构方案与后续能力边界](strategy-backtest-architecture-plan.md)。
+- 后续加入固定维持保证金率的全仓强平模型，最低账户 MMR 采用 `min(E/M)`；[MMR 实施与验证](mmr-liquidation-report.md)。
 
 ### 2026-11-02
 - **新增模块**：前端多周期 K 线图分区（15m/1h/4h/1d）与动态回放终端（`web/index.html`、`web/styles.css`、`web/src/chart.js`、`web/src/replay.js`、`web/src/api.js`、`web/src/app.js`）。

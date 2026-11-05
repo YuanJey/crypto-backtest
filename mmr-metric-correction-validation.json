@@ -1,0 +1,357 @@
+{
+  "mmr_definition": "equity_over_maintenance_margin",
+  "configuration_field": "account.maintenance_margin_rate",
+  "configuration_label": "维持保证金率",
+  "cases": [
+    {
+      "id": "verify_addition_long_atr_each_entry",
+      "old_run_id": "run-3a708bd86896b5592a13aea4c340b5cf",
+      "new_run_id": "run-047574983a270258361ed337131dfadc",
+      "maintenance_margin_rate": 0.005,
+      "old_minimum_e_over_n": 6.368901382717635,
+      "minimum_mmr": 1273.780276543527,
+      "minimum_mmr_percent": 127378.0276543527,
+      "final_equity": 9795.40587181204,
+      "liquidated": false,
+      "execution_unchanged": true,
+      "old_archive_unchanged": true,
+      "new_archive_equal": true
+    },
+    {
+      "id": "verify_addition_long_atr_entry",
+      "old_run_id": "run-116447cf08115939237fd2803513984e",
+      "new_run_id": "run-3075ba6b3d46ac7370705bb33dde7734",
+      "maintenance_margin_rate": 0.005,
+      "old_minimum_e_over_n": 6.351036592424626,
+      "minimum_mmr": 1270.2073184849253,
+      "minimum_mmr_percent": 127020.73184849253,
+      "final_equity": 9801.95117106386,
+      "liquidated": false,
+      "execution_unchanged": true,
+      "old_archive_unchanged": true,
+      "new_archive_equal": true
+    },
+    {
+      "id": "verify_addition_long_atr_live",
+      "old_run_id": "run-b9b13326e928067ed7df57e06e0c8eff",
+      "new_run_id": "run-78453f9b0739154a0089269595d350d9",
+      "maintenance_margin_rate": 0.005,
+      "old_minimum_e_over_n": 6.389981928640549,
+      "minimum_mmr": 1277.9963857281098,
+      "minimum_mmr_percent": 127799.63857281097,
+      "final_equity": 9795.392451492147,
+      "liquidated": false,
+      "execution_unchanged": true,
+      "old_archive_unchanged": true,
+      "new_archive_equal": true
+    },
+    {
+      "id": "verify_addition_long_fixed_amount",
+      "old_run_id": "run-9e5d13530823e8d334b81c502ab9ffd9",
+      "new_run_id": "run-458251bcc21912dbe26ce7e8a4a5bd7f",
+      "maintenance_margin_rate": 0.005,
+      "old_minimum_e_over_n": 6.368941881268681,
+      "minimum_mmr": 1273.788376253736,
+      "minimum_mmr_percent": 127378.8376253736,
+      "final_equity": 9797.73352275669,
+      "liquidated": false,
+      "execution_unchanged": true,
+      "old_archive_unchanged": true,
+      "new_archive_equal": true
+    },
+    {
+      "id": "verify_addition_long_percent_fixed",
+      "old_run_id": "run-3edb9eab9db81da9fd56e7b0f6fede23",
+      "new_run_id": "run-0ca5b007fd276659e0b25bffc9085098",
+      "maintenance_margin_rate": 0.005,
+      "old_minimum_e_over_n": 6.396859285946355,
+      "minimum_mmr": 1279.371857189271,
+      "minimum_mmr_percent": 127937.1857189271,
+      "final_equity": 9777.083060710174,
+      "liquidated": false,
+      "execution_unchanged": true,
+      "old_archive_unchanged": true,
+      "new_archive_equal": true
+    },
+    {
+      "id": "verify_addition_long_percent_geometric",
+      "old_run_id": "run-e57f266ec6a521bcdf9a856747c2e70b",
+      "new_run_id": "run-e838f56b6d01096e4c550eb32f1833fc",
+      "maintenance_margin_rate": 0.005,
+      "old_minimum_e_over_n": 6.420797153253681,
+      "minimum_mmr": 1284.1594306507363,
+      "minimum_mmr_percent": 128415.94306507363,
+      "final_equity": 9779.658625475415,
+      "liquidated": false,
+      "execution_unchanged": true,
+      "old_archive_unchanged": true,
+      "new_archive_equal": true
+    },
+    {
+      "id": "verify_addition_long_percent_linear",
+      "old_run_id": "run-248c503cf210dccf3cb5fd82e850f34f",
+      "new_run_id": "run-18f5f91b053232fc30390d7ec4c51837",
+      "maintenance_margin_rate": 0.005,
+      "old_minimum_e_over_n": 6.401813398515565,
+      "minimum_mmr": 1280.3626797031131,
+      "minimum_mmr_percent": 128036.26797031131,
+      "final_equity": 9784.007011157422,
+      "liquidated": false,
+      "execution_unchanged": true,
+      "old_archive_unchanged": true,
+      "new_archive_equal": true
+    },
+    {
+      "id": "verify_addition_short_atr_each_entry",
+      "old_run_id": "run-2000bf6dfee5d79edb096d8bfadbd024",
+      "new_run_id": "run-a8b0e46f2971b467cd3b3c7d37a23883",
+      "maintenance_margin_rate": 0.005,
+      "old_minimum_e_over_n": 11.697908632658656,
+      "minimum_mmr": 2339.5817265317314,
+      "minimum_mmr_percent": 233958.17265317315,
+      "final_equity": 10042.095100082028,
+      "liquidated": false,
+      "execution_unchanged": true,
+      "old_archive_unchanged": true,
+      "new_archive_equal": true
+    },
+    {
+      "id": "verify_addition_short_atr_entry",
+      "old_run_id": "run-50cc63e8694cf7f91158da8e9aeb89bd",
+      "new_run_id": "run-c1158b9ef7fda3f59fa0461e1207290a",
+      "maintenance_margin_rate": 0.005,
+      "old_minimum_e_over_n": 11.685195383434353,
+      "minimum_mmr": 2337.0390766868704,
+      "minimum_mmr_percent": 233703.90766868705,
+      "final_equity": 10046.006771324186,
+      "liquidated": false,
+      "execution_unchanged": true,
+      "old_archive_unchanged": true,
+      "new_archive_equal": true
+    },
+    {
+      "id": "verify_addition_short_atr_live",
+      "old_run_id": "run-1f84a00ebd30f7caa7afc61a3ff1f301",
+      "new_run_id": "run-04f34095bff092ff3b22282cf68ffe3b",
+      "maintenance_margin_rate": 0.005,
+      "old_minimum_e_over_n": 11.70343644466638,
+      "minimum_mmr": 2340.687288933276,
+      "minimum_mmr_percent": 234068.72889332758,
+      "final_equity": 10040.396060650295,
+      "liquidated": false,
+      "execution_unchanged": true,
+      "old_archive_unchanged": true,
+      "new_archive_equal": true
+    },
+    {
+      "id": "verify_addition_short_fixed_amount",
+      "old_run_id": "run-9be662c269c03dea077b528b18f640bc",
+      "new_run_id": "run-54c8ac54504fda4962d6f5bc1c246021",
+      "maintenance_margin_rate": 0.005,
+      "old_minimum_e_over_n": 11.690684051710937,
+      "minimum_mmr": 2338.1368103421873,
+      "minimum_mmr_percent": 233813.68103421872,
+      "final_equity": 10046.145332891694,
+      "liquidated": false,
+      "execution_unchanged": true,
+      "old_archive_unchanged": true,
+      "new_archive_equal": true
+    },
+    {
+      "id": "verify_addition_short_percent_fixed",
+      "old_run_id": "run-3f300aa3c72f8dcba940be68b31916bc",
+      "new_run_id": "run-f1fdd4ca712b7fe598d39a2b1dd8af79",
+      "maintenance_margin_rate": 0.005,
+      "old_minimum_e_over_n": 11.69553437726919,
+      "minimum_mmr": 2339.1068754538383,
+      "minimum_mmr_percent": 233910.68754538381,
+      "final_equity": 10057.615374893354,
+      "liquidated": false,
+      "execution_unchanged": true,
+      "old_archive_unchanged": true,
+      "new_archive_equal": true
+    },
+    {
+      "id": "verify_addition_short_percent_geometric",
+      "old_run_id": "run-2683988324949e44619a7cd22acd506b",
+      "new_run_id": "run-02665b92430c3a2a2ac8a37afb9d1d3f",
+      "maintenance_margin_rate": 0.005,
+      "old_minimum_e_over_n": 11.687512244616146,
+      "minimum_mmr": 2337.502448923229,
+      "minimum_mmr_percent": 233750.24489232292,
+      "final_equity": 10024.664487239585,
+      "liquidated": false,
+      "execution_unchanged": true,
+      "old_archive_unchanged": true,
+      "new_archive_equal": true
+    },
+    {
+      "id": "verify_addition_short_percent_linear",
+      "old_run_id": "run-00875d1d645de1af5ee47595766ec5e2",
+      "new_run_id": "run-e0a1dbdf48da9ee97494756d3cf464d4",
+      "maintenance_margin_rate": 0.005,
+      "old_minimum_e_over_n": 11.691235729431668,
+      "minimum_mmr": 2338.247145886334,
+      "minimum_mmr_percent": 233824.7145886334,
+      "final_equity": 10047.377583705365,
+      "liquidated": false,
+      "execution_unchanged": true,
+      "old_archive_unchanged": true,
+      "new_archive_equal": true
+    },
+    {
+      "id": "verify_mmr_long",
+      "old_run_id": "run-ed83015904ac1b3e4ab02547c319ea0b",
+      "new_run_id": "run-d4ae62367eaedd8288938684dfd35909",
+      "maintenance_margin_rate": 0.005,
+      "old_minimum_e_over_n": 0.0049999999999998275,
+      "minimum_mmr": 0.9999999999999654,
+      "minimum_mmr_percent": 99.99999999999653,
+      "final_equity": 885.4036944005948,
+      "liquidated": true,
+      "execution_unchanged": true,
+      "old_archive_unchanged": true,
+      "new_archive_equal": true,
+      "old_input_replay_corrected": true,
+      "replay_run_id": "run-ade5748c8ed24267ea3b98d83a248783"
+    },
+    {
+      "id": "verify_mmr_short",
+      "old_run_id": "run-6fbdd79a0e18e0280dd4d633393b04eb",
+      "new_run_id": "run-307098fe81a0de2b9798d9b4f02f5366",
+      "maintenance_margin_rate": 0.005,
+      "old_minimum_e_over_n": 0.004999999999999903,
+      "minimum_mmr": 0.9999999999999805,
+      "minimum_mmr_percent": 99.99999999999804,
+      "final_equity": 955.0544169163168,
+      "liquidated": true,
+      "execution_unchanged": true,
+      "old_archive_unchanged": true,
+      "new_archive_equal": true,
+      "old_input_replay_corrected": true,
+      "replay_run_id": "run-7e2318cad0b30c1b7d76f36d076b1839"
+    }
+  ],
+  "legacy_disabled_cases": [
+    {
+      "id": "verify_addition_long_atr_each_entry",
+      "run_id": "run-643ee2361d6cda34e8d02eeab0938455",
+      "report_sha256": "62921a9b3de05673cf27d4e14407facb7d7281e1abf9a89a3e66393cc9d3a3f5",
+      "matches_original_baseline": true
+    },
+    {
+      "id": "verify_addition_long_atr_entry",
+      "run_id": "run-707d259836c951b37925e92a32e1387c",
+      "report_sha256": "b483bffc97606aa498006692e194d942b27e3d746ccbe41aa1cfc051c52ceb99",
+      "matches_original_baseline": true
+    },
+    {
+      "id": "verify_addition_long_atr_live",
+      "run_id": "run-3e0352da01917ab32b1a3af9974abc00",
+      "report_sha256": "2f204c060f455d919859e7474d24bd50a8f8ae3ca0e64736ff0d5c5a35c509ac",
+      "matches_original_baseline": true
+    },
+    {
+      "id": "verify_addition_long_fixed_amount",
+      "run_id": "run-0386e88b32b14aa1142c1f86e5cc0a2a",
+      "report_sha256": "0f8c9902d708466779342338e9969cfcd391dbfdee592691f36f66c34df25526",
+      "matches_original_baseline": true
+    },
+    {
+      "id": "verify_addition_long_percent_fixed",
+      "run_id": "run-735ebe9b5b78d1991198a9c13566dc6a",
+      "report_sha256": "6b9a21033546e19717c691f2f0c73899117947bcfbbebf388433964cf431b8a2",
+      "matches_original_baseline": true
+    },
+    {
+      "id": "verify_addition_long_percent_geometric",
+      "run_id": "run-41054185cc20e6ae04456f8510a56455",
+      "report_sha256": "c28af858997c20b5b4cd6cdce86712533a80372875f0acf8bff53c1e715d0c0f",
+      "matches_original_baseline": true
+    },
+    {
+      "id": "verify_addition_long_percent_linear",
+      "run_id": "run-d7d09a06a85a5931f9e2d68967c2d254",
+      "report_sha256": "96cec486002e2c3b1f67ba17aef836eb7cf0667c57519b4fad8b884d365939f5",
+      "matches_original_baseline": true
+    },
+    {
+      "id": "verify_addition_short_atr_each_entry",
+      "run_id": "run-84026ebce65027d974eba7e63263880c",
+      "report_sha256": "605ccb51d0241d0512fba8eedb84c21792590bbd11bf7d7f79a1ad0d7759a194",
+      "matches_original_baseline": true
+    },
+    {
+      "id": "verify_addition_short_atr_entry",
+      "run_id": "run-d037667fe5ee89dc575352d79929c064",
+      "report_sha256": "a67708e200a4edba445bd173b13e1520b3bf299346592c2e7a484bf18315a263",
+      "matches_original_baseline": true
+    },
+    {
+      "id": "verify_addition_short_atr_live",
+      "run_id": "run-9c57b2db21d4946c94786aad605e1a98",
+      "report_sha256": "be441741c9c7fc1e9177c423aca5d6aec9b9c391abb64b434472c0cbde6facbf",
+      "matches_original_baseline": true
+    },
+    {
+      "id": "verify_addition_short_fixed_amount",
+      "run_id": "run-714bbf678239418d5a03b0567c0895d6",
+      "report_sha256": "6b78a886c8617175ddce6258ba6670156a55880e1f8642bde2af0af34698b28f",
+      "matches_original_baseline": true
+    },
+    {
+      "id": "verify_addition_short_percent_fixed",
+      "run_id": "run-6d965d2c2cc4b01588a89df8c1f66331",
+      "report_sha256": "28b9ccd25b45afb07c8bd28e006530e88ac827a48f33bc23e39388b6fe692d5c",
+      "matches_original_baseline": true
+    },
+    {
+      "id": "verify_addition_short_percent_geometric",
+      "run_id": "run-e914776d36c5c931dcd841f8a4f91748",
+      "report_sha256": "b671988fefe21e5d92b87b31dea21e47bd41ad1485e512fe79a45855be3dc049",
+      "matches_original_baseline": true
+    },
+    {
+      "id": "verify_addition_short_percent_linear",
+      "run_id": "run-f744dfe9a4857fb695b3048c29d0f88f",
+      "report_sha256": "aeb6857625e5335cd7349ad5db88190d2dae9b3affd93dd1099b8555d37769c9",
+      "matches_original_baseline": true
+    },
+    {
+      "id": "verify_history_long",
+      "run_id": "run-a299b5250bcc1d3c5eb7ff2e4c510036",
+      "report_sha256": "b510319c3b9d409ddb60a5901c6bea0619bcc981dfb93a367037c75dbca1a9f6",
+      "matches_original_baseline": true
+    },
+    {
+      "id": "verify_history_short",
+      "run_id": "run-bc97b433d55db7d689edd9d73f2721a2",
+      "report_sha256": "d483b90898fb3ddd69d00d514c519e6905a1aff623b506185a326bebb0529c5e",
+      "matches_original_baseline": true
+    }
+  ],
+  "checks": {
+    "corrected_real_market_cases": 16,
+    "liquidation_boundary_percent": 100,
+    "unchanged_disabled_cases": 16,
+    "go_race": "passed: go test -p 1 -race ./...",
+    "go_vet": "passed: go vet -p 1 ./...",
+    "frontend": "passed: 85 tests",
+    "javascript_syntax": "passed",
+    "actual_archive_frontend_rendering": "passed for both long and short",
+    "cli_minimum_mmr_percent": 99.99999999999653,
+    "git_diff_check": "passed"
+  },
+  "display_validation": {
+    "configuration_label": "维持保证金率 (%)，0 为关闭",
+    "minimum_metric_label": "最低 MMR (E/M)",
+    "current_metric_label": "当前 MMR (E/M)",
+    "legacy_liquidation_minimum_display": "100.000%",
+    "native_liquidation_minimum_display": "100.000%",
+    "maintenance_rate_display": "0.500%",
+    "legacy_and_native_replay_point_mmr_equal": true,
+    "browser_labels_observed": true,
+    "browser_history_click_completed": false,
+    "browser_history_click_limitation": "browser control channel timed out twice; actual archive rendering verified in Node VM"
+  }
+}

@@ -123,6 +123,7 @@ func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request) {
 			"actions":           []string{"enter", "add", "open", "close"},
 			"execution":         []string{"next_bar_open", "trigger_price"},
 			"run_configuration": true, "archived_runs": true, "ledger": true,
+			"maintenance_margin": true,
 		},
 	})
 }

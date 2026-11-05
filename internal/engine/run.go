@@ -84,7 +84,7 @@ func Run(ctx context.Context, compiled compiler.Plan, request RunRequest) (Resul
 	positionHistory := newPositionHistory(plan.Rules, len(bars))
 	exitPolicies := newExitPolicyRuntimes(plan.ExitPolicies)
 	additions := newAdditionRuntimes(plan.Rules)
-	result := Result{}
+	result := Result{Margin: newMarginReport(config.Account)}
 	pendingOrderIndexes := make([]int, 0)
 	orderSequence := 0
 	risk := riskController{spec: config.Risk, peak: config.Account.InitialCash}
@@ -97,10 +97,24 @@ func Run(ctx context.Context, compiled compiler.Plan, request RunRequest) (Resul
 		if !bar.IsClosed() {
 			return Result{}, fmt.Errorf("bar at open_time_ms=%d is not closed", bar.OpenTimeMS)
 		}
+		if result.Margin != nil {
+			result.Margin.observe(portfolio, bar.Open)
+			if !result.Margin.Liquidated && marginBreached(portfolio, bar.Open, result.Margin.MaintenanceRate) {
+				if err := forceLiquidation(&portfolio, &result, &orderSequence, bar.Open,
+					bar.OpenTimeMS, bar.OpenTimeMS, "open", plan.Logic, config); err != nil {
+					return Result{}, err
+				}
+			}
+		}
 		openEquity := portfolio.equity(bar.Open)
 		riskHalted := risk.observe(openEquity, false)
 		if len(pendingOrderIndexes) > 0 {
 			for _, orderIndex := range pendingOrderIndexes {
+				if result.Margin != nil && result.Margin.Liquidated {
+					result.Orders[orderIndex].Status = OrderStatusSkipped
+					result.Orders[orderIndex].Reason = "account_liquidated"
+					continue
+				}
 				previousEntryCount := portfolio.entryCount
 				hadPosition := portfolio.quantity != 0
 				if executeOrder(&portfolio, &result, orderIndex, bar.Open, bar.OpenTimeMS, plan.Logic, config, riskHalted) {
@@ -108,6 +122,15 @@ func Run(ctx context.Context, compiled compiler.Plan, request RunRequest) (Resul
 					if portfolio.entryCount > previousEntryCount {
 						snapshotExitPolicies(exitPolicies, states, previousEntryCount == 0)
 						snapshotAdditions(additions, states, previousEntryCount == 0)
+					}
+					if result.Margin != nil {
+						result.Margin.observe(portfolio, bar.Open)
+						if marginBreached(portfolio, bar.Open, result.Margin.MaintenanceRate) {
+							if err := forceLiquidation(&portfolio, &result, &orderSequence, bar.Open,
+								bar.OpenTimeMS, bar.OpenTimeMS, "post_fill", plan.Logic, config); err != nil {
+								return Result{}, err
+							}
+						}
 					}
 					if hadPosition && portfolio.quantity == 0 {
 						resetExitPolicyRuntimes(exitPolicies)
@@ -118,8 +141,19 @@ func Run(ctx context.Context, compiled compiler.Plan, request RunRequest) (Resul
 			pendingOrderIndexes = pendingOrderIndexes[:0]
 		}
 
-		exitHandled := false
-		if candidate := selectExitCandidate(portfolio, bar, exitPolicies, states); candidate != nil {
+		exitHandled, err := processMarginIntrabar(&portfolio, &result, &orderSequence, bar,
+			bar.OpenTimeMS+plan.BaseTimeframeMS, exitPolicies, states, plan.Logic, config)
+		if err != nil {
+			return Result{}, err
+		}
+		if exitHandled {
+			lastFillBarIndex = index
+			if portfolio.quantity == 0 {
+				resetExitPolicyRuntimes(exitPolicies)
+				resetAdditionRuntimes(additions)
+			}
+		}
+		if candidate := selectExitCandidate(portfolio, bar, exitPolicies, states); !exitHandled && candidate != nil {
 			candidate.runtime.fired = true
 			orderSequence++
 			action := strategy.ActionSpec{
@@ -190,8 +224,22 @@ func Run(ctx context.Context, compiled compiler.Plan, request RunRequest) (Resul
 		}
 		portfolio.updateExtremes(bar.High, bar.Low)
 
+		if result.Margin != nil && !result.Margin.Liquidated &&
+			marginBreached(portfolio, bar.Close, result.Margin.MaintenanceRate) {
+			if err := forceLiquidation(&portfolio, &result, &orderSequence, bar.Close,
+				bar.OpenTimeMS+plan.BaseTimeframeMS, bar.OpenTimeMS, "close", plan.Logic, config); err != nil {
+				return Result{}, err
+			}
+			resetExitPolicyRuntimes(exitPolicies)
+			resetAdditionRuntimes(additions)
+			lastFillBarIndex, exitHandled = index, true
+		}
 		currentEquity := portfolio.equity(bar.Close)
 		riskHalted = risk.observe(currentEquity, true)
+		if result.Margin != nil {
+			result.Margin.observe(portfolio, bar.Close)
+			riskHalted = riskHalted || result.Margin.Liquidated
+		}
 
 		evalCtx := evalContext{
 			bars: bars, barIndex: index, indicators: indicatorSeries,
@@ -229,14 +277,22 @@ func Run(ctx context.Context, compiled compiler.Plan, request RunRequest) (Resul
 		// Record after evaluation so a maxLag ring never evicts a needed bar.
 		positionHistory.record(index, portfolio)
 
-		result.EquityCurve = append(result.EquityCurve, EquityPoint{
+		point := EquityPoint{
 			TimeMS:           bar.OpenTimeMS + plan.BaseTimeframeMS,
 			Equity:           currentEquity,
 			Cash:             portfolio.cash,
 			PositionQty:      portfolio.quantity,
 			PositionLeverage: portfolio.positionLeverage(bar.Close),
 			Close:            bar.Close,
-		})
+		}
+		if result.Margin != nil && portfolio.quantity != 0 {
+			required := portfolio.positionNotional(bar.Close) * result.Margin.MaintenanceRate
+			ratio := currentEquity / portfolio.positionNotional(bar.Close)
+			point.MaintenanceMargin, point.MarginRatio = &required, &ratio
+			point.MMR = positionMMR(portfolio, bar.Close, result.Margin.MaintenanceRate)
+			point.LiquidationPrice = liquidationPrice(portfolio, result.Margin.MaintenanceRate)
+		}
+		result.EquityCurve = append(result.EquityCurve, point)
 		if request.OnProgress != nil && ((index+1)%256 == 0 || index+1 == len(bars)) {
 			request.OnProgress(index+1, len(bars))
 		}
@@ -306,6 +362,7 @@ func executeOrder(portfolio *portfolio, result *Result, orderIndex int, rawPrice
 		Fee:         match.fee,
 		RealizedPNL: match.realized,
 		Side:        order.Action.Side,
+		Reason:      order.Reason,
 	}
 	applyMatchedFill(portfolio, match, order.Action.Type, price)
 	result.Fills = append(result.Fills, fill)

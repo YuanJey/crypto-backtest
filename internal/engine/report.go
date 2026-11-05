@@ -22,6 +22,7 @@ func validateReportSpec(spec ReportSpec, plan compiler.ExecutionPlan) error {
 		MetricOrderCount:          {},
 		MetricFillCount:           {},
 		MetricMaxPositionLeverage: {},
+		MetricMinimumMMR:          {},
 	}
 	for _, metric := range spec.Metrics {
 		if _, ok := validMetrics[metric]; !ok {
@@ -96,6 +97,10 @@ func buildMetrics(result Result, requested []MetricType, initialCash float64) ma
 			metrics[metric] = float64(len(result.Fills))
 		case MetricMaxPositionLeverage:
 			metrics[metric] = maxPositionLeverage(result.EquityCurve)
+		case MetricMinimumMMR:
+			if result.Margin != nil && result.Margin.MinimumMMR != nil {
+				metrics[metric] = *result.Margin.MinimumMMR
+			}
 		}
 	}
 	return metrics

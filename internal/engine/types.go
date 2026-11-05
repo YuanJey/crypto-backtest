@@ -12,6 +12,7 @@ type Result struct {
 	Indicators  map[string]IndicatorReport `json:"indicators,omitempty"`
 	Metrics     map[MetricType]float64     `json:"metrics,omitempty"`
 	Ledger      []LedgerEvent              `json:"ledger,omitempty"`
+	Margin      *MarginReport              `json:"margin,omitempty"`
 	FinalEquity float64                    `json:"final_equity"`
 	TotalOrders int                        `json:"-"`
 	TotalFills  int                        `json:"-"`
@@ -31,6 +32,7 @@ type Order struct {
 	SignalTimeMS int64               `json:"signal_time_ms"`
 	Action       strategy.ActionSpec `json:"action"`
 	Status       OrderStatus         `json:"status"`
+	Reason       string              `json:"reason,omitempty"`
 }
 
 type Fill struct {
@@ -42,15 +44,21 @@ type Fill struct {
 	Fee         float64            `json:"fee"`
 	RealizedPNL float64            `json:"realized_pnl"`
 	Side        strategy.TradeSide `json:"side"`
+	Reason      string             `json:"reason,omitempty"`
 }
 
 type EquityPoint struct {
-	TimeMS           int64   `json:"time_ms"`
-	Equity           float64 `json:"equity"`
-	Cash             float64 `json:"cash"`
-	PositionQty      float64 `json:"position_qty"`
-	PositionLeverage float64 `json:"position_leverage"`
-	Close            float64 `json:"close"`
+	TimeMS            int64    `json:"time_ms"`
+	Equity            float64  `json:"equity"`
+	Cash              float64  `json:"cash"`
+	PositionQty       float64  `json:"position_qty"`
+	PositionLeverage  float64  `json:"position_leverage"`
+	Close             float64  `json:"close"`
+	MaintenanceMargin *float64 `json:"maintenance_margin,omitempty"`
+	MMR               *float64 `json:"mmr,omitempty"`
+	// Legacy equity / notional ratio. Use MMR for account maintenance coverage.
+	MarginRatio      *float64 `json:"margin_ratio,omitempty"`
+	LiquidationPrice *float64 `json:"liquidation_price,omitempty"`
 }
 
 type RunRequest struct {
@@ -80,6 +88,7 @@ const (
 	MetricOrderCount          MetricType = "order_count"
 	MetricFillCount           MetricType = "fill_count"
 	MetricMaxPositionLeverage MetricType = "max_position_leverage"
+	MetricMinimumMMR          MetricType = "minimum_mmr"
 )
 
 type IndicatorOverlay struct {

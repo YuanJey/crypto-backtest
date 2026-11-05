@@ -67,7 +67,7 @@ func (m *Manager) admit(ctx context.Context, prepared PreparedRun) (string, cont
 		ConfigSHA256    string                    `json:"config_sha256"`
 		PlanSHA256      string                    `json:"plan_sha256"`
 		EngineVersion   string                    `json:"engine_version"`
-	}{prepared.Version, prepared.Data.Provenance, runstore.Hash(config), runstore.Hash(plan), "bar-engine-v1"})
+	}{prepared.Version, prepared.Data.Provenance, runstore.Hash(config), runstore.Hash(plan), "bar-engine-v1.2-mmr-coverage"})
 	if err != nil {
 		return "", nil, err
 	}

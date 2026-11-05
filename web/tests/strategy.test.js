@@ -570,6 +570,30 @@ test('overview separates leverage and capital decay from rule allocation', () =>
   assert.ok(!document.getElementById('rulesTreeContainer').innerHTML.includes('value="inherit"'));
 });
 
+test('maintenance-rate edits use percentage units and changing to spot clears the perpetual setting', () => {
+  const { wb, document } = workbench();
+  wb.currentStrategy.account.market_type = 'perpetual';
+  wb.sourceStrategy = copy(wb.currentStrategy);
+  const source = copy(wb.sourceStrategy);
+  wb.renderOverviewForm(wb.currentStrategy);
+  assert.ok(document.getElementById('riskCards').innerHTML.includes('维持保证金率'));
+  assert.ok(!document.getElementById('riskCards').innerHTML.includes('最低 MMR'));
+  const field = document.getElementById('formMaintenanceMarginRate');
+  field.value = '0.5';
+  field.emit('change');
+  assert.equal(wb.currentStrategy.account.maintenance_margin_rate, 0.005);
+  assert.deepEqual(copy(wb.sourceStrategy), source);
+  for (const value of ['100', '', 'Infinity', '-1']) {
+    field.value = value;
+    field.emit('change');
+    assert.equal(wb.currentStrategy.account.maintenance_margin_rate, 0.005);
+  }
+  const market = document.getElementById('formMarketType');
+  market.value = 'spot';
+  market.emit('change');
+  assert.equal(Object.hasOwn(wb.currentStrategy.account, 'maintenance_margin_rate'), false);
+});
+
 test('switching action types cleans incompatible fields and retains allocation and conditions', () => {
   const { wb } = workbench();
   const rule = wb.currentStrategy.rules[0];

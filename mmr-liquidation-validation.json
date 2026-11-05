@@ -1,0 +1,1029 @@
+{
+  "baseline_commit": "f84e2db",
+  "preview": "http://127.0.0.1:8084",
+  "legacy_cases": [
+    {
+      "id": "verify_addition_long_atr_each_entry",
+      "run_id": "run-1e055d71bde8fd2eea0409a702921451",
+      "bar_count": 1344,
+      "report_sha256": "62921a9b3de05673cf27d4e14407facb7d7281e1abf9a89a3e66393cc9d3a3f5",
+      "matches_baseline": true,
+      "final_equity": 9795.40587181204
+    },
+    {
+      "id": "verify_addition_long_atr_entry",
+      "run_id": "run-975da37d74f09c0a368a3ef5d5ea8721",
+      "bar_count": 1344,
+      "report_sha256": "b483bffc97606aa498006692e194d942b27e3d746ccbe41aa1cfc051c52ceb99",
+      "matches_baseline": true,
+      "final_equity": 9801.95117106386
+    },
+    {
+      "id": "verify_addition_long_atr_live",
+      "run_id": "run-a6e53eec3f848f245a613af547c25cf4",
+      "bar_count": 1344,
+      "report_sha256": "2f204c060f455d919859e7474d24bd50a8f8ae3ca0e64736ff0d5c5a35c509ac",
+      "matches_baseline": true,
+      "final_equity": 9795.392451492147
+    },
+    {
+      "id": "verify_addition_long_fixed_amount",
+      "run_id": "run-915b8114f069664926013d6cd92ab9e9",
+      "bar_count": 1344,
+      "report_sha256": "0f8c9902d708466779342338e9969cfcd391dbfdee592691f36f66c34df25526",
+      "matches_baseline": true,
+      "final_equity": 9797.73352275669
+    },
+    {
+      "id": "verify_addition_long_percent_fixed",
+      "run_id": "run-70432dfc4cf19ed07dc03bd56641b401",
+      "bar_count": 1344,
+      "report_sha256": "6b9a21033546e19717c691f2f0c73899117947bcfbbebf388433964cf431b8a2",
+      "matches_baseline": true,
+      "final_equity": 9777.083060710174
+    },
+    {
+      "id": "verify_addition_long_percent_geometric",
+      "run_id": "run-6507b74f1c3ad4d05096dea6311894a2",
+      "bar_count": 1344,
+      "report_sha256": "c28af858997c20b5b4cd6cdce86712533a80372875f0acf8bff53c1e715d0c0f",
+      "matches_baseline": true,
+      "final_equity": 9779.658625475415
+    },
+    {
+      "id": "verify_addition_long_percent_linear",
+      "run_id": "run-4def1d185bb6cb886c8578e90f43d070",
+      "bar_count": 1344,
+      "report_sha256": "96cec486002e2c3b1f67ba17aef836eb7cf0667c57519b4fad8b884d365939f5",
+      "matches_baseline": true,
+      "final_equity": 9784.007011157422
+    },
+    {
+      "id": "verify_addition_short_atr_each_entry",
+      "run_id": "run-250028a97a15d66ea2000279d0939ea8",
+      "bar_count": 1344,
+      "report_sha256": "605ccb51d0241d0512fba8eedb84c21792590bbd11bf7d7f79a1ad0d7759a194",
+      "matches_baseline": true,
+      "final_equity": 10042.095100082028
+    },
+    {
+      "id": "verify_addition_short_atr_entry",
+      "run_id": "run-3ce3fddeab2699e85d3b75d05abac6d4",
+      "bar_count": 1344,
+      "report_sha256": "a67708e200a4edba445bd173b13e1520b3bf299346592c2e7a484bf18315a263",
+      "matches_baseline": true,
+      "final_equity": 10046.006771324186
+    },
+    {
+      "id": "verify_addition_short_atr_live",
+      "run_id": "run-9ea8929161149a4f0970734594a4a393",
+      "bar_count": 1344,
+      "report_sha256": "be441741c9c7fc1e9177c423aca5d6aec9b9c391abb64b434472c0cbde6facbf",
+      "matches_baseline": true,
+      "final_equity": 10040.396060650295
+    },
+    {
+      "id": "verify_addition_short_fixed_amount",
+      "run_id": "run-fffd274fefb43cca31e80bea7d3fcc76",
+      "bar_count": 1344,
+      "report_sha256": "6b78a886c8617175ddce6258ba6670156a55880e1f8642bde2af0af34698b28f",
+      "matches_baseline": true,
+      "final_equity": 10046.145332891694
+    },
+    {
+      "id": "verify_addition_short_percent_fixed",
+      "run_id": "run-ba1fcefa3ea4b8e10be22670fe7fe825",
+      "bar_count": 1344,
+      "report_sha256": "28b9ccd25b45afb07c8bd28e006530e88ac827a48f33bc23e39388b6fe692d5c",
+      "matches_baseline": true,
+      "final_equity": 10057.615374893354
+    },
+    {
+      "id": "verify_addition_short_percent_geometric",
+      "run_id": "run-37228ba880cf5e3d2016557181dd96e7",
+      "bar_count": 1344,
+      "report_sha256": "b671988fefe21e5d92b87b31dea21e47bd41ad1485e512fe79a45855be3dc049",
+      "matches_baseline": true,
+      "final_equity": 10024.664487239585
+    },
+    {
+      "id": "verify_addition_short_percent_linear",
+      "run_id": "run-39cec797cb68e78dfe7fe70e3f5d108f",
+      "bar_count": 1344,
+      "report_sha256": "aeb6857625e5335cd7349ad5db88190d2dae9b3affd93dd1099b8555d37769c9",
+      "matches_baseline": true,
+      "final_equity": 10047.377583705365
+    },
+    {
+      "id": "verify_history_long",
+      "run_id": "run-a977181032f6b6cc882ff088b63dc178",
+      "bar_count": 1344,
+      "report_sha256": "b510319c3b9d409ddb60a5901c6bea0619bcc981dfb93a367037c75dbca1a9f6",
+      "matches_baseline": true,
+      "final_equity": 9960.719353772784
+    },
+    {
+      "id": "verify_history_short",
+      "run_id": "run-ad5cb82e8f69a563a2c433850412ceb4",
+      "bar_count": 1344,
+      "report_sha256": "d483b90898fb3ddd69d00d514c519e6905a1aff623b506185a326bebb0529c5e",
+      "matches_baseline": true,
+      "final_equity": 9967.810371404872
+    }
+  ],
+  "enabled_healthy_cases": [
+    {
+      "id": "verify_addition_long_atr_each_entry",
+      "run_id": "run-3a708bd86896b5592a13aea4c340b5cf",
+      "margin": {
+        "model": "linear_cross_fixed_mmr_ohlc_adverse_first",
+        "maintenance_margin_rate": 0.005,
+        "liquidated": false,
+        "liquidation_count": 0,
+        "minimum_margin_ratio": 6.368901382717635,
+        "liquidations": []
+      },
+      "execution_unchanged": true,
+      "ledger_audit": {
+        "events": 69,
+        "cash": 9848.538337078042,
+        "position_qty": 0.6095471006269423,
+        "passed": true
+      }
+    },
+    {
+      "id": "verify_addition_long_atr_entry",
+      "run_id": "run-116447cf08115939237fd2803513984e",
+      "margin": {
+        "model": "linear_cross_fixed_mmr_ohlc_adverse_first",
+        "maintenance_margin_rate": 0.005,
+        "liquidated": false,
+        "liquidation_count": 0,
+        "minimum_margin_ratio": 6.351036592424626,
+        "liquidations": []
+      },
+      "execution_unchanged": true,
+      "ledger_audit": {
+        "events": 65,
+        "cash": 9856.333552401502,
+        "position_qty": 0.610029593077621,
+        "passed": true
+      }
+    },
+    {
+      "id": "verify_addition_long_atr_live",
+      "run_id": "run-b9b13326e928067ed7df57e06e0c8eff",
+      "margin": {
+        "model": "linear_cross_fixed_mmr_ohlc_adverse_first",
+        "maintenance_margin_rate": 0.005,
+        "liquidated": false,
+        "liquidation_count": 0,
+        "minimum_margin_ratio": 6.389981928640549,
+        "liquidations": []
+      },
+      "execution_unchanged": true,
+      "ledger_audit": {
+        "events": 72,
+        "cash": 9837.970672384485,
+        "position_qty": 0.6112340393826897,
+        "passed": true
+      }
+    },
+    {
+      "id": "verify_addition_long_fixed_amount",
+      "run_id": "run-9e5d13530823e8d334b81c502ab9ffd9",
+      "margin": {
+        "model": "linear_cross_fixed_mmr_ohlc_adverse_first",
+        "maintenance_margin_rate": 0.005,
+        "liquidated": false,
+        "liquidation_count": 0,
+        "minimum_margin_ratio": 6.368941881268681,
+        "liquidations": []
+      },
+      "execution_unchanged": true,
+      "ledger_audit": {
+        "events": 71,
+        "cash": 9852.092504084008,
+        "position_qty": 0.6097671055141081,
+        "passed": true
+      }
+    },
+    {
+      "id": "verify_addition_long_percent_fixed",
+      "run_id": "run-3edb9eab9db81da9fd56e7b0f6fede23",
+      "margin": {
+        "model": "linear_cross_fixed_mmr_ohlc_adverse_first",
+        "maintenance_margin_rate": 0.005,
+        "liquidated": false,
+        "liquidation_count": 0,
+        "minimum_margin_ratio": 6.396859285946355,
+        "liquidations": []
+      },
+      "execution_unchanged": true,
+      "ledger_audit": {
+        "events": 71,
+        "cash": 9831.327470838125,
+        "position_qty": 0.6084819131336063,
+        "passed": true
+      }
+    },
+    {
+      "id": "verify_addition_long_percent_geometric",
+      "run_id": "run-e57f266ec6a521bcdf9a856747c2e70b",
+      "margin": {
+        "model": "linear_cross_fixed_mmr_ohlc_adverse_first",
+        "maintenance_margin_rate": 0.005,
+        "liquidated": false,
+        "liquidation_count": 0,
+        "minimum_margin_ratio": 6.420797153253681,
+        "liquidations": []
+      },
+      "execution_unchanged": true,
+      "ledger_audit": {
+        "events": 64,
+        "cash": 9823.664525772156,
+        "position_qty": 0.6092212136820143,
+        "passed": true
+      }
+    },
+    {
+      "id": "verify_addition_long_percent_linear",
+      "run_id": "run-248c503cf210dccf3cb5fd82e850f34f",
+      "margin": {
+        "model": "linear_cross_fixed_mmr_ohlc_adverse_first",
+        "maintenance_margin_rate": 0.005,
+        "liquidated": false,
+        "liquidation_count": 0,
+        "minimum_margin_ratio": 6.401813398515565,
+        "liquidations": []
+      },
+      "execution_unchanged": true,
+      "ledger_audit": {
+        "events": 69,
+        "cash": 9837.077646461934,
+        "position_qty": 0.6088377739738765,
+        "passed": true
+      }
+    },
+    {
+      "id": "verify_addition_short_atr_each_entry",
+      "run_id": "run-2000bf6dfee5d79edb096d8bfadbd024",
+      "margin": {
+        "model": "linear_cross_fixed_mmr_ohlc_adverse_first",
+        "maintenance_margin_rate": 0.005,
+        "liquidated": false,
+        "liquidation_count": 0,
+        "minimum_margin_ratio": 11.697908632658656,
+        "liquidations": []
+      },
+      "execution_unchanged": true,
+      "ledger_audit": {
+        "events": 71,
+        "cash": 10042.312248999939,
+        "position_qty": -0.10358011555561764,
+        "passed": true
+      }
+    },
+    {
+      "id": "verify_addition_short_atr_entry",
+      "run_id": "run-50cc63e8694cf7f91158da8e9aeb89bd",
+      "margin": {
+        "model": "linear_cross_fixed_mmr_ohlc_adverse_first",
+        "maintenance_margin_rate": 0.005,
+        "liquidated": false,
+        "liquidation_count": 0,
+        "minimum_margin_ratio": 11.685195383434353,
+        "liquidations": []
+      },
+      "execution_unchanged": true,
+      "ledger_audit": {
+        "events": 69,
+        "cash": 10046.137005561222,
+        "position_qty": -0.10356391818613167,
+        "passed": true
+      }
+    },
+    {
+      "id": "verify_addition_short_atr_live",
+      "run_id": "run-1f84a00ebd30f7caa7afc61a3ff1f301",
+      "margin": {
+        "model": "linear_cross_fixed_mmr_ohlc_adverse_first",
+        "maintenance_margin_rate": 0.005,
+        "liquidated": false,
+        "liquidation_count": 0,
+        "minimum_margin_ratio": 11.70343644466638,
+        "liquidations": []
+      },
+      "execution_unchanged": true,
+      "ledger_audit": {
+        "events": 70,
+        "cash": 10040.61319119782,
+        "position_qty": -0.10357135287400138,
+        "passed": true
+      }
+    },
+    {
+      "id": "verify_addition_short_fixed_amount",
+      "run_id": "run-9be662c269c03dea077b528b18f640bc",
+      "margin": {
+        "model": "linear_cross_fixed_mmr_ohlc_adverse_first",
+        "maintenance_margin_rate": 0.005,
+        "liquidated": false,
+        "liquidation_count": 0,
+        "minimum_margin_ratio": 11.690684051710937,
+        "liquidations": []
+      },
+      "execution_unchanged": true,
+      "ledger_audit": {
+        "events": 72,
+        "cash": 10046.362525595347,
+        "position_qty": -0.10360100136964973,
+        "passed": true
+      }
+    },
+    {
+      "id": "verify_addition_short_percent_fixed",
+      "run_id": "run-3f300aa3c72f8dcba940be68b31916bc",
+      "margin": {
+        "model": "linear_cross_fixed_mmr_ohlc_adverse_first",
+        "maintenance_margin_rate": 0.005,
+        "liquidated": false,
+        "liquidation_count": 0,
+        "minimum_margin_ratio": 11.69553437726919,
+        "liquidations": []
+      },
+      "execution_unchanged": true,
+      "ledger_audit": {
+        "events": 76,
+        "cash": 10057.745684353502,
+        "position_qty": -0.10362373655993774,
+        "passed": true
+      }
+    },
+    {
+      "id": "verify_addition_short_percent_geometric",
+      "run_id": "run-2683988324949e44619a7cd22acd506b",
+      "margin": {
+        "model": "linear_cross_fixed_mmr_ohlc_adverse_first",
+        "maintenance_margin_rate": 0.005,
+        "liquidated": false,
+        "liquidation_count": 0,
+        "minimum_margin_ratio": 11.687512244616146,
+        "liquidations": []
+      },
+      "execution_unchanged": true,
+      "ledger_audit": {
+        "events": 71,
+        "cash": 10024.881447620006,
+        "position_qty": -0.10349018310252489,
+        "passed": true
+      }
+    },
+    {
+      "id": "verify_addition_short_percent_linear",
+      "run_id": "run-00875d1d645de1af5ee47595766ec5e2",
+      "margin": {
+        "model": "linear_cross_fixed_mmr_ohlc_adverse_first",
+        "maintenance_margin_rate": 0.005,
+        "liquidated": false,
+        "liquidation_count": 0,
+        "minimum_margin_ratio": 11.691235729431668,
+        "liquidations": []
+      },
+      "execution_unchanged": true,
+      "ledger_audit": {
+        "events": 72,
+        "cash": 10047.594789728724,
+        "position_qty": -0.10360735487553416,
+        "passed": true
+      }
+    }
+  ],
+  "stress_cases": [
+    {
+      "id": "verify_mmr_long",
+      "definition": {
+        "schema_version": 1,
+        "id": "verify_mmr_long",
+        "name": "MMR 多头强平验证",
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbols": [
+            "ETH-USDT"
+          ],
+          "timeframe": "15m",
+          "start": "2026-10-01T00:00:00Z",
+          "end": "2026-10-15T00:00:00Z"
+        },
+        "account": {
+          "market_type": "perpetual",
+          "initial_cash": 10000,
+          "quote_currency": "USDT",
+          "exchange_leverage": 20
+        },
+        "behavior": {
+          "allow_additions": true,
+          "allow_pyramiding": false,
+          "allow_same_bar_reversal": false,
+          "cooldown_bars": 0
+        },
+        "position": {
+          "position_leverage": 1
+        },
+        "exit_policies": [],
+        "execution": {
+          "signal_time": "bar_close",
+          "market_fill_time": "next_bar_open",
+          "intrabar_conflict": "conservative",
+          "fee": {
+            "maker_rate": 0,
+            "taker_rate": 0.0004
+          },
+          "slippage": {
+            "type": "none",
+            "value": 0
+          }
+        },
+        "risk": {
+          "max_symbol_equity_pct": 10,
+          "max_total_exposure_pct": 10,
+          "max_open_positions": 1,
+          "max_drawdown_halt_pct": 0
+        },
+        "indicators": [
+          {
+            "id": "atr",
+            "type": "atr",
+            "inputs": null,
+            "params": {
+              "period": 14
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "entry",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "enter",
+              "side": "long",
+              "size_pct": 1
+            }
+          },
+          {
+            "id": "add_1",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "addition_index": 1,
+              "sizing_mode": "current_position_multiple",
+              "size_multiplier": 4,
+              "size_pct": 0
+            }
+          },
+          {
+            "id": "add_2",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "addition_index": 2,
+              "sizing_mode": "current_position_multiple",
+              "size_multiplier": 4,
+              "size_pct": 0
+            }
+          }
+        ]
+      },
+      "run_config": {
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbols": [
+            "ETH-USDT"
+          ],
+          "timeframe": "15m",
+          "start": "2026-10-01T00:00:00Z",
+          "end": "2026-10-15T00:00:00Z"
+        },
+        "account": {
+          "market_type": "perpetual",
+          "initial_cash": 10000,
+          "quote_currency": "USDT",
+          "exchange_leverage": 20,
+          "maintenance_margin_rate": 0.005
+        },
+        "execution": {
+          "signal_time": "bar_close",
+          "market_fill_time": "next_bar_open",
+          "intrabar_conflict": "conservative",
+          "fee": {
+            "maker_rate": 0,
+            "taker_rate": 0.0004
+          },
+          "slippage": {
+            "type": "none",
+            "value": 0
+          }
+        },
+        "risk": {
+          "max_symbol_equity_pct": 20,
+          "max_total_exposure_pct": 20,
+          "max_open_positions": 1,
+          "max_drawdown_halt_pct": 0
+        }
+      },
+      "strategy_version": {
+        "revision": 2,
+        "definition_sha256": "8c311ee3d9544ee28994b8fa803af27cce548651b9d72f149ddc5b9dad795f33"
+      },
+      "data": {
+        "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+        "symbol": "ETH-USDT",
+        "timeframe": "15m",
+        "start_ms": 1790812800000,
+        "end_ms": 1792022400000,
+        "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+        "bars_sha256": "9f3cf4b5a84505abc1fbb786623186fdc5cac5ad276f77edcd963f4966b7ba2b",
+        "files": [
+          {
+            "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=08/part-000.parquet",
+            "sha256": "b0e0882fecef562d424c168e90353aba0802f46ecb2a2853001ee97a29ab0e2e",
+            "row_count": 2536,
+            "start_ms": 1785938400000,
+            "end_ms": 1788220800000
+          },
+          {
+            "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=09/part-000.parquet",
+            "sha256": "edb771e0a6d82f42ac2fc7ee3f8f8628498495c586a402e1b1e7a7ef33bc8b46",
+            "row_count": 2880,
+            "start_ms": 1788220800000,
+            "end_ms": 1790812800000
+          },
+          {
+            "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=10/part-000.parquet",
+            "sha256": "887b26a63b53f0e6bce073e9bd52fafe18aad1f8d653f28797ce6f2798f8299c",
+            "row_count": 2976,
+            "start_ms": 1790812800000,
+            "end_ms": 1793491200000
+          },
+          {
+            "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=11/part-000.parquet",
+            "sha256": "9497e54d579c8246292ef227f6dc7ed12408ab55b052da7fda8f00dcd8be8caf",
+            "row_count": 248,
+            "start_ms": 1793491200000,
+            "end_ms": 1793714400000
+          }
+        ],
+        "synthetic": false
+      },
+      "run_id": "run-ed83015904ac1b3e4ab02547c319ea0b",
+      "replay_run_id": "run-3b6b4ddabb7a638a77983c4c4749a81a",
+      "bar_count": 1344,
+      "fill_count": 4,
+      "final_equity": 885.4036944005948,
+      "margin": {
+        "model": "linear_cross_fixed_mmr_ohlc_adverse_first",
+        "maintenance_margin_rate": 0.005,
+        "liquidated": true,
+        "liquidation_count": 1,
+        "minimum_margin_ratio": 0.0049999999999998275,
+        "liquidations": [
+          {
+            "order_id": "order-4",
+            "bar_open_time_ms": 1791367200000,
+            "time_ms": 1791368100000,
+            "phase": "intrabar",
+            "side": "long",
+            "quantity": 75.01962893032017,
+            "trigger_price": 2565.7160231879466,
+            "fill_price": 2565.7160231879466,
+            "equity_before": 962.3953200006491,
+            "maintenance_margin": 962.3953200006824,
+            "margin_ratio": 0.0049999999999998275,
+            "cash_after": 885.4036944005948
+          }
+        ]
+      },
+      "ledger": [
+        {
+          "sequence": 1,
+          "action": "enter",
+          "fill": {
+            "order_id": "order-1",
+            "rule_id": "entry",
+            "time_ms": 1790813700000,
+            "price": 2681.17,
+            "quantity": 3.7297150124758964,
+            "fee": 4,
+            "realized_pnl": 0,
+            "side": "long"
+          },
+          "notional": 10000,
+          "cash": 9996,
+          "position_qty": 3.7297150124758964,
+          "average_price": 2681.17
+        },
+        {
+          "sequence": 2,
+          "action": "add",
+          "fill": {
+            "order_id": "order-2",
+            "rule_id": "add_1",
+            "time_ms": 1790814600000,
+            "price": 2681.23,
+            "quantity": 14.918860049903586,
+            "fee": 16.000358052641197,
+            "realized_pnl": 0,
+            "side": "long"
+          },
+          "notional": 40000.89513160299,
+          "cash": 9979.99964194736,
+          "position_qty": 18.648575062379482,
+          "average_price": 2681.2180000000003
+        },
+        {
+          "sequence": 3,
+          "action": "add",
+          "fill": {
+            "order_id": "order-3",
+            "rule_id": "add_2",
+            "time_ms": 1790815500000,
+            "price": 2686.4,
+            "quantity": 56.37105386794068,
+            "fee": 60.57407964433434,
+            "realized_pnl": 0,
+            "side": "long"
+          },
+          "notional": 151435.19911083585,
+          "cash": 9919.425562303024,
+          "position_qty": 75.01962893032017,
+          "average_price": 2685.111844921774
+        },
+        {
+          "sequence": 4,
+          "action": "close",
+          "fill": {
+            "order_id": "order-4",
+            "rule_id": "__liquidation__",
+            "time_ms": 1791368100000,
+            "price": 2565.7160231879466,
+            "quantity": 75.01962893032017,
+            "fee": 76.99162560005459,
+            "realized_pnl": -8957.030242302375,
+            "side": "long",
+            "reason": "liquidation"
+          },
+          "notional": 192479.06400013648,
+          "cash": 885.4036944005948,
+          "position_qty": 0,
+          "average_price": 0
+        }
+      ],
+      "ledger_audit": {
+        "events": 4,
+        "cash": 885.4036944005948,
+        "position_qty": 0.0,
+        "passed": true
+      },
+      "snapshot_unchanged": true,
+      "archive_equal": true,
+      "replay_equal": true,
+      "report_sha256": "113c9c7a81186355fbf5ef54ac7d8ef51fe07efeebdd762768caecc0960989ec"
+    },
+    {
+      "id": "verify_mmr_short",
+      "definition": {
+        "schema_version": 1,
+        "id": "verify_mmr_short",
+        "name": "MMR 空头强平验证",
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbols": [
+            "ETH-USDT"
+          ],
+          "timeframe": "15m",
+          "start": "2026-08-05T14:00:00Z",
+          "end": "2026-11-03T14:00:00Z"
+        },
+        "account": {
+          "market_type": "perpetual",
+          "initial_cash": 10000,
+          "quote_currency": "USDT",
+          "exchange_leverage": 20
+        },
+        "behavior": {
+          "allow_additions": true,
+          "allow_pyramiding": false,
+          "allow_same_bar_reversal": false,
+          "cooldown_bars": 0
+        },
+        "position": {
+          "position_leverage": 1
+        },
+        "exit_policies": [],
+        "execution": {
+          "signal_time": "bar_close",
+          "market_fill_time": "next_bar_open",
+          "intrabar_conflict": "conservative",
+          "fee": {
+            "maker_rate": 0,
+            "taker_rate": 0.0004
+          },
+          "slippage": {
+            "type": "none",
+            "value": 0
+          }
+        },
+        "risk": {
+          "max_symbol_equity_pct": 10,
+          "max_total_exposure_pct": 10,
+          "max_open_positions": 1,
+          "max_drawdown_halt_pct": 0
+        },
+        "indicators": [
+          {
+            "id": "atr",
+            "type": "atr",
+            "inputs": null,
+            "params": {
+              "period": 14
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "entry",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "enter",
+              "side": "short",
+              "size_pct": 1
+            }
+          },
+          {
+            "id": "add_1",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "addition_index": 1,
+              "sizing_mode": "current_position_multiple",
+              "size_multiplier": 4,
+              "size_pct": 0
+            }
+          },
+          {
+            "id": "add_2",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "addition_index": 2,
+              "sizing_mode": "current_position_multiple",
+              "size_multiplier": 4,
+              "size_pct": 0
+            }
+          }
+        ]
+      },
+      "run_config": {
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbols": [
+            "ETH-USDT"
+          ],
+          "timeframe": "15m",
+          "start": "2026-08-05T14:00:00Z",
+          "end": "2026-11-03T14:00:00Z"
+        },
+        "account": {
+          "market_type": "perpetual",
+          "initial_cash": 10000,
+          "quote_currency": "USDT",
+          "exchange_leverage": 20,
+          "maintenance_margin_rate": 0.005
+        },
+        "execution": {
+          "signal_time": "bar_close",
+          "market_fill_time": "next_bar_open",
+          "intrabar_conflict": "conservative",
+          "fee": {
+            "maker_rate": 0,
+            "taker_rate": 0.0004
+          },
+          "slippage": {
+            "type": "none",
+            "value": 0
+          }
+        },
+        "risk": {
+          "max_symbol_equity_pct": 20,
+          "max_total_exposure_pct": 20,
+          "max_open_positions": 1,
+          "max_drawdown_halt_pct": 0
+        }
+      },
+      "strategy_version": {
+        "revision": 1,
+        "definition_sha256": "859866112e29ea4179036b7418fb2daeca87a843adb99d36de8110eaff88dc92"
+      },
+      "data": {
+        "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+        "symbol": "ETH-USDT",
+        "timeframe": "15m",
+        "start_ms": 1785938400000,
+        "end_ms": 1793714400000,
+        "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+        "bars_sha256": "1c360dd9a82efd7dbb6dc3f2f04c404c7ea7fc3d0bd6ebfa1b86260121773fd1",
+        "files": [
+          {
+            "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=08/part-000.parquet",
+            "sha256": "b0e0882fecef562d424c168e90353aba0802f46ecb2a2853001ee97a29ab0e2e",
+            "row_count": 2536,
+            "start_ms": 1785938400000,
+            "end_ms": 1788220800000
+          },
+          {
+            "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=09/part-000.parquet",
+            "sha256": "edb771e0a6d82f42ac2fc7ee3f8f8628498495c586a402e1b1e7a7ef33bc8b46",
+            "row_count": 2880,
+            "start_ms": 1788220800000,
+            "end_ms": 1790812800000
+          },
+          {
+            "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=10/part-000.parquet",
+            "sha256": "887b26a63b53f0e6bce073e9bd52fafe18aad1f8d653f28797ce6f2798f8299c",
+            "row_count": 2976,
+            "start_ms": 1790812800000,
+            "end_ms": 1793491200000
+          },
+          {
+            "path": "exchange=binance/symbol=ETH-USDT/timeframe=15m/year=2026/month=11/part-000.parquet",
+            "sha256": "9497e54d579c8246292ef227f6dc7ed12408ab55b052da7fda8f00dcd8be8caf",
+            "row_count": 248,
+            "start_ms": 1793491200000,
+            "end_ms": 1793714400000
+          }
+        ],
+        "synthetic": false
+      },
+      "run_id": "run-6fbdd79a0e18e0280dd4d633393b04eb",
+      "replay_run_id": "run-72c46eff77f75e53cd60e61b1aee17bd",
+      "bar_count": 8640,
+      "fill_count": 4,
+      "final_equity": 955.0544169163168,
+      "margin": {
+        "model": "linear_cross_fixed_mmr_ohlc_adverse_first",
+        "maintenance_margin_rate": 0.005,
+        "liquidated": true,
+        "liquidation_count": 1,
+        "minimum_margin_ratio": 0.004999999999999903,
+        "liquidations": [
+          {
+            "order_id": "order-4",
+            "bar_open_time_ms": 1787150700000,
+            "time_ms": 1787151600000,
+            "phase": "intrabar",
+            "side": "short",
+            "quantity": -106.07385630901115,
+            "trigger_price": 1957.3204240992347,
+            "fill_price": 1957.3204240992347,
+            "equity_before": 1038.1026270829548,
+            "maintenance_margin": 1038.102627082975,
+            "margin_ratio": 0.004999999999999903,
+            "cash_after": 955.0544169163168
+          }
+        ]
+      },
+      "ledger": [
+        {
+          "sequence": 1,
+          "action": "enter",
+          "fill": {
+            "order_id": "order-1",
+            "rule_id": "entry",
+            "time_ms": 1785939300000,
+            "price": 1878.29,
+            "quantity": -5.3239915029095615,
+            "fee": 4,
+            "realized_pnl": 0,
+            "side": "short"
+          },
+          "notional": 10000,
+          "cash": 9996,
+          "position_qty": -5.3239915029095615,
+          "average_price": 1878.29
+        },
+        {
+          "sequence": 2,
+          "action": "add",
+          "fill": {
+            "order_id": "order-2",
+            "rule_id": "add_1",
+            "time_ms": 1785940200000,
+            "price": 1870.96,
+            "quantity": -21.295966011638246,
+            "fee": 15.937560227653877,
+            "realized_pnl": 0,
+            "side": "short"
+          },
+          "notional": 39843.90056913469,
+          "cash": 9980.062439772346,
+          "position_qty": -26.619957514547806,
+          "average_price": 1872.426
+        },
+        {
+          "sequence": 3,
+          "action": "add",
+          "fill": {
+            "order_id": "order-3",
+            "rule_id": "add_2",
+            "time_ms": 1785941100000,
+            "price": 1873.97,
+            "quantity": -79.45389879446334,
+            "fee": 59.55768908954419,
+            "realized_pnl": 0,
+            "side": "short"
+          },
+          "notional": 148894.22272386047,
+          "cash": 9920.504750682801,
+          "position_qty": -106.07385630901115,
+          "average_price": 1873.5825226721017
+        },
+        {
+          "sequence": 4,
+          "action": "close",
+          "fill": {
+            "order_id": "order-4",
+            "rule_id": "__liquidation__",
+            "time_ms": 1787151600000,
+            "price": 1957.3204240992347,
+            "quantity": -106.07385630901115,
+            "fee": 83.048210166638,
+            "realized_pnl": -8882.402123599846,
+            "side": "short",
+            "reason": "liquidation"
+          },
+          "notional": 207620.525416595,
+          "cash": 955.0544169163168,
+          "position_qty": 0,
+          "average_price": 0
+        }
+      ],
+      "ledger_audit": {
+        "events": 4,
+        "cash": 955.0544169163168,
+        "position_qty": 0.0,
+        "passed": true
+      },
+      "snapshot_unchanged": true,
+      "archive_equal": true,
+      "replay_equal": true,
+      "report_sha256": "588b50af9af1568c0595c1b68253afc8ef2deac97bc3e0ab39636712dae2a4e0"
+    }
+  ],
+  "checks": {
+    "fresh_legacy_matches": 16,
+    "mmr_enabled_healthy": 14,
+    "real_market_liquidations": 2,
+    "ledger_and_replay_audited": true,
+    "go_race": "passed: go test -p 1 -race ./...",
+    "go_vet": "passed: go vet -p 1 ./...",
+    "frontend": "passed: 80 tests",
+    "javascript_syntax": "passed",
+    "cli_matches_api": true,
+    "git_diff_check": "passed"
+  },
+  "browser": {
+    "preview": "http://127.0.0.1:8084",
+    "mmr_percent_input": 0.5,
+    "healthy_run_id": "run-09f7d33bd047ab08e4431b9325b17ca8",
+    "healthy_label": "未爆仓",
+    "liquidated_run_id": "run-f6e7998e8df501e0cb9bef9790269bbd",
+    "liquidated_label": "已爆仓 · 1 次",
+    "trigger_price_display": "2565.7160",
+    "equity_display": "$885.40",
+    "bar_count": 1344,
+    "viewport_width": 790,
+    "body_width": 790
+  }
+}

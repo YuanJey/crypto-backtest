@@ -208,6 +208,12 @@ func validateAccount(account AccountSpec) error {
 	if account.MarketType == MarketTypeSpot && account.ExchangeLeverage != 1 {
 		return fmt.Errorf("spot account.exchange_leverage must be 1")
 	}
+	if !isFinite(account.MaintenanceMarginRate) || account.MaintenanceMarginRate < 0 || account.MaintenanceMarginRate >= 1 {
+		return fmt.Errorf("account.maintenance_margin_rate must be finite and in [0, 1)")
+	}
+	if account.MarketType == MarketTypeSpot && account.MaintenanceMarginRate != 0 {
+		return fmt.Errorf("spot account.maintenance_margin_rate must be 0")
+	}
 	return nil
 }
 

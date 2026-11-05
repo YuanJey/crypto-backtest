@@ -57,6 +57,7 @@ class BacktestRunPanel {
       ['btTakerFee', config.execution.fee.taker_rate * 100],
       ['btSlippageBps', config.execution.slippage.type === 'bps' ? config.execution.slippage.value : 0],
       ['btExchangeLeverage', config.account.exchange_leverage],
+      ['btMaintenanceMarginRate', (config.account.maintenance_margin_rate ?? 0) * 100],
       ['btExposureLimit', config.risk.max_total_exposure_pct],
       ['btSymbolLimit', config.risk.max_symbol_equity_pct],
       ['btDrawdownLimit', config.risk.max_drawdown_halt_pct * 100],
@@ -64,6 +65,7 @@ class BacktestRunPanel {
       ['btRunEnd', config.data.end.slice(0, 16)],
     ]) document.getElementById(id).value = value;
     document.getElementById('btExchangeLeverage').disabled = config.account.market_type === 'spot';
+    document.getElementById('btMaintenanceMarginRate').disabled = config.account.market_type === 'spot';
   }
 
   updateDataSelection() {
@@ -91,6 +93,10 @@ class BacktestRunPanel {
     };
     config.account.initial_cash = read('btInitialCash', Number.MIN_VALUE);
     config.account.exchange_leverage = read('btExchangeLeverage', 1);
+    const maintenanceRate = config.account.market_type === 'spot' ? 0 : read('btMaintenanceMarginRate', 0, 100) / 100;
+    if (maintenanceRate >= 1) throw new Error('维持保证金率必须小于 100%');
+    if (maintenanceRate > 0) config.account.maintenance_margin_rate = maintenanceRate;
+    else delete config.account.maintenance_margin_rate;
     config.execution.fee.taker_rate = read('btTakerFee', 0, 100) / 100;
     const slippage = read('btSlippageBps', 0);
     config.execution.slippage = { type: slippage ? 'bps' : 'none', value: slippage };
@@ -117,7 +123,7 @@ class BacktestRunPanel {
       this.onReset();
       const record = await this.controller.start(config, {
         equity_curve: true, orders: true, fills: true, ledger: true,
-        metrics: ['final_equity', 'total_return_pct', 'max_drawdown_pct', 'max_position_leverage', 'order_count', 'fill_count'],
+        metrics: ['final_equity', 'total_return_pct', 'max_drawdown_pct', 'max_position_leverage', 'order_count', 'fill_count', 'minimum_mmr'],
         indicators: indicators.map(indicator => ({ id: indicator.id })),
       });
       this.refreshHistory();

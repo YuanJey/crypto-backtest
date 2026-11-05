@@ -39,6 +39,9 @@ type AccountSpec struct {
 	InitialCash      float64    `json:"initial_cash"`
 	QuoteCurrency    string     `json:"quote_currency"`
 	ExchangeLeverage float64    `json:"exchange_leverage,omitempty"`
+	// Fixed minimum maintenance margin as a fraction of current notional.
+	// Zero disables the model for legacy runs; positive values require perpetual.
+	MaintenanceMarginRate float64 `json:"maintenance_margin_rate,omitempty"`
 }
 
 type MarketType string

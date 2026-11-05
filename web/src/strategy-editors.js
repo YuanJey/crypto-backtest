@@ -365,6 +365,14 @@ class StrategyEditors {
     `;
     riskCards.innerHTML = `
       <div class="visual-card">
+        <label class="vcard-label">维持保证金率（0 为关闭强平检查）</label>
+        <div class="input-with-unit">
+          <input type="number" class="form-control" id="formMaintenanceMarginRate"
+            value="${(acc.maintenance_margin_rate ?? 0) * 100}" min="0" max="99.99" step="0.01" ${isSpot ? 'disabled' : ''}>
+          <span class="input-unit">%</span>
+        </div>
+      </div>
+      <div class="visual-card">
         <label class="vcard-label">最大回撤停机</label>
         <label class="binary-control">
           <input type="checkbox" id="formDrawdownHaltEnabled" ${drawdownHaltEnabled ? 'checked' : ''}>
@@ -398,6 +406,7 @@ class StrategyEditors {
       def.account.market_type = e.target.value;
       if (e.target.value === 'spot') {
         def.account.exchange_leverage = 1;
+        delete def.account.maintenance_margin_rate;
         if (!def.position) def.position = {};
         def.position.position_leverage = 1;
       }
@@ -422,6 +431,17 @@ class StrategyEditors {
       def.account.exchange_leverage = value;
       def.position.position_leverage = Math.min(def.position.position_leverage || 1, value);
       this.renderOverviewForm(def);
+      this.syncToJson();
+    });
+    document.getElementById('formMaintenanceMarginRate').addEventListener('change', (e) => {
+      const value = Number(e.target.value);
+      if (e.target.disabled || e.target.value.trim() === '' || !Number.isFinite(value) || value < 0 || value >= 100) {
+        this.showAlert('维持保证金率必须在 0% 至 100% 之间，100% 不可选。', 'error');
+        return;
+      }
+      if (!def.account) def.account = {};
+      if (value > 0) def.account.maintenance_margin_rate = value / 100;
+      else delete def.account.maintenance_margin_rate;
       this.syncToJson();
     });
     document.getElementById('formPositionLeverage').addEventListener('change', () => {

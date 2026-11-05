@@ -95,6 +95,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const liveDrawdown = document.getElementById('liveDrawdown');
   const livePosition = document.getElementById('livePosition');
   const liveLeverage = document.getElementById('liveLeverage');
+  const liveMarginRatio = document.getElementById('liveMarginRatio');
+  const liveLiquidationPrice = document.getElementById('liveLiquidationPrice');
 
   // 4. 事件绑定：回放控制
   btnPlayPause.addEventListener('click', () => replay.togglePlay());
@@ -258,6 +260,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   function resetBacktestVisualization(message = '等待回测') {
     activeBacktest = null;
     if (metricsBar) metricsBar.style.display = 'none';
+    document.getElementById('btMarginDetails').hidden = true;
     Object.values(charts).forEach(chart => chart.setIndicators([]));
     timeframes.forEach(({ tf }) => {
       renderIndicatorLegend(tf, [], message);
@@ -267,7 +270,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     equityEmptyState.textContent = '暂无资金数据';
     equityStatus.textContent = message;
     equityStatus.className = 'equity-status';
-    for (const element of [liveEquity, liveReturn, liveDrawdown, livePosition, liveLeverage]) {
+    for (const element of [liveEquity, liveReturn, liveDrawdown, livePosition, liveLeverage, liveMarginRatio, liveLiquidationPrice]) {
       element.textContent = '--';
       element.className = 'equity-live-value';
     }
@@ -426,6 +429,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     liveDrawdown.className = `equity-live-value ${drawdown > 0 ? 'negative' : ''}`;
     livePosition.textContent = Number(current.position_qty || 0).toFixed(4);
     liveLeverage.textContent = `${Number(current.position_leverage || 0).toFixed(2)}x`;
+    const currentMMR = MarginView.pointMMR(current, activeBacktest.response.report?.margin);
+    liveMarginRatio.textContent = currentMMR === null ? '--' : `${(currentMMR * 100).toFixed(3)}%`;
+    liveLiquidationPrice.textContent = Number.isFinite(current.liquidation_price) ? current.liquidation_price.toFixed(4) : '--';
     equityStatus.textContent = `${visibleCount} / ${points.length} 点`;
     equityStatus.className = 'equity-status ready';
   }
@@ -647,6 +653,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (bmEquity) {
             bmEquity.textContent = `$${finalEq.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
           }
+          MarginView.render(resp.report.margin);
         }
 
         replayStatusText.textContent = `回测完成: ${resp.bar_count || 0} 根K线, 产生 ${resp.fill_count || 0} 笔撮合`;

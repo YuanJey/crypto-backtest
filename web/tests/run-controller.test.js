@@ -210,16 +210,38 @@ test('run panel edits experiment values without modifying saved defaults', () =>
   elements.get('btExposureLimit').value = '2';
   elements.get('btSymbolLimit').value = '1.5';
   elements.get('btDrawdownLimit').value = '0';
+  elements.get('btMaintenanceMarginRate').value = '0.5';
   for (const element of elements.values()) element.value = String(element.value);
   const config = panel.readConfig();
   assert.equal(config.account.initial_cash, 25000);
   assert.equal(config.risk.max_total_exposure_pct, 2);
   assert.equal(config.risk.max_symbol_equity_pct, 1.5);
   assert.equal(config.risk.max_drawdown_halt_pct, 0);
+  assert.equal(config.account.maintenance_margin_rate, 0.005);
   assert.equal(config.data.symbols[0], 'ETH-USDT');
   assert.deepEqual(copy(panel.config), before);
   elements.get('btInitialCash').value = '';
   assert.throws(() => panel.readConfig(), /无效/);
+});
+
+test('maintenance-rate controls preserve disabled legacy runs and reject invalid percentages', () => {
+  const context = environment(), elements = new Map();
+  context.document = { getElementById(id) {
+    if (!elements.has(id)) elements.set(id, { value: '', closest: () => null });
+    return elements.get(id);
+  } };
+  const panel = Object.create(context.window.BacktestRunPanel.prototype);
+  panel.config = snapshot().default_run_config;
+  panel.getDataSelection = () => ({ datasetID: '__sample__', symbol: 'BTC-USDT' });
+  panel.renderConfig();
+  for (const element of elements.values()) element.value = String(element.value);
+  assert.equal(Object.hasOwn(panel.readConfig().account, 'maintenance_margin_rate'), false);
+  for (const value of ['100', '-1', 'NaN', '']) {
+    elements.get('btMaintenanceMarginRate').value = value;
+    assert.throws(() => panel.readConfig(), /维持保证金率|无效/);
+  }
+  panel.config.account.market_type = 'spot';
+  assert.equal(Object.hasOwn(panel.readConfig().account, 'maintenance_margin_rate'), false);
 });
 
 test('capability catalog owns metadata and escapes rendered labels', () => {
