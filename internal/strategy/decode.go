@@ -19,3 +19,16 @@ func Decode(raw []byte) (Definition, error) {
 	}
 	return definition, nil
 }
+
+func DecodeRunConfig(raw []byte) (RunConfig, error) {
+	var config RunConfig
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&config); err != nil {
+		return RunConfig{}, fmt.Errorf("decode run config: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return RunConfig{}, fmt.Errorf("decode run config: trailing data")
+	}
+	return config, nil
+}

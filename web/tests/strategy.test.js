@@ -5,6 +5,7 @@ const test = require('node:test');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '../src/strategy.js'), 'utf8');
+const adapterSource = fs.readFileSync(path.join(__dirname, '../src/strategy-contract-adapter.js'), 'utf8');
 const copy = value => JSON.parse(JSON.stringify(value));
 const ref = (scope, name, field, offset) => ({
   kind: 'reference',
@@ -37,9 +38,14 @@ function workbench() {
       if (!elements.has(id)) elements.set(id, new Element());
       return elements.get(id);
     },
+    querySelectorAll() { return []; },
   };
   const context = { window: {}, document };
   vm.createContext(context);
+  vm.runInContext(adapterSource, context);
+  for (const file of ['strategy-store.js', 'capability-catalog.js', 'strategy-editors.js']) {
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../src', file), 'utf8'), context);
+  }
   vm.runInContext(source, context);
   const wb = Object.create(context.window.StrategyWorkbench.prototype);
   wb.catalog = [
@@ -254,10 +260,220 @@ function legacyStrategy(wb, position = {}, action = {}) {
   return def;
 }
 
+function deepFreeze(value) {
+  if (value && typeof value === 'object') {
+    Object.values(value).forEach(deepFreeze);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+test('all visual sections read deeply frozen legacy definitions without migration', () => {
+  const { wb } = workbench();
+  const def = legacyStrategy(wb, { add_size_pct: 0.01, target_leverage: 3 });
+  def.exit_policies = [{
+    id: 'invalid', anchor: { type: 'avg_entry_price', indicator: 'retain_me' },
+    distance: { type: 'percent', value: -1, indicator: 'retain_me' }, close_pct: 0,
+  }, { id: 'missing', anchor: { type: 'indicator' }, distance: { type: 'atr_multiple' } }];
+  const before = copy(def);
+  wb.currentStrategy = deepFreeze(def);
+  wb.renderVisualDetail(def);
+  wb.renderVisualDetail(def);
+  assert.deepEqual(copy(def), before);
+  assert.equal(def.rules[0].action.type, 'open');
+});
+
+test('rendered defaults do not create fields until the user edits them', () => {
+  const { wb, document } = workbench();
+  wb.currentStrategy = { id: 'minimal' };
+  wb.renderVisualDetail(wb.currentStrategy);
+  assert.deepEqual(copy(wb.currentStrategy), { id: 'minimal' });
+  assert.ok(document.getElementById('positionCards').innerHTML.includes('value="0.5"'));
+  const input = document.getElementById('formLongCapitalDecayPower');
+  input.value = '0.75';
+  input.emit('change');
+  assert.deepEqual(copy(wb.currentStrategy), { id: 'minimal', position: { long_capital_decay_power: 0.75 } });
+});
+
+test('loading keeps the fetched revision and the migrated draft independently owned', async () => {
+  const { wb, context } = workbench();
+  const source = deepFreeze(legacyStrategy(wb, { add_size_multiplier: 2 }));
+  const before = copy(source);
+  context.Api = { fetchStrategyById: async () => source };
+  await wb.selectStrategy(source.id);
+  assert.deepEqual(copy(source), before);
+  assert.deepEqual(copy(wb.sourceStrategy), before);
+  assert.notEqual(wb.sourceStrategy, source);
+  assert.equal(wb.currentStrategy.rules[0].action.type, 'enter');
+  wb.currentStrategy.rules[0].when.args[0].args[1].number = 999;
+  assert.deepEqual(copy(wb.sourceStrategy), before);
+  assert.deepEqual(copy(source), before);
+});
+
+test('adapter preparation is idempotent, preserves unknown fields, and shares no descendants', () => {
+  const { wb, context } = workbench();
+  const adapter = context.window.StrategyContractAdapter;
+  const source = legacyStrategy(wb, { target_leverage: 3 });
+  delete source.position.position_leverage;
+  source.custom_extension = { values: [1, 2] };
+  source.rules[0].custom_extension = { retained: true };
+  const before = copy(source);
+  const draft = adapter.prepareDraft(deepFreeze(source));
+  assert.deepEqual(copy(adapter.prepareDraft(draft)), copy(draft));
+  assert.deepEqual(copy(adapter.prepareSave(draft)), copy(draft));
+  assert.equal(draft.position.position_leverage, 3);
+  assert.equal(draft.rules[0].custom_extension.retained, true);
+  draft.custom_extension.values[0] = 99;
+  assert.deepEqual(copy(source), before);
+});
+
+test('explicit invalid scalar values remain visible for backend validation', () => {
+  const { wb, context } = workbench();
+  const source = wb.getDefaultStrategyTemplate();
+  source.account.exchange_leverage = 5;
+  source.position.position_leverage = -2;
+  source.position.long_capital_decay_power = 0;
+  source.position.short_capital_decay_power = null;
+  source.behavior.allow_additions = null;
+  source.exit_policies = [{ id: 'invalid', close_pct: 0, distance: { type: 'percent', value: -1 } }];
+  const draft = context.window.StrategyContractAdapter.prepareDraft(source);
+  assert.equal(draft.account.exchange_leverage, 5);
+  assert.equal(draft.position.position_leverage, -2);
+  assert.equal(draft.position.long_capital_decay_power, 0);
+  assert.equal(draft.position.short_capital_decay_power, null);
+  assert.equal(draft.behavior.allow_additions, null);
+  const view = wb.normalizeExitPolicy(draft.exit_policies[0]);
+  assert.equal(view.close_pct, 0);
+  assert.equal(view.distance.value, -1);
+});
+
+test('JSON adapter failures retain the previous draft, source, editor and mode', () => {
+  const { wb, document } = workbench();
+  wb.sourceStrategy = copy(wb.currentStrategy);
+  const source = wb.sourceStrategy;
+  const draft = wb.currentStrategy;
+  for (const invalid of [
+    legacyStrategy(wb, { add_size_multiplier: 1e308 }),
+    { rules: 'invalid' }, { exit_policies: [{ anchor: 'invalid' }] }, { account: null },
+  ]) {
+    wb.activeMode = 'json';
+    const json = JSON.stringify(invalid);
+    document.getElementById('jsonEditorArea').value = json;
+    wb.switchMode('visual');
+    assert.equal(wb.activeMode, 'json');
+    assert.equal(wb.currentStrategy, draft);
+    assert.equal(wb.sourceStrategy, source);
+    assert.equal(document.getElementById('jsonEditorArea').value, json);
+  }
+});
+
+test('a visual rendering failure rolls back the parsed JSON draft', () => {
+  const { wb, document } = workbench();
+  const current = wb.currentStrategy;
+  wb.activeMode = 'json';
+  const json = JSON.stringify({ id: 'unsupported' });
+  document.getElementById('jsonEditorArea').value = json;
+  wb.renderVisualDetail = () => { throw new Error('unsupported visual shape'); };
+  wb.switchMode('visual');
+  assert.equal(wb.currentStrategy, current);
+  assert.equal(wb.activeMode, 'json');
+  assert.equal(document.getElementById('jsonEditorArea').value, json);
+});
+
+test('an unconvertible fetched revision opens as JSON without losing its raw configuration', async () => {
+  const { wb, document, context } = workbench();
+  const source = legacyStrategy(wb, { add_size_multiplier: 1e308 });
+  const before = copy(source);
+  context.Api = { fetchStrategyById: async () => deepFreeze(source) };
+  await wb.selectStrategy(source.id);
+  assert.equal(wb.activeMode, 'json');
+  assert.deepEqual(copy(wb.sourceStrategy), before);
+  assert.deepEqual(JSON.parse(document.getElementById('jsonEditorArea').value), before);
+});
+
+test('a fetched revision with unsupported visual shape remains available in JSON', async () => {
+  const { wb, context, document } = workbench();
+  const source = wb.getDefaultStrategyTemplate();
+  source.indicators = [{ id: 'broken' }];
+  context.Api = { fetchStrategyById: async () => source };
+  await wb.selectStrategy(source.id);
+  assert.equal(wb.activeMode, 'json');
+  assert.deepEqual(copy(wb.sourceStrategy), copy(source));
+  assert.deepEqual(JSON.parse(document.getElementById('jsonEditorArea').value).indicators, source.indicators);
+});
+
+test('failed saves leave visual and JSON drafts, raw source and editor unchanged', async () => {
+  for (const mode of ['visual', 'json']) {
+    const { wb, context, document } = workbench();
+    wb.currentStrategy = legacyStrategy(wb);
+    wb.sourceStrategy = copy(wb.currentStrategy);
+    wb.activeMode = mode;
+    const draft = wb.currentStrategy;
+    const source = wb.sourceStrategy;
+    const before = copy(draft);
+    const json = JSON.stringify(draft);
+    document.getElementById('jsonEditorArea').value = json;
+    context.Api = { saveStrategy: async payload => {
+      assert.equal(payload.rules[0].action.type, 'enter');
+      payload.rules[0].when.args.length = 0;
+      throw new Error('backend rejected');
+    } };
+    await wb.handleSave();
+    assert.equal(wb.currentStrategy, draft);
+    assert.equal(wb.sourceStrategy, source);
+    assert.deepEqual(copy(draft), before);
+    assert.deepEqual(copy(source), before);
+    assert.equal(document.getElementById('jsonEditorArea').value, json);
+  }
+});
+
+test('editing an exit ID preserves missing references and invalid unrelated values', () => {
+  const { wb, document } = workbench();
+  const policy = { id: 'before', close_pct: 0, distance: { type: 'atr_multiple', value: -1 } };
+  wb.currentStrategy.exit_policies = [policy];
+  wb.currentStrategy.indicators.push({ id: 'atr', type: 'atr' });
+  const field = new Element();
+  field.dataset = { exitIdx: '0', exitField: 'id' };
+  field.value = 'after';
+  document.getElementById('exitPoliciesCards').selectors.set('.exit-policy-field', [field]);
+  wb.renderExitPoliciesSection(wb.currentStrategy);
+  assert.ok(document.getElementById('exitPoliciesCards').innerHTML.includes('请选择 ATR 指标'));
+  field.emit('change');
+  assert.deepEqual(copy(policy), { id: 'after', close_pct: 0, distance: { type: 'atr_multiple', value: -1 } });
+});
+
+test('explicit exit distance selection creates only its fields and removes incompatible ATR settings', () => {
+  const { wb, document } = workbench();
+  const policy = { id: 'minimal' };
+  wb.currentStrategy.exit_policies = [policy];
+  wb.currentStrategy.indicators.push({ id: 'atr', type: 'atr' });
+  const field = new Element();
+  field.dataset = { exitIdx: '0', exitField: 'distance_type' };
+  field.value = 'atr_multiple';
+  document.getElementById('exitPoliciesCards').selectors.set('.exit-policy-field', [field]);
+  wb.renderExitPoliciesSection(wb.currentStrategy);
+  field.emit('change');
+  assert.deepEqual(copy(policy), { id: 'minimal', distance: {
+    type: 'atr_multiple', value: 2, indicator: 'atr', field: 'value', sampling: 'live',
+  } });
+  field.value = 'fixed_amount';
+  field.emit('change');
+  assert.deepEqual(copy(policy), { id: 'minimal', distance: { type: 'fixed_amount', value: 100 } });
+  field.dataset.exitField = 'purpose';
+  field.value = 'take_profit';
+  field.emit('change');
+  assert.deepEqual(copy(policy), {
+    id: 'minimal', distance: { type: 'fixed_amount', value: 100 },
+    purpose: 'take_profit', trigger_price: 'high',
+  });
+});
+
 test('legacy fixed sizing moves into each action and preserves the original condition and priority', () => {
   const { wb } = workbench();
-  const def = legacyStrategy(wb, { add_size_pct: 0.01 });
-  wb.migrateRuleSizing(def);
+  const original = legacyStrategy(wb, { add_size_pct: 0.01 });
+  const before = copy(original);
+  const def = wb.migrateRuleSizing(original);
+  assert.deepEqual(copy(original), before);
   assert.deepEqual(copy(def.position), { position_leverage: 1 });
   assert.equal(def.behavior.allow_pyramiding, false);
   assert.equal(def.behavior.allow_additions, true);
@@ -273,41 +489,37 @@ test('legacy fixed sizing moves into each action and preserves the original cond
     assert.deepEqual(copy(rule.when), conditions.nested);
   }
   const once = copy(def);
-  wb.migrateRuleSizing(def);
-  assert.deepEqual(copy(def), once);
+  assert.deepEqual(copy(wb.migrateRuleSizing(def)), once);
 });
 
 test('legacy explicit size overrides both first entry and addition modes', () => {
   const { wb } = workbench();
-  const def = legacyStrategy(wb, { add_size_multiplier: 2 }, { size_pct: 0.00345 });
-  wb.migrateRuleSizing(def);
+  const def = wb.migrateRuleSizing(legacyStrategy(wb, { add_size_multiplier: 2 }, { size_pct: 0.00345 }));
   assert.deepEqual(copy(def.rules.map(rule => rule.action.size_pct)), [0.00345, 0.00345, 0.00345]);
   assert.ok(def.rules.every(rule => !rule.action.size_multiplier));
 });
 
 test('legacy exponential sizing becomes a direct first-fill multiplier for each addition', () => {
   const { wb } = workbench();
-  const def = legacyStrategy(wb, { add_size_multiplier: 2 }, { size_pct: 0 });
-  wb.migrateRuleSizing(def);
+  const def = wb.migrateRuleSizing(legacyStrategy(wb, { add_size_multiplier: 2 }, { size_pct: 0 }));
   assert.equal(def.rules[0].action.size_pct, 0.0025);
   assert.deepEqual(copy(def.rules.slice(1).map(rule => rule.action.size_multiplier)), [2, 4]);
 });
 
 test('legacy default additions use one times the actual first notional', () => {
   const { wb } = workbench();
-  const def = legacyStrategy(wb);
-  wb.migrateRuleSizing(def);
+  const def = wb.migrateRuleSizing(legacyStrategy(wb));
   assert.deepEqual(copy(def.rules.slice(1).map(rule => rule.action.size_multiplier)), [1, 1]);
 });
 
 test('legacy position pyramiding alias and chain conditions migrate without AST rewriting', () => {
   const { wb } = workbench();
-  const def = legacyStrategy(wb, { allow_pyramiding: true });
+  let def = legacyStrategy(wb, { allow_pyramiding: true });
   def.behavior.allow_pyramiding = false;
   delete def.rules[0].when;
   def.rules[0].condition = 'or(position.flat(), position.avg_entry_price.gte(market.close))';
   def.rules[0].disabled = true;
-  wb.migrateRuleSizing(def);
+  def = wb.migrateRuleSizing(def);
   assert.equal(def.rules.length, 3);
   for (const rule of def.rules) {
     assert.equal(rule.condition, 'or(position.flat(), position.avg_entry_price.gte(market.close))');
@@ -318,10 +530,10 @@ test('legacy position pyramiding alias and chain conditions migrate without AST 
 
 test('migration generates collision-free IDs and keeps provenance for legacy tie ordering', () => {
   const { wb } = workbench();
-  const def = legacyStrategy(wb);
+  let def = legacyStrategy(wb);
   const close = { id: 'old__add_1', when: copy(conditions.false), action: { type: 'close', side: 'long', size_pct: 1 } };
   def.rules.push(close);
-  wb.migrateRuleSizing(def);
+  def = wb.migrateRuleSizing(def);
   assert.equal(new Set(def.rules.map(rule => rule.id)).size, 4);
   assert.equal(def.rules[1].id, 'old__add_1_2');
   assert.equal(def.rules[1].source_rule_id, 'old');
@@ -333,6 +545,7 @@ test('invalid or overflowing legacy migration leaves the full definition untouch
   for (const position of [
     { max_additions: 1.5 }, { initial_size_pct: 0 }, { add_size_multiplier: 1e308 },
     { add_size_pct: 0.1, add_size_multiplier: 2 },
+    { max_additions: null }, { add_size_pct: null }, { allow_pyramiding: 'true' },
   ]) {
     const def = legacyStrategy(wb, position);
     const before = copy(def);
@@ -457,15 +670,15 @@ test('allow additions switch enables configuration and preserves rules when disa
 
 test('historical explicit add rules without the new switch remain enabled after migration', () => {
   const { wb } = workbench();
-  const def = wb.getDefaultStrategyTemplate();
+  let def = wb.getDefaultStrategyTemplate();
   delete def.behavior.allow_additions;
   def.rules.push({ id: 'add', when: copy(conditions.true),
     action: { type: 'add', side: 'long', addition_index: 1, size_multiplier: 4 } });
   const before = copy(def.rules);
-  wb.migrateRuleSizing(def);
+  def = wb.migrateRuleSizing(def);
   assert.equal(def.behavior.allow_additions, true);
   assert.deepEqual(copy(def.rules), before);
-  wb.migrateRuleSizing(def);
+  def = wb.migrateRuleSizing(def);
   assert.equal(def.rules.at(-1).action.sizing_mode, undefined);
 });
 

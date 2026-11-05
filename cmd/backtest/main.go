@@ -32,7 +32,8 @@ func run(args []string) error {
 	dbPath := flags.String("db", "", "SQLite database path; when set, load strategy from SQLite instead of strategies directory")
 	runBacktest := flags.Bool("run", false, "run the compiled strategy against its dataset")
 	dataRoot := flags.String("data-root", "data/market", "dataset output root")
-	reportValue := flags.String("report", "summary", "comma-separated report sections: summary,equity,orders,fills,indicators")
+	runConfigPath := flags.String("run-config", "", "strict JSON experiment configuration file; does not modify strategy")
+	reportValue := flags.String("report", "summary", "comma-separated report sections: summary,equity,orders,fills,ledger,indicators")
 	reportIndicators := flags.String("report-indicator", "", "comma-separated indicator fields, e.g. ema_fast_15m.value,rsi_14_4h.value")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -61,6 +62,24 @@ func run(args []string) error {
 		return err
 	}
 
+	var runConfig *strategy.RunConfig
+	if *runConfigPath != "" {
+		raw, err := os.ReadFile(*runConfigPath)
+		if err != nil {
+			return err
+		}
+		config, err := strategy.DecodeRunConfig(raw)
+		if err != nil {
+			return err
+		}
+		snapshot := plan.Snapshot()
+		if err := strategy.ValidateRunConfig(config, snapshot.Logic); err != nil {
+			return err
+		}
+		runConfig = &config
+		definition = strategy.ComposeV1(snapshot.Logic, config)
+	}
+
 	reportSpec, err := parseReportSpec(*reportValue, *reportIndicators, plan)
 	if err != nil {
 		return err
@@ -80,7 +99,8 @@ func run(args []string) error {
 
 	response, err := runner.Run(context.Background(), backtest.Request{
 		StrategyID:       *strategyID,
-		StrategyRevision: *strategyRevision,
+		StrategyRevision: version.Revision,
+		RunConfig:        runConfig,
 		Report:           reportSpec,
 	})
 	if err != nil {
@@ -117,6 +137,8 @@ func parseReportSpec(value string, indicatorValue string, plan compiler.Plan) (e
 			spec.Orders = true
 		case "fills":
 			spec.Fills = true
+		case "ledger":
+			spec.Ledger = true
 		case "indicators":
 			includeIndicators = true
 		default:
@@ -128,8 +150,9 @@ func parseReportSpec(value string, indicatorValue string, plan compiler.Plan) (e
 		return engine.ReportSpec{}, err
 	}
 	if includeIndicators && len(overlays) == 0 {
-		overlays = make([]engine.IndicatorOverlay, 0, len(plan.Indicators))
-		for _, item := range plan.Indicators {
+		snapshot := plan.Snapshot()
+		overlays = make([]engine.IndicatorOverlay, 0, len(snapshot.Indicators))
+		for _, item := range snapshot.Indicators {
 			overlays = append(overlays, engine.IndicatorOverlay{ID: item.ID})
 		}
 	}

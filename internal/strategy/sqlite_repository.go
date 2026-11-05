@@ -16,6 +16,10 @@ type SQLiteRepository struct {
 	db *sql.DB
 }
 
+// Database supplies the shared connection to independently owned persistence
+// modules. Strategy operations do not depend on run storage.
+func (r *SQLiteRepository) Database() *sql.DB { return r.db }
+
 func OpenSQLiteRepository(ctx context.Context, path string) (*SQLiteRepository, error) {
 	if dir := filepath.Dir(path); dir != "." && dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -26,6 +30,9 @@ func OpenSQLiteRepository(ctx context.Context, path string) (*SQLiteRepository, 
 	if err != nil {
 		return nil, err
 	}
+	// Keep :memory: databases and concurrent strategy/run transactions on one
+	// connection. This also avoids independent writers racing SQLite locks.
+	db.SetMaxOpenConns(1)
 	repository := &SQLiteRepository{db: db}
 	if err := repository.Init(ctx); err != nil {
 		db.Close()

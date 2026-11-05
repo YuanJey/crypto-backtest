@@ -1,0 +1,4404 @@
+{
+  "baseline_commit": "96911ac",
+  "baseline_port": 8081,
+  "cases": [
+    {
+      "id": "verify_addition_long_atr_each_entry",
+      "definition": {
+        "schema_version": 1,
+        "id": "verify_addition_long_atr_each_entry",
+        "name": "verify_addition_long_atr_each_entry",
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbols": [
+            "ETH-USDT"
+          ],
+          "timeframe": "15m",
+          "start": "2026-10-01T00:00:00Z",
+          "end": "2026-10-15T00:00:00Z"
+        },
+        "account": {
+          "market_type": "perpetual",
+          "initial_cash": 10000,
+          "quote_currency": "USDT",
+          "exchange_leverage": 10
+        },
+        "behavior": {
+          "allow_additions": true,
+          "allow_pyramiding": false,
+          "allow_same_bar_reversal": false,
+          "cooldown_bars": 0
+        },
+        "position": {
+          "position_leverage": 1
+        },
+        "exit_policies": [
+          {
+            "id": "take_profit",
+            "side": "long",
+            "purpose": "take_profit",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.01
+            },
+            "execution": "next_open"
+          },
+          {
+            "id": "stop_loss",
+            "side": "long",
+            "purpose": "stop_loss",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.05
+            },
+            "execution": "next_open"
+          }
+        ],
+        "execution": {
+          "signal_time": "bar_close",
+          "market_fill_time": "next_bar_open",
+          "intrabar_conflict": "conservative",
+          "fee": {
+            "maker_rate": 0,
+            "taker_rate": 0.0004
+          },
+          "slippage": {
+            "type": "none",
+            "value": 0
+          }
+        },
+        "risk": {
+          "max_symbol_equity_pct": 10,
+          "max_total_exposure_pct": 10,
+          "max_open_positions": 1,
+          "max_drawdown_halt_pct": 0.5
+        },
+        "indicators": [
+          {
+            "id": "atr",
+            "type": "atr",
+            "inputs": null,
+            "params": {
+              "period": 14
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "enter",
+            "when": {
+              "kind": "operator",
+              "op": "gt",
+              "args": [
+                {
+                  "kind": "reference",
+                  "ref": {
+                    "scope": "indicator",
+                    "name": "atr",
+                    "field": "value"
+                  }
+                },
+                {
+                  "kind": "number",
+                  "number": 0
+                }
+              ]
+            },
+            "action": {
+              "type": "enter",
+              "side": "long",
+              "size_pct": 0.01
+            }
+          },
+          {
+            "id": "add_1",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 1,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "atr_multiple",
+                "value": 0.5,
+                "indicator": "atr",
+                "field": "value",
+                "sampling": "each_entry"
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "geometric",
+                "value": 1.5
+              }
+            }
+          },
+          {
+            "id": "add_2",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 2,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "atr_multiple",
+                "value": 0.5,
+                "indicator": "atr",
+                "field": "value",
+                "sampling": "each_entry"
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "geometric",
+                "value": 1.5
+              }
+            }
+          },
+          {
+            "id": "add_3",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 3,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "atr_multiple",
+                "value": 0.5,
+                "indicator": "atr",
+                "field": "value",
+                "sampling": "each_entry"
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "geometric",
+                "value": 1.5
+              }
+            }
+          }
+        ]
+      },
+      "before": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "30bfd1209af9cc4397decacf8b669f533b5ccc9573b969334e37dc537cc59710"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 69,
+        "fill_count": 69,
+        "final_equity": 9795.40587181204,
+        "report_sha256": "62921a9b3de05673cf27d4e14407facb7d7281e1abf9a89a3e66393cc9d3a3f5",
+        "component_sha256": {
+          "orders": "0de1ddc3b14cb5b7af78d81ef58be55920bd280b7006c3765c37b1d8968d8485",
+          "fills": "b4e4aef703833825503cce78ccbefa4a29c520ad7db58a871c333e3f2c112e88",
+          "equity_curve": "5f6e82f6d5578ea8f90a40bbb8a6654749706deec0129c41cdda06902213d046",
+          "metrics": "40c274022559cc1e41f93a3639514b0d6d9bc7e462a8d179a3e80dbedca4e313",
+          "final_equity": "27d587da5e931b56c5cbfdf7b1191ed9750d7dd018579e3d70f59f179d484b3c"
+        }
+      },
+      "before_sha256": "a57d8cc8f246c5dcda8e8e599a85473937b1dbced0ff37c792030417007f7e08",
+      "after": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "30bfd1209af9cc4397decacf8b669f533b5ccc9573b969334e37dc537cc59710"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 69,
+        "fill_count": 69,
+        "final_equity": 9795.40587181204,
+        "report_sha256": "62921a9b3de05673cf27d4e14407facb7d7281e1abf9a89a3e66393cc9d3a3f5",
+        "component_sha256": {
+          "orders": "0de1ddc3b14cb5b7af78d81ef58be55920bd280b7006c3765c37b1d8968d8485",
+          "fills": "b4e4aef703833825503cce78ccbefa4a29c520ad7db58a871c333e3f2c112e88",
+          "equity_curve": "5f6e82f6d5578ea8f90a40bbb8a6654749706deec0129c41cdda06902213d046",
+          "metrics": "40c274022559cc1e41f93a3639514b0d6d9bc7e462a8d179a3e80dbedca4e313",
+          "final_equity": "27d587da5e931b56c5cbfdf7b1191ed9750d7dd018579e3d70f59f179d484b3c"
+        }
+      },
+      "after_sha256": "a57d8cc8f246c5dcda8e8e599a85473937b1dbced0ff37c792030417007f7e08",
+      "identical": true
+    },
+    {
+      "id": "verify_addition_long_atr_entry",
+      "definition": {
+        "schema_version": 1,
+        "id": "verify_addition_long_atr_entry",
+        "name": "verify_addition_long_atr_entry",
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbols": [
+            "ETH-USDT"
+          ],
+          "timeframe": "15m",
+          "start": "2026-10-01T00:00:00Z",
+          "end": "2026-10-15T00:00:00Z"
+        },
+        "account": {
+          "market_type": "perpetual",
+          "initial_cash": 10000,
+          "quote_currency": "USDT",
+          "exchange_leverage": 10
+        },
+        "behavior": {
+          "allow_additions": true,
+          "allow_pyramiding": false,
+          "allow_same_bar_reversal": false,
+          "cooldown_bars": 0
+        },
+        "position": {
+          "position_leverage": 1
+        },
+        "exit_policies": [
+          {
+            "id": "take_profit",
+            "side": "long",
+            "purpose": "take_profit",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.01
+            },
+            "execution": "next_open"
+          },
+          {
+            "id": "stop_loss",
+            "side": "long",
+            "purpose": "stop_loss",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.05
+            },
+            "execution": "next_open"
+          }
+        ],
+        "execution": {
+          "signal_time": "bar_close",
+          "market_fill_time": "next_bar_open",
+          "intrabar_conflict": "conservative",
+          "fee": {
+            "maker_rate": 0,
+            "taker_rate": 0.0004
+          },
+          "slippage": {
+            "type": "none",
+            "value": 0
+          }
+        },
+        "risk": {
+          "max_symbol_equity_pct": 10,
+          "max_total_exposure_pct": 10,
+          "max_open_positions": 1,
+          "max_drawdown_halt_pct": 0.5
+        },
+        "indicators": [
+          {
+            "id": "atr",
+            "type": "atr",
+            "inputs": null,
+            "params": {
+              "period": 14
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "enter",
+            "when": {
+              "kind": "operator",
+              "op": "gt",
+              "args": [
+                {
+                  "kind": "reference",
+                  "ref": {
+                    "scope": "indicator",
+                    "name": "atr",
+                    "field": "value"
+                  }
+                },
+                {
+                  "kind": "number",
+                  "number": 0
+                }
+              ]
+            },
+            "action": {
+              "type": "enter",
+              "side": "long",
+              "size_pct": 0.01
+            }
+          },
+          {
+            "id": "add_1",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 1,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "first_entry_price"
+              },
+              "distance": {
+                "type": "atr_multiple",
+                "value": 0.5,
+                "indicator": "atr",
+                "field": "value",
+                "sampling": "entry"
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "linear",
+                "value": 0.25
+              }
+            }
+          },
+          {
+            "id": "add_2",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 2,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "first_entry_price"
+              },
+              "distance": {
+                "type": "atr_multiple",
+                "value": 0.5,
+                "indicator": "atr",
+                "field": "value",
+                "sampling": "entry"
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "linear",
+                "value": 0.25
+              }
+            }
+          },
+          {
+            "id": "add_3",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 3,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "first_entry_price"
+              },
+              "distance": {
+                "type": "atr_multiple",
+                "value": 0.5,
+                "indicator": "atr",
+                "field": "value",
+                "sampling": "entry"
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "linear",
+                "value": 0.25
+              }
+            }
+          }
+        ]
+      },
+      "before": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "8156234726a3a12315abd938d9e3e95c4943fd24bf20f13c01f71efbb7c4a02d"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 65,
+        "fill_count": 65,
+        "final_equity": 9801.95117106386,
+        "report_sha256": "b483bffc97606aa498006692e194d942b27e3d746ccbe41aa1cfc051c52ceb99",
+        "component_sha256": {
+          "orders": "e924633e16632ce79a64441e5c2269a79ad2407abbc441c8569c44e23f3bbc92",
+          "fills": "739f59246a63befdad6f77325fb564c3ea7e3426049f48ec71baa3a9fd9d1920",
+          "equity_curve": "bf4d5f0bbd5daa463b42eeeb2f6844c9b3f995610ba62a4ea90963de4dcaa460",
+          "metrics": "ed0761bf5280a0764ce21c5a029b78a734ea0db3095bae8598efbb46b83c5338",
+          "final_equity": "0f4f323a72f06eb0d47c2fcd76c7cce18131f2627685ccbc5e484a731047db3f"
+        }
+      },
+      "before_sha256": "810b2549f727d15db64ba63550c7b0b605a6c7672686c2f5054f90c338480347",
+      "after": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "8156234726a3a12315abd938d9e3e95c4943fd24bf20f13c01f71efbb7c4a02d"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 65,
+        "fill_count": 65,
+        "final_equity": 9801.95117106386,
+        "report_sha256": "b483bffc97606aa498006692e194d942b27e3d746ccbe41aa1cfc051c52ceb99",
+        "component_sha256": {
+          "orders": "e924633e16632ce79a64441e5c2269a79ad2407abbc441c8569c44e23f3bbc92",
+          "fills": "739f59246a63befdad6f77325fb564c3ea7e3426049f48ec71baa3a9fd9d1920",
+          "equity_curve": "bf4d5f0bbd5daa463b42eeeb2f6844c9b3f995610ba62a4ea90963de4dcaa460",
+          "metrics": "ed0761bf5280a0764ce21c5a029b78a734ea0db3095bae8598efbb46b83c5338",
+          "final_equity": "0f4f323a72f06eb0d47c2fcd76c7cce18131f2627685ccbc5e484a731047db3f"
+        }
+      },
+      "after_sha256": "810b2549f727d15db64ba63550c7b0b605a6c7672686c2f5054f90c338480347",
+      "identical": true
+    },
+    {
+      "id": "verify_addition_long_atr_live",
+      "definition": {
+        "schema_version": 1,
+        "id": "verify_addition_long_atr_live",
+        "name": "verify_addition_long_atr_live",
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbols": [
+            "ETH-USDT"
+          ],
+          "timeframe": "15m",
+          "start": "2026-10-01T00:00:00Z",
+          "end": "2026-10-15T00:00:00Z"
+        },
+        "account": {
+          "market_type": "perpetual",
+          "initial_cash": 10000,
+          "quote_currency": "USDT",
+          "exchange_leverage": 10
+        },
+        "behavior": {
+          "allow_additions": true,
+          "allow_pyramiding": false,
+          "allow_same_bar_reversal": false,
+          "cooldown_bars": 0
+        },
+        "position": {
+          "position_leverage": 1
+        },
+        "exit_policies": [
+          {
+            "id": "take_profit",
+            "side": "long",
+            "purpose": "take_profit",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.01
+            },
+            "execution": "next_open"
+          },
+          {
+            "id": "stop_loss",
+            "side": "long",
+            "purpose": "stop_loss",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.05
+            },
+            "execution": "next_open"
+          }
+        ],
+        "execution": {
+          "signal_time": "bar_close",
+          "market_fill_time": "next_bar_open",
+          "intrabar_conflict": "conservative",
+          "fee": {
+            "maker_rate": 0,
+            "taker_rate": 0.0004
+          },
+          "slippage": {
+            "type": "none",
+            "value": 0
+          }
+        },
+        "risk": {
+          "max_symbol_equity_pct": 10,
+          "max_total_exposure_pct": 10,
+          "max_open_positions": 1,
+          "max_drawdown_halt_pct": 0.5
+        },
+        "indicators": [
+          {
+            "id": "atr",
+            "type": "atr",
+            "inputs": null,
+            "params": {
+              "period": 14
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "enter",
+            "when": {
+              "kind": "operator",
+              "op": "gt",
+              "args": [
+                {
+                  "kind": "reference",
+                  "ref": {
+                    "scope": "indicator",
+                    "name": "atr",
+                    "field": "value"
+                  }
+                },
+                {
+                  "kind": "number",
+                  "number": 0
+                }
+              ]
+            },
+            "action": {
+              "type": "enter",
+              "side": "long",
+              "size_pct": 0.01
+            }
+          },
+          {
+            "id": "add_1",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 1,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "last_entry_price"
+              },
+              "distance": {
+                "type": "atr_multiple",
+                "value": 0.5,
+                "indicator": "atr",
+                "field": "value",
+                "sampling": "live"
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "geometric",
+                "value": 1.5
+              }
+            }
+          },
+          {
+            "id": "add_2",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 2,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "last_entry_price"
+              },
+              "distance": {
+                "type": "atr_multiple",
+                "value": 0.5,
+                "indicator": "atr",
+                "field": "value",
+                "sampling": "live"
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "geometric",
+                "value": 1.5
+              }
+            }
+          },
+          {
+            "id": "add_3",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 3,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "last_entry_price"
+              },
+              "distance": {
+                "type": "atr_multiple",
+                "value": 0.5,
+                "indicator": "atr",
+                "field": "value",
+                "sampling": "live"
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "geometric",
+                "value": 1.5
+              }
+            }
+          }
+        ]
+      },
+      "before": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "650046d1c8e20e6262efdf8c965ce34ca9946c897cecd1547c0a4c8a1080f850"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 72,
+        "fill_count": 72,
+        "final_equity": 9795.392451492147,
+        "report_sha256": "2f204c060f455d919859e7474d24bd50a8f8ae3ca0e64736ff0d5c5a35c509ac",
+        "component_sha256": {
+          "orders": "28736f548f2e541aeaa2b5568e6d57e377fc4de370080694f93ac3540d4d764c",
+          "fills": "933ad56a010fe96f23ecae9d487ef06ee385892fc58ce2f201ea132b5abaac6e",
+          "equity_curve": "00942a2337c8535f8f4a005ea471c1511c16b8d29a062ed81bb3090e9c55268b",
+          "metrics": "7717229f37781a200aaced8dd4e2cb06bf4ddb243f12ab8432641d16afbab952",
+          "final_equity": "0fa3ee79fc5667784ca03b309c6a7d344e968fc740c1607312c391d0c452912d"
+        }
+      },
+      "before_sha256": "875ef8122429ff6e81174667c07e84537c817cfd48beeed548b7d3aeff3d4020",
+      "after": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "650046d1c8e20e6262efdf8c965ce34ca9946c897cecd1547c0a4c8a1080f850"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 72,
+        "fill_count": 72,
+        "final_equity": 9795.392451492147,
+        "report_sha256": "2f204c060f455d919859e7474d24bd50a8f8ae3ca0e64736ff0d5c5a35c509ac",
+        "component_sha256": {
+          "orders": "28736f548f2e541aeaa2b5568e6d57e377fc4de370080694f93ac3540d4d764c",
+          "fills": "933ad56a010fe96f23ecae9d487ef06ee385892fc58ce2f201ea132b5abaac6e",
+          "equity_curve": "00942a2337c8535f8f4a005ea471c1511c16b8d29a062ed81bb3090e9c55268b",
+          "metrics": "7717229f37781a200aaced8dd4e2cb06bf4ddb243f12ab8432641d16afbab952",
+          "final_equity": "0fa3ee79fc5667784ca03b309c6a7d344e968fc740c1607312c391d0c452912d"
+        }
+      },
+      "after_sha256": "875ef8122429ff6e81174667c07e84537c817cfd48beeed548b7d3aeff3d4020",
+      "identical": true
+    },
+    {
+      "id": "verify_addition_long_fixed_amount",
+      "definition": {
+        "schema_version": 1,
+        "id": "verify_addition_long_fixed_amount",
+        "name": "verify_addition_long_fixed_amount",
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbols": [
+            "ETH-USDT"
+          ],
+          "timeframe": "15m",
+          "start": "2026-10-01T00:00:00Z",
+          "end": "2026-10-15T00:00:00Z"
+        },
+        "account": {
+          "market_type": "perpetual",
+          "initial_cash": 10000,
+          "quote_currency": "USDT",
+          "exchange_leverage": 10
+        },
+        "behavior": {
+          "allow_additions": true,
+          "allow_pyramiding": false,
+          "allow_same_bar_reversal": false,
+          "cooldown_bars": 0
+        },
+        "position": {
+          "position_leverage": 1
+        },
+        "exit_policies": [
+          {
+            "id": "take_profit",
+            "side": "long",
+            "purpose": "take_profit",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.01
+            },
+            "execution": "next_open"
+          },
+          {
+            "id": "stop_loss",
+            "side": "long",
+            "purpose": "stop_loss",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.05
+            },
+            "execution": "next_open"
+          }
+        ],
+        "execution": {
+          "signal_time": "bar_close",
+          "market_fill_time": "next_bar_open",
+          "intrabar_conflict": "conservative",
+          "fee": {
+            "maker_rate": 0,
+            "taker_rate": 0.0004
+          },
+          "slippage": {
+            "type": "none",
+            "value": 0
+          }
+        },
+        "risk": {
+          "max_symbol_equity_pct": 10,
+          "max_total_exposure_pct": 10,
+          "max_open_positions": 1,
+          "max_drawdown_halt_pct": 0.5
+        },
+        "indicators": [
+          {
+            "id": "atr",
+            "type": "atr",
+            "inputs": null,
+            "params": {
+              "period": 14
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "enter",
+            "when": {
+              "kind": "operator",
+              "op": "gt",
+              "args": [
+                {
+                  "kind": "reference",
+                  "ref": {
+                    "scope": "indicator",
+                    "name": "atr",
+                    "field": "value"
+                  }
+                },
+                {
+                  "kind": "number",
+                  "number": 0
+                }
+              ]
+            },
+            "action": {
+              "type": "enter",
+              "side": "long",
+              "size_pct": 0.01
+            }
+          },
+          {
+            "id": "add_1",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 1,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "fixed_amount",
+                "value": 5
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "linear",
+                "value": 2
+              }
+            }
+          },
+          {
+            "id": "add_2",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 2,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "fixed_amount",
+                "value": 5
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "linear",
+                "value": 2
+              }
+            }
+          },
+          {
+            "id": "add_3",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 3,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "fixed_amount",
+                "value": 5
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "linear",
+                "value": 2
+              }
+            }
+          }
+        ]
+      },
+      "before": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "a3224264e54f03e98a10fd07f6373a5f0b3ffccd771c87f9e4a331e8205cc9ab"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 71,
+        "fill_count": 71,
+        "final_equity": 9797.73352275669,
+        "report_sha256": "0f8c9902d708466779342338e9969cfcd391dbfdee592691f36f66c34df25526",
+        "component_sha256": {
+          "orders": "1aed16d1ba62ba5e9cd54cc883700de0c84c78d8bc0c1ac6d90aab0763b63c35",
+          "fills": "189aa0bffb9fd6fa157b28e4d20b92d6abafa45a9936b80956f4f056b639fc5a",
+          "equity_curve": "9ce8eb44d2444b796311f481a3213c180d11ad2575e5cd3f8267ef9c0d3f168e",
+          "metrics": "c4dd62b2c44683b2d88112d47027afbd0389b1ec734708d30cd5a81ede9a96d9",
+          "final_equity": "076006cd20d8ef1247f858afca9aa7eaf6a79de36b76190b31f3740a4254e984"
+        }
+      },
+      "before_sha256": "bb1674e2a45f4574adcfdc59d61622fe161bb3b0aed44eb4ec4d5cda6b1449f8",
+      "after": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "a3224264e54f03e98a10fd07f6373a5f0b3ffccd771c87f9e4a331e8205cc9ab"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 71,
+        "fill_count": 71,
+        "final_equity": 9797.73352275669,
+        "report_sha256": "0f8c9902d708466779342338e9969cfcd391dbfdee592691f36f66c34df25526",
+        "component_sha256": {
+          "orders": "1aed16d1ba62ba5e9cd54cc883700de0c84c78d8bc0c1ac6d90aab0763b63c35",
+          "fills": "189aa0bffb9fd6fa157b28e4d20b92d6abafa45a9936b80956f4f056b639fc5a",
+          "equity_curve": "9ce8eb44d2444b796311f481a3213c180d11ad2575e5cd3f8267ef9c0d3f168e",
+          "metrics": "c4dd62b2c44683b2d88112d47027afbd0389b1ec734708d30cd5a81ede9a96d9",
+          "final_equity": "076006cd20d8ef1247f858afca9aa7eaf6a79de36b76190b31f3740a4254e984"
+        }
+      },
+      "after_sha256": "bb1674e2a45f4574adcfdc59d61622fe161bb3b0aed44eb4ec4d5cda6b1449f8",
+      "identical": true
+    },
+    {
+      "id": "verify_addition_long_percent_fixed",
+      "definition": {
+        "schema_version": 1,
+        "id": "verify_addition_long_percent_fixed",
+        "name": "verify_addition_long_percent_fixed",
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbols": [
+            "ETH-USDT"
+          ],
+          "timeframe": "15m",
+          "start": "2026-10-01T00:00:00Z",
+          "end": "2026-10-15T00:00:00Z"
+        },
+        "account": {
+          "market_type": "perpetual",
+          "initial_cash": 10000,
+          "quote_currency": "USDT",
+          "exchange_leverage": 10
+        },
+        "behavior": {
+          "allow_additions": true,
+          "allow_pyramiding": false,
+          "allow_same_bar_reversal": false,
+          "cooldown_bars": 0
+        },
+        "position": {
+          "position_leverage": 1
+        },
+        "exit_policies": [
+          {
+            "id": "take_profit",
+            "side": "long",
+            "purpose": "take_profit",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.01
+            },
+            "execution": "next_open"
+          },
+          {
+            "id": "stop_loss",
+            "side": "long",
+            "purpose": "stop_loss",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.05
+            },
+            "execution": "next_open"
+          }
+        ],
+        "execution": {
+          "signal_time": "bar_close",
+          "market_fill_time": "next_bar_open",
+          "intrabar_conflict": "conservative",
+          "fee": {
+            "maker_rate": 0,
+            "taker_rate": 0.0004
+          },
+          "slippage": {
+            "type": "none",
+            "value": 0
+          }
+        },
+        "risk": {
+          "max_symbol_equity_pct": 10,
+          "max_total_exposure_pct": 10,
+          "max_open_positions": 1,
+          "max_drawdown_halt_pct": 0.5
+        },
+        "indicators": [
+          {
+            "id": "atr",
+            "type": "atr",
+            "inputs": null,
+            "params": {
+              "period": 14
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "enter",
+            "when": {
+              "kind": "operator",
+              "op": "gt",
+              "args": [
+                {
+                  "kind": "reference",
+                  "ref": {
+                    "scope": "indicator",
+                    "name": "atr",
+                    "field": "value"
+                  }
+                },
+                {
+                  "kind": "number",
+                  "number": 0
+                }
+              ]
+            },
+            "action": {
+              "type": "enter",
+              "side": "long",
+              "size_pct": 0.01
+            }
+          },
+          {
+            "id": "add_1",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 1,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "percent",
+                "value": 0.002
+              },
+              "direction": "adverse",
+              "trigger_price": "close"
+            }
+          },
+          {
+            "id": "add_2",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 2,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "percent",
+                "value": 0.002
+              },
+              "direction": "adverse",
+              "trigger_price": "close"
+            }
+          },
+          {
+            "id": "add_3",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 3,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "percent",
+                "value": 0.002
+              },
+              "direction": "adverse",
+              "trigger_price": "close"
+            }
+          }
+        ]
+      },
+      "before": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "5645064467adb7f15e479387de0c7b05bbc4779b24aaffdbf773f90e21a41365"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 71,
+        "fill_count": 71,
+        "final_equity": 9777.083060710174,
+        "report_sha256": "6b9a21033546e19717c691f2f0c73899117947bcfbbebf388433964cf431b8a2",
+        "component_sha256": {
+          "orders": "d96a923b37ac57dae74a6ac13795d8d100d35ef28aeb2b32d239017f7bf6c264",
+          "fills": "7765229aba47e56bfb3b431f25c24ed5382e83546d6fb7880ce7a03ad7612859",
+          "equity_curve": "419e1d531c0ecbbbc785e1182eb00329aee65151856a54f54aef74232ce48593",
+          "metrics": "5afe04db2026787f99ec1b0051fea611d034c8d74a20e1d5af996e25b8a71798",
+          "final_equity": "a084f73aba74fcc454beb7534719b007d4fe47b3eecc86cdd9736367ddca16c6"
+        }
+      },
+      "before_sha256": "895c19721a0ddb31f43eaef9f876701f2b9ea08cf6e3ba87fd4b6372a421df85",
+      "after": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "5645064467adb7f15e479387de0c7b05bbc4779b24aaffdbf773f90e21a41365"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 71,
+        "fill_count": 71,
+        "final_equity": 9777.083060710174,
+        "report_sha256": "6b9a21033546e19717c691f2f0c73899117947bcfbbebf388433964cf431b8a2",
+        "component_sha256": {
+          "orders": "d96a923b37ac57dae74a6ac13795d8d100d35ef28aeb2b32d239017f7bf6c264",
+          "fills": "7765229aba47e56bfb3b431f25c24ed5382e83546d6fb7880ce7a03ad7612859",
+          "equity_curve": "419e1d531c0ecbbbc785e1182eb00329aee65151856a54f54aef74232ce48593",
+          "metrics": "5afe04db2026787f99ec1b0051fea611d034c8d74a20e1d5af996e25b8a71798",
+          "final_equity": "a084f73aba74fcc454beb7534719b007d4fe47b3eecc86cdd9736367ddca16c6"
+        }
+      },
+      "after_sha256": "895c19721a0ddb31f43eaef9f876701f2b9ea08cf6e3ba87fd4b6372a421df85",
+      "identical": true
+    },
+    {
+      "id": "verify_addition_long_percent_geometric",
+      "definition": {
+        "schema_version": 1,
+        "id": "verify_addition_long_percent_geometric",
+        "name": "verify_addition_long_percent_geometric",
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbols": [
+            "ETH-USDT"
+          ],
+          "timeframe": "15m",
+          "start": "2026-10-01T00:00:00Z",
+          "end": "2026-10-15T00:00:00Z"
+        },
+        "account": {
+          "market_type": "perpetual",
+          "initial_cash": 10000,
+          "quote_currency": "USDT",
+          "exchange_leverage": 10
+        },
+        "behavior": {
+          "allow_additions": true,
+          "allow_pyramiding": false,
+          "allow_same_bar_reversal": false,
+          "cooldown_bars": 0
+        },
+        "position": {
+          "position_leverage": 1
+        },
+        "exit_policies": [
+          {
+            "id": "take_profit",
+            "side": "long",
+            "purpose": "take_profit",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.01
+            },
+            "execution": "next_open"
+          },
+          {
+            "id": "stop_loss",
+            "side": "long",
+            "purpose": "stop_loss",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.05
+            },
+            "execution": "next_open"
+          }
+        ],
+        "execution": {
+          "signal_time": "bar_close",
+          "market_fill_time": "next_bar_open",
+          "intrabar_conflict": "conservative",
+          "fee": {
+            "maker_rate": 0,
+            "taker_rate": 0.0004
+          },
+          "slippage": {
+            "type": "none",
+            "value": 0
+          }
+        },
+        "risk": {
+          "max_symbol_equity_pct": 10,
+          "max_total_exposure_pct": 10,
+          "max_open_positions": 1,
+          "max_drawdown_halt_pct": 0.5
+        },
+        "indicators": [
+          {
+            "id": "atr",
+            "type": "atr",
+            "inputs": null,
+            "params": {
+              "period": 14
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "enter",
+            "when": {
+              "kind": "operator",
+              "op": "gt",
+              "args": [
+                {
+                  "kind": "reference",
+                  "ref": {
+                    "scope": "indicator",
+                    "name": "atr",
+                    "field": "value"
+                  }
+                },
+                {
+                  "kind": "number",
+                  "number": 0
+                }
+              ]
+            },
+            "action": {
+              "type": "enter",
+              "side": "long",
+              "size_pct": 0.01
+            }
+          },
+          {
+            "id": "add_1",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 1,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "last_entry_price"
+              },
+              "distance": {
+                "type": "percent",
+                "value": 0.002
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "geometric",
+                "value": 1.5
+              }
+            }
+          },
+          {
+            "id": "add_2",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 2,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "last_entry_price"
+              },
+              "distance": {
+                "type": "percent",
+                "value": 0.002
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "geometric",
+                "value": 1.5
+              }
+            }
+          },
+          {
+            "id": "add_3",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 3,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "last_entry_price"
+              },
+              "distance": {
+                "type": "percent",
+                "value": 0.002
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "geometric",
+                "value": 1.5
+              }
+            }
+          }
+        ]
+      },
+      "before": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "5aa16213bb72b07e0d8ac979f0ebfe229067526cdff0da70d2274d81a930e710"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 64,
+        "fill_count": 64,
+        "final_equity": 9779.658625475415,
+        "report_sha256": "c28af858997c20b5b4cd6cdce86712533a80372875f0acf8bff53c1e715d0c0f",
+        "component_sha256": {
+          "orders": "b60e66930be6871819f0300f90cd8fc03253e9b43250ac323e4b6643782c2b50",
+          "fills": "5233363730b231bff3bdfd5e9eb5a5ca59cd8f209247aa804944d0c98ee1b625",
+          "equity_curve": "cf1045a16d283fb391351e22ffd347ecd57b183d5fcc88e5b69fa023ecea091a",
+          "metrics": "6a418dbb47979a2547ee7455886e66e2305e1484f8c52aa958be9c88255aa753",
+          "final_equity": "58079b2209ec25bd6987e725c8374778f08487455ac459d0397499e0c6a41fe5"
+        }
+      },
+      "before_sha256": "35ab93be82d18cb401e87690d50f17e178b5cd6b3a30788f5542cdb295d2179a",
+      "after": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "5aa16213bb72b07e0d8ac979f0ebfe229067526cdff0da70d2274d81a930e710"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 64,
+        "fill_count": 64,
+        "final_equity": 9779.658625475415,
+        "report_sha256": "c28af858997c20b5b4cd6cdce86712533a80372875f0acf8bff53c1e715d0c0f",
+        "component_sha256": {
+          "orders": "b60e66930be6871819f0300f90cd8fc03253e9b43250ac323e4b6643782c2b50",
+          "fills": "5233363730b231bff3bdfd5e9eb5a5ca59cd8f209247aa804944d0c98ee1b625",
+          "equity_curve": "cf1045a16d283fb391351e22ffd347ecd57b183d5fcc88e5b69fa023ecea091a",
+          "metrics": "6a418dbb47979a2547ee7455886e66e2305e1484f8c52aa958be9c88255aa753",
+          "final_equity": "58079b2209ec25bd6987e725c8374778f08487455ac459d0397499e0c6a41fe5"
+        }
+      },
+      "after_sha256": "35ab93be82d18cb401e87690d50f17e178b5cd6b3a30788f5542cdb295d2179a",
+      "identical": true
+    },
+    {
+      "id": "verify_addition_long_percent_linear",
+      "definition": {
+        "schema_version": 1,
+        "id": "verify_addition_long_percent_linear",
+        "name": "verify_addition_long_percent_linear",
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbols": [
+            "ETH-USDT"
+          ],
+          "timeframe": "15m",
+          "start": "2026-10-01T00:00:00Z",
+          "end": "2026-10-15T00:00:00Z"
+        },
+        "account": {
+          "market_type": "perpetual",
+          "initial_cash": 10000,
+          "quote_currency": "USDT",
+          "exchange_leverage": 10
+        },
+        "behavior": {
+          "allow_additions": true,
+          "allow_pyramiding": false,
+          "allow_same_bar_reversal": false,
+          "cooldown_bars": 0
+        },
+        "position": {
+          "position_leverage": 1
+        },
+        "exit_policies": [
+          {
+            "id": "take_profit",
+            "side": "long",
+            "purpose": "take_profit",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.01
+            },
+            "execution": "next_open"
+          },
+          {
+            "id": "stop_loss",
+            "side": "long",
+            "purpose": "stop_loss",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.05
+            },
+            "execution": "next_open"
+          }
+        ],
+        "execution": {
+          "signal_time": "bar_close",
+          "market_fill_time": "next_bar_open",
+          "intrabar_conflict": "conservative",
+          "fee": {
+            "maker_rate": 0,
+            "taker_rate": 0.0004
+          },
+          "slippage": {
+            "type": "none",
+            "value": 0
+          }
+        },
+        "risk": {
+          "max_symbol_equity_pct": 10,
+          "max_total_exposure_pct": 10,
+          "max_open_positions": 1,
+          "max_drawdown_halt_pct": 0.5
+        },
+        "indicators": [
+          {
+            "id": "atr",
+            "type": "atr",
+            "inputs": null,
+            "params": {
+              "period": 14
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "enter",
+            "when": {
+              "kind": "operator",
+              "op": "gt",
+              "args": [
+                {
+                  "kind": "reference",
+                  "ref": {
+                    "scope": "indicator",
+                    "name": "atr",
+                    "field": "value"
+                  }
+                },
+                {
+                  "kind": "number",
+                  "number": 0
+                }
+              ]
+            },
+            "action": {
+              "type": "enter",
+              "side": "long",
+              "size_pct": 0.01
+            }
+          },
+          {
+            "id": "add_1",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 1,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "percent",
+                "value": 0.002
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "linear",
+                "value": 0.001
+              }
+            }
+          },
+          {
+            "id": "add_2",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 2,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "percent",
+                "value": 0.002
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "linear",
+                "value": 0.001
+              }
+            }
+          },
+          {
+            "id": "add_3",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "long",
+              "size_pct": 0,
+              "addition_index": 3,
+              "size_multiplier": 1.5,
+              "sizing_mode": "current_position_multiple"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "percent",
+                "value": 0.002
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "linear",
+                "value": 0.001
+              }
+            }
+          }
+        ]
+      },
+      "before": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "09a24546835e81b493e93647007fc675bd1c091d89966a4935c9a2fc8de45bfa"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 69,
+        "fill_count": 69,
+        "final_equity": 9784.007011157422,
+        "report_sha256": "96cec486002e2c3b1f67ba17aef836eb7cf0667c57519b4fad8b884d365939f5",
+        "component_sha256": {
+          "orders": "e45b0700e659638aa2b5b2c87874610fb72a663b37dc8d26a2418fe7319c3766",
+          "fills": "67a39ad5e51b45914354f1c7811ea20947ee78fadef66e8139716c0b52050699",
+          "equity_curve": "1132afd5d2d7ba9849e97aa0f19efe7c3dc4d61f09f215e8dce542f2a0d70375",
+          "metrics": "b7a774c18699911f2dec91d327d47215701d24439f731ea6832292d03bfc1300",
+          "final_equity": "2bb0502b691c5575f6584f698d0eb58a11ab6592772893186ce1a51c8c27054a"
+        }
+      },
+      "before_sha256": "04964c3a802da2d38bd804fad3ff2a18d36444a9cce3e92a09482fb22c169903",
+      "after": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "09a24546835e81b493e93647007fc675bd1c091d89966a4935c9a2fc8de45bfa"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 69,
+        "fill_count": 69,
+        "final_equity": 9784.007011157422,
+        "report_sha256": "96cec486002e2c3b1f67ba17aef836eb7cf0667c57519b4fad8b884d365939f5",
+        "component_sha256": {
+          "orders": "e45b0700e659638aa2b5b2c87874610fb72a663b37dc8d26a2418fe7319c3766",
+          "fills": "67a39ad5e51b45914354f1c7811ea20947ee78fadef66e8139716c0b52050699",
+          "equity_curve": "1132afd5d2d7ba9849e97aa0f19efe7c3dc4d61f09f215e8dce542f2a0d70375",
+          "metrics": "b7a774c18699911f2dec91d327d47215701d24439f731ea6832292d03bfc1300",
+          "final_equity": "2bb0502b691c5575f6584f698d0eb58a11ab6592772893186ce1a51c8c27054a"
+        }
+      },
+      "after_sha256": "04964c3a802da2d38bd804fad3ff2a18d36444a9cce3e92a09482fb22c169903",
+      "identical": true
+    },
+    {
+      "id": "verify_addition_short_atr_each_entry",
+      "definition": {
+        "schema_version": 1,
+        "id": "verify_addition_short_atr_each_entry",
+        "name": "verify_addition_short_atr_each_entry",
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbols": [
+            "ETH-USDT"
+          ],
+          "timeframe": "15m",
+          "start": "2026-10-01T00:00:00Z",
+          "end": "2026-10-15T00:00:00Z"
+        },
+        "account": {
+          "market_type": "perpetual",
+          "initial_cash": 10000,
+          "quote_currency": "USDT",
+          "exchange_leverage": 10
+        },
+        "behavior": {
+          "allow_additions": true,
+          "allow_pyramiding": false,
+          "allow_same_bar_reversal": false,
+          "cooldown_bars": 0
+        },
+        "position": {
+          "position_leverage": 1
+        },
+        "exit_policies": [
+          {
+            "id": "take_profit",
+            "side": "short",
+            "purpose": "take_profit",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.01
+            },
+            "execution": "next_open"
+          },
+          {
+            "id": "stop_loss",
+            "side": "short",
+            "purpose": "stop_loss",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.05
+            },
+            "execution": "next_open"
+          }
+        ],
+        "execution": {
+          "signal_time": "bar_close",
+          "market_fill_time": "next_bar_open",
+          "intrabar_conflict": "conservative",
+          "fee": {
+            "maker_rate": 0,
+            "taker_rate": 0.0004
+          },
+          "slippage": {
+            "type": "none",
+            "value": 0
+          }
+        },
+        "risk": {
+          "max_symbol_equity_pct": 10,
+          "max_total_exposure_pct": 10,
+          "max_open_positions": 1,
+          "max_drawdown_halt_pct": 0.5
+        },
+        "indicators": [
+          {
+            "id": "atr",
+            "type": "atr",
+            "inputs": null,
+            "params": {
+              "period": 14
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "enter",
+            "when": {
+              "kind": "operator",
+              "op": "gt",
+              "args": [
+                {
+                  "kind": "reference",
+                  "ref": {
+                    "scope": "indicator",
+                    "name": "atr",
+                    "field": "value"
+                  }
+                },
+                {
+                  "kind": "number",
+                  "number": 0
+                }
+              ]
+            },
+            "action": {
+              "type": "enter",
+              "side": "short",
+              "size_pct": 0.01
+            }
+          },
+          {
+            "id": "add_1",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 1,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "atr_multiple",
+                "value": 0.5,
+                "indicator": "atr",
+                "field": "value",
+                "sampling": "each_entry"
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "geometric",
+                "value": 1.5
+              }
+            }
+          },
+          {
+            "id": "add_2",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 2,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "atr_multiple",
+                "value": 0.5,
+                "indicator": "atr",
+                "field": "value",
+                "sampling": "each_entry"
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "geometric",
+                "value": 1.5
+              }
+            }
+          },
+          {
+            "id": "add_3",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 3,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "atr_multiple",
+                "value": 0.5,
+                "indicator": "atr",
+                "field": "value",
+                "sampling": "each_entry"
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "geometric",
+                "value": 1.5
+              }
+            }
+          }
+        ]
+      },
+      "before": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "2064f06b75b6fba8df9d1a18548985eb48d8df2a6c14bc98fdfe3a1c3a4fce27"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 71,
+        "fill_count": 71,
+        "final_equity": 10042.095100082028,
+        "report_sha256": "605ccb51d0241d0512fba8eedb84c21792590bbd11bf7d7f79a1ad0d7759a194",
+        "component_sha256": {
+          "orders": "6b125621dd1c0120da597b7f15af2dd1ad174f57079e34e02e42cff830d10934",
+          "fills": "7ee7360b7bdf64dc42960618301783944a157513680a4abb2191e9c300e5b67c",
+          "equity_curve": "4575a9c94356cf0ce92d059e4238723c63d8f4361c5b37056cb7744b802779ce",
+          "metrics": "2aec757faa5b9a1cff99962cd7b23bc182cc54a7bdd3d84a504727636508913c",
+          "final_equity": "3e06a0e3941e218fc3603a316573d9ecb94105012250671290864bc74240ae81"
+        }
+      },
+      "before_sha256": "6bb8b1d6f32fa25ddd77661188c710cdf46d2c63d0cf003a44f1825a367863a7",
+      "after": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "2064f06b75b6fba8df9d1a18548985eb48d8df2a6c14bc98fdfe3a1c3a4fce27"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 71,
+        "fill_count": 71,
+        "final_equity": 10042.095100082028,
+        "report_sha256": "605ccb51d0241d0512fba8eedb84c21792590bbd11bf7d7f79a1ad0d7759a194",
+        "component_sha256": {
+          "orders": "6b125621dd1c0120da597b7f15af2dd1ad174f57079e34e02e42cff830d10934",
+          "fills": "7ee7360b7bdf64dc42960618301783944a157513680a4abb2191e9c300e5b67c",
+          "equity_curve": "4575a9c94356cf0ce92d059e4238723c63d8f4361c5b37056cb7744b802779ce",
+          "metrics": "2aec757faa5b9a1cff99962cd7b23bc182cc54a7bdd3d84a504727636508913c",
+          "final_equity": "3e06a0e3941e218fc3603a316573d9ecb94105012250671290864bc74240ae81"
+        }
+      },
+      "after_sha256": "6bb8b1d6f32fa25ddd77661188c710cdf46d2c63d0cf003a44f1825a367863a7",
+      "identical": true
+    },
+    {
+      "id": "verify_addition_short_atr_entry",
+      "definition": {
+        "schema_version": 1,
+        "id": "verify_addition_short_atr_entry",
+        "name": "verify_addition_short_atr_entry",
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbols": [
+            "ETH-USDT"
+          ],
+          "timeframe": "15m",
+          "start": "2026-10-01T00:00:00Z",
+          "end": "2026-10-15T00:00:00Z"
+        },
+        "account": {
+          "market_type": "perpetual",
+          "initial_cash": 10000,
+          "quote_currency": "USDT",
+          "exchange_leverage": 10
+        },
+        "behavior": {
+          "allow_additions": true,
+          "allow_pyramiding": false,
+          "allow_same_bar_reversal": false,
+          "cooldown_bars": 0
+        },
+        "position": {
+          "position_leverage": 1
+        },
+        "exit_policies": [
+          {
+            "id": "take_profit",
+            "side": "short",
+            "purpose": "take_profit",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.01
+            },
+            "execution": "next_open"
+          },
+          {
+            "id": "stop_loss",
+            "side": "short",
+            "purpose": "stop_loss",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.05
+            },
+            "execution": "next_open"
+          }
+        ],
+        "execution": {
+          "signal_time": "bar_close",
+          "market_fill_time": "next_bar_open",
+          "intrabar_conflict": "conservative",
+          "fee": {
+            "maker_rate": 0,
+            "taker_rate": 0.0004
+          },
+          "slippage": {
+            "type": "none",
+            "value": 0
+          }
+        },
+        "risk": {
+          "max_symbol_equity_pct": 10,
+          "max_total_exposure_pct": 10,
+          "max_open_positions": 1,
+          "max_drawdown_halt_pct": 0.5
+        },
+        "indicators": [
+          {
+            "id": "atr",
+            "type": "atr",
+            "inputs": null,
+            "params": {
+              "period": 14
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "enter",
+            "when": {
+              "kind": "operator",
+              "op": "gt",
+              "args": [
+                {
+                  "kind": "reference",
+                  "ref": {
+                    "scope": "indicator",
+                    "name": "atr",
+                    "field": "value"
+                  }
+                },
+                {
+                  "kind": "number",
+                  "number": 0
+                }
+              ]
+            },
+            "action": {
+              "type": "enter",
+              "side": "short",
+              "size_pct": 0.01
+            }
+          },
+          {
+            "id": "add_1",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 1,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "first_entry_price"
+              },
+              "distance": {
+                "type": "atr_multiple",
+                "value": 0.5,
+                "indicator": "atr",
+                "field": "value",
+                "sampling": "entry"
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "linear",
+                "value": 0.25
+              }
+            }
+          },
+          {
+            "id": "add_2",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 2,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "first_entry_price"
+              },
+              "distance": {
+                "type": "atr_multiple",
+                "value": 0.5,
+                "indicator": "atr",
+                "field": "value",
+                "sampling": "entry"
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "linear",
+                "value": 0.25
+              }
+            }
+          },
+          {
+            "id": "add_3",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 3,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "first_entry_price"
+              },
+              "distance": {
+                "type": "atr_multiple",
+                "value": 0.5,
+                "indicator": "atr",
+                "field": "value",
+                "sampling": "entry"
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "linear",
+                "value": 0.25
+              }
+            }
+          }
+        ]
+      },
+      "before": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "5f74d9b275ed17954c339439ba431194e0e2612ff2831cebb137ca11e2c8dc5d"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 69,
+        "fill_count": 69,
+        "final_equity": 10046.006771324186,
+        "report_sha256": "a67708e200a4edba445bd173b13e1520b3bf299346592c2e7a484bf18315a263",
+        "component_sha256": {
+          "orders": "77029754695d4ddd764ae1e3e20d8a5bdbaba512df7e6fd202ad6dafed1299ad",
+          "fills": "ff22623265b906dc6f3cf266bcc19d85f49784230c75726284991edc1abadf0e",
+          "equity_curve": "e71d4f5f2fd929796ec678ae033b1133b1c09924d5b347a59d6bfce820031c60",
+          "metrics": "697bdf5881d0b68124f397d32f59b33116e577265ad2e49f17c3df90d4c84eee",
+          "final_equity": "dde810c71120b02cafde474a72972cb429b48bf71f5d47986a6df6270445dbb1"
+        }
+      },
+      "before_sha256": "1cd7b1be4d778ee9f306c8907c86e046e0998fdef0255d5b7ee5f34eb72dfd14",
+      "after": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "5f74d9b275ed17954c339439ba431194e0e2612ff2831cebb137ca11e2c8dc5d"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 69,
+        "fill_count": 69,
+        "final_equity": 10046.006771324186,
+        "report_sha256": "a67708e200a4edba445bd173b13e1520b3bf299346592c2e7a484bf18315a263",
+        "component_sha256": {
+          "orders": "77029754695d4ddd764ae1e3e20d8a5bdbaba512df7e6fd202ad6dafed1299ad",
+          "fills": "ff22623265b906dc6f3cf266bcc19d85f49784230c75726284991edc1abadf0e",
+          "equity_curve": "e71d4f5f2fd929796ec678ae033b1133b1c09924d5b347a59d6bfce820031c60",
+          "metrics": "697bdf5881d0b68124f397d32f59b33116e577265ad2e49f17c3df90d4c84eee",
+          "final_equity": "dde810c71120b02cafde474a72972cb429b48bf71f5d47986a6df6270445dbb1"
+        }
+      },
+      "after_sha256": "1cd7b1be4d778ee9f306c8907c86e046e0998fdef0255d5b7ee5f34eb72dfd14",
+      "identical": true
+    },
+    {
+      "id": "verify_addition_short_atr_live",
+      "definition": {
+        "schema_version": 1,
+        "id": "verify_addition_short_atr_live",
+        "name": "verify_addition_short_atr_live",
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbols": [
+            "ETH-USDT"
+          ],
+          "timeframe": "15m",
+          "start": "2026-10-01T00:00:00Z",
+          "end": "2026-10-15T00:00:00Z"
+        },
+        "account": {
+          "market_type": "perpetual",
+          "initial_cash": 10000,
+          "quote_currency": "USDT",
+          "exchange_leverage": 10
+        },
+        "behavior": {
+          "allow_additions": true,
+          "allow_pyramiding": false,
+          "allow_same_bar_reversal": false,
+          "cooldown_bars": 0
+        },
+        "position": {
+          "position_leverage": 1
+        },
+        "exit_policies": [
+          {
+            "id": "take_profit",
+            "side": "short",
+            "purpose": "take_profit",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.01
+            },
+            "execution": "next_open"
+          },
+          {
+            "id": "stop_loss",
+            "side": "short",
+            "purpose": "stop_loss",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.05
+            },
+            "execution": "next_open"
+          }
+        ],
+        "execution": {
+          "signal_time": "bar_close",
+          "market_fill_time": "next_bar_open",
+          "intrabar_conflict": "conservative",
+          "fee": {
+            "maker_rate": 0,
+            "taker_rate": 0.0004
+          },
+          "slippage": {
+            "type": "none",
+            "value": 0
+          }
+        },
+        "risk": {
+          "max_symbol_equity_pct": 10,
+          "max_total_exposure_pct": 10,
+          "max_open_positions": 1,
+          "max_drawdown_halt_pct": 0.5
+        },
+        "indicators": [
+          {
+            "id": "atr",
+            "type": "atr",
+            "inputs": null,
+            "params": {
+              "period": 14
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "enter",
+            "when": {
+              "kind": "operator",
+              "op": "gt",
+              "args": [
+                {
+                  "kind": "reference",
+                  "ref": {
+                    "scope": "indicator",
+                    "name": "atr",
+                    "field": "value"
+                  }
+                },
+                {
+                  "kind": "number",
+                  "number": 0
+                }
+              ]
+            },
+            "action": {
+              "type": "enter",
+              "side": "short",
+              "size_pct": 0.01
+            }
+          },
+          {
+            "id": "add_1",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 1,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "last_entry_price"
+              },
+              "distance": {
+                "type": "atr_multiple",
+                "value": 0.5,
+                "indicator": "atr",
+                "field": "value",
+                "sampling": "live"
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "geometric",
+                "value": 1.5
+              }
+            }
+          },
+          {
+            "id": "add_2",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 2,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "last_entry_price"
+              },
+              "distance": {
+                "type": "atr_multiple",
+                "value": 0.5,
+                "indicator": "atr",
+                "field": "value",
+                "sampling": "live"
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "geometric",
+                "value": 1.5
+              }
+            }
+          },
+          {
+            "id": "add_3",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 3,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "last_entry_price"
+              },
+              "distance": {
+                "type": "atr_multiple",
+                "value": 0.5,
+                "indicator": "atr",
+                "field": "value",
+                "sampling": "live"
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "geometric",
+                "value": 1.5
+              }
+            }
+          }
+        ]
+      },
+      "before": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "81b2ebe63908c339c6916c66a51f6739efae326892d5cd0ebd2f39d423df1d1f"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 70,
+        "fill_count": 70,
+        "final_equity": 10040.396060650295,
+        "report_sha256": "be441741c9c7fc1e9177c423aca5d6aec9b9c391abb64b434472c0cbde6facbf",
+        "component_sha256": {
+          "orders": "4b3072877219383bdd545eb02c74663fcfb05a13e554b7f72fceea1b00b148cb",
+          "fills": "5c8941bbe0a96aa6c5c4d130fe5682c34e56a30c53ae0c23b1eb15c373bea183",
+          "equity_curve": "d99671faa23263ba4e5134a86017a47ee7e0ef030fe74b6e93dbe121ec1b10a5",
+          "metrics": "817d84944c45c46d74f255013c370527ffdfd545a3be5b8c58e55497d42dda20",
+          "final_equity": "2dee797e3266ab7976be53524b11fa5dfe0d1e57bd6fe8bd6db5e3b73398f601"
+        }
+      },
+      "before_sha256": "3df7f9688d4f63fdb836096ba5ac81d70e10b5aac69508d3e04d7c69d2f0b41a",
+      "after": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "81b2ebe63908c339c6916c66a51f6739efae326892d5cd0ebd2f39d423df1d1f"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 70,
+        "fill_count": 70,
+        "final_equity": 10040.396060650295,
+        "report_sha256": "be441741c9c7fc1e9177c423aca5d6aec9b9c391abb64b434472c0cbde6facbf",
+        "component_sha256": {
+          "orders": "4b3072877219383bdd545eb02c74663fcfb05a13e554b7f72fceea1b00b148cb",
+          "fills": "5c8941bbe0a96aa6c5c4d130fe5682c34e56a30c53ae0c23b1eb15c373bea183",
+          "equity_curve": "d99671faa23263ba4e5134a86017a47ee7e0ef030fe74b6e93dbe121ec1b10a5",
+          "metrics": "817d84944c45c46d74f255013c370527ffdfd545a3be5b8c58e55497d42dda20",
+          "final_equity": "2dee797e3266ab7976be53524b11fa5dfe0d1e57bd6fe8bd6db5e3b73398f601"
+        }
+      },
+      "after_sha256": "3df7f9688d4f63fdb836096ba5ac81d70e10b5aac69508d3e04d7c69d2f0b41a",
+      "identical": true
+    },
+    {
+      "id": "verify_addition_short_fixed_amount",
+      "definition": {
+        "schema_version": 1,
+        "id": "verify_addition_short_fixed_amount",
+        "name": "verify_addition_short_fixed_amount",
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbols": [
+            "ETH-USDT"
+          ],
+          "timeframe": "15m",
+          "start": "2026-10-01T00:00:00Z",
+          "end": "2026-10-15T00:00:00Z"
+        },
+        "account": {
+          "market_type": "perpetual",
+          "initial_cash": 10000,
+          "quote_currency": "USDT",
+          "exchange_leverage": 10
+        },
+        "behavior": {
+          "allow_additions": true,
+          "allow_pyramiding": false,
+          "allow_same_bar_reversal": false,
+          "cooldown_bars": 0
+        },
+        "position": {
+          "position_leverage": 1
+        },
+        "exit_policies": [
+          {
+            "id": "take_profit",
+            "side": "short",
+            "purpose": "take_profit",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.01
+            },
+            "execution": "next_open"
+          },
+          {
+            "id": "stop_loss",
+            "side": "short",
+            "purpose": "stop_loss",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.05
+            },
+            "execution": "next_open"
+          }
+        ],
+        "execution": {
+          "signal_time": "bar_close",
+          "market_fill_time": "next_bar_open",
+          "intrabar_conflict": "conservative",
+          "fee": {
+            "maker_rate": 0,
+            "taker_rate": 0.0004
+          },
+          "slippage": {
+            "type": "none",
+            "value": 0
+          }
+        },
+        "risk": {
+          "max_symbol_equity_pct": 10,
+          "max_total_exposure_pct": 10,
+          "max_open_positions": 1,
+          "max_drawdown_halt_pct": 0.5
+        },
+        "indicators": [
+          {
+            "id": "atr",
+            "type": "atr",
+            "inputs": null,
+            "params": {
+              "period": 14
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "enter",
+            "when": {
+              "kind": "operator",
+              "op": "gt",
+              "args": [
+                {
+                  "kind": "reference",
+                  "ref": {
+                    "scope": "indicator",
+                    "name": "atr",
+                    "field": "value"
+                  }
+                },
+                {
+                  "kind": "number",
+                  "number": 0
+                }
+              ]
+            },
+            "action": {
+              "type": "enter",
+              "side": "short",
+              "size_pct": 0.01
+            }
+          },
+          {
+            "id": "add_1",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 1,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "fixed_amount",
+                "value": 5
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "linear",
+                "value": 2
+              }
+            }
+          },
+          {
+            "id": "add_2",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 2,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "fixed_amount",
+                "value": 5
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "linear",
+                "value": 2
+              }
+            }
+          },
+          {
+            "id": "add_3",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 3,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "fixed_amount",
+                "value": 5
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "linear",
+                "value": 2
+              }
+            }
+          }
+        ]
+      },
+      "before": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "cc8a7669dc7608544ec2ae929d59feb34f35b4a4a8e66d33e8e74742d292f5bf"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 72,
+        "fill_count": 72,
+        "final_equity": 10046.145332891694,
+        "report_sha256": "6b78a886c8617175ddce6258ba6670156a55880e1f8642bde2af0af34698b28f",
+        "component_sha256": {
+          "orders": "fecf95d1bff5366f78b9c7e0e5421e60e2a768216388ca5f2c0e6ce721b270da",
+          "fills": "d65b6eb73caf5b414d0a431279f1f845b2c02bbb49fa0de01fe3d2df56f266c0",
+          "equity_curve": "c14c49243e5670e3868f0560a199f5fc52c8964e835447fb3350362018533838",
+          "metrics": "159d8ce5422e43bdbc16cdf70e4206fbd40960fc3b325f9ef2061076c37a73cb",
+          "final_equity": "ce0382b7effa042f01533d8e6836a940538774e8637bfceb0d7a9b19ad67fd9f"
+        }
+      },
+      "before_sha256": "162b53e1cc93810b82a13e29bcfbf2c88accb20848031f04c2860de821169dbf",
+      "after": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "cc8a7669dc7608544ec2ae929d59feb34f35b4a4a8e66d33e8e74742d292f5bf"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 72,
+        "fill_count": 72,
+        "final_equity": 10046.145332891694,
+        "report_sha256": "6b78a886c8617175ddce6258ba6670156a55880e1f8642bde2af0af34698b28f",
+        "component_sha256": {
+          "orders": "fecf95d1bff5366f78b9c7e0e5421e60e2a768216388ca5f2c0e6ce721b270da",
+          "fills": "d65b6eb73caf5b414d0a431279f1f845b2c02bbb49fa0de01fe3d2df56f266c0",
+          "equity_curve": "c14c49243e5670e3868f0560a199f5fc52c8964e835447fb3350362018533838",
+          "metrics": "159d8ce5422e43bdbc16cdf70e4206fbd40960fc3b325f9ef2061076c37a73cb",
+          "final_equity": "ce0382b7effa042f01533d8e6836a940538774e8637bfceb0d7a9b19ad67fd9f"
+        }
+      },
+      "after_sha256": "162b53e1cc93810b82a13e29bcfbf2c88accb20848031f04c2860de821169dbf",
+      "identical": true
+    },
+    {
+      "id": "verify_addition_short_percent_fixed",
+      "definition": {
+        "schema_version": 1,
+        "id": "verify_addition_short_percent_fixed",
+        "name": "verify_addition_short_percent_fixed",
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbols": [
+            "ETH-USDT"
+          ],
+          "timeframe": "15m",
+          "start": "2026-10-01T00:00:00Z",
+          "end": "2026-10-15T00:00:00Z"
+        },
+        "account": {
+          "market_type": "perpetual",
+          "initial_cash": 10000,
+          "quote_currency": "USDT",
+          "exchange_leverage": 10
+        },
+        "behavior": {
+          "allow_additions": true,
+          "allow_pyramiding": false,
+          "allow_same_bar_reversal": false,
+          "cooldown_bars": 0
+        },
+        "position": {
+          "position_leverage": 1
+        },
+        "exit_policies": [
+          {
+            "id": "take_profit",
+            "side": "short",
+            "purpose": "take_profit",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.01
+            },
+            "execution": "next_open"
+          },
+          {
+            "id": "stop_loss",
+            "side": "short",
+            "purpose": "stop_loss",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.05
+            },
+            "execution": "next_open"
+          }
+        ],
+        "execution": {
+          "signal_time": "bar_close",
+          "market_fill_time": "next_bar_open",
+          "intrabar_conflict": "conservative",
+          "fee": {
+            "maker_rate": 0,
+            "taker_rate": 0.0004
+          },
+          "slippage": {
+            "type": "none",
+            "value": 0
+          }
+        },
+        "risk": {
+          "max_symbol_equity_pct": 10,
+          "max_total_exposure_pct": 10,
+          "max_open_positions": 1,
+          "max_drawdown_halt_pct": 0.5
+        },
+        "indicators": [
+          {
+            "id": "atr",
+            "type": "atr",
+            "inputs": null,
+            "params": {
+              "period": 14
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "enter",
+            "when": {
+              "kind": "operator",
+              "op": "gt",
+              "args": [
+                {
+                  "kind": "reference",
+                  "ref": {
+                    "scope": "indicator",
+                    "name": "atr",
+                    "field": "value"
+                  }
+                },
+                {
+                  "kind": "number",
+                  "number": 0
+                }
+              ]
+            },
+            "action": {
+              "type": "enter",
+              "side": "short",
+              "size_pct": 0.01
+            }
+          },
+          {
+            "id": "add_1",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 1,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "percent",
+                "value": 0.002
+              },
+              "direction": "adverse",
+              "trigger_price": "close"
+            }
+          },
+          {
+            "id": "add_2",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 2,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "percent",
+                "value": 0.002
+              },
+              "direction": "adverse",
+              "trigger_price": "close"
+            }
+          },
+          {
+            "id": "add_3",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 3,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "percent",
+                "value": 0.002
+              },
+              "direction": "adverse",
+              "trigger_price": "close"
+            }
+          }
+        ]
+      },
+      "before": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "bcbbe4aaf49181f19cc3c2e6b6ee53bb46fd77fc8ab03d8eef4b51ac0ce59c16"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 76,
+        "fill_count": 76,
+        "final_equity": 10057.615374893354,
+        "report_sha256": "28b9ccd25b45afb07c8bd28e006530e88ac827a48f33bc23e39388b6fe692d5c",
+        "component_sha256": {
+          "orders": "0f00a6df7ef45c0c505e88f0b56eff0789a11f03e6472f7c27c5500aff0f1ca1",
+          "fills": "b5633d7257566e75b1c5a365b34f2f238be73a2565cf154aef8d893e01da4de1",
+          "equity_curve": "b482dd6bc5f10092175b6c9d52edffd30a0408a0646b94e6952fa09b9d031f95",
+          "metrics": "cd321716e1e3672c8335b97bce1738441ad9a4fbee2f00cd0a0fff652573c2a2",
+          "final_equity": "3fd455805842f7df128ef7053c664d263edccea8016fc9572f272b81f8e90059"
+        }
+      },
+      "before_sha256": "fcac6f0be54d4de11f64e599a17fec17f0c52f0d86c606c7c957782138603878",
+      "after": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "bcbbe4aaf49181f19cc3c2e6b6ee53bb46fd77fc8ab03d8eef4b51ac0ce59c16"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 76,
+        "fill_count": 76,
+        "final_equity": 10057.615374893354,
+        "report_sha256": "28b9ccd25b45afb07c8bd28e006530e88ac827a48f33bc23e39388b6fe692d5c",
+        "component_sha256": {
+          "orders": "0f00a6df7ef45c0c505e88f0b56eff0789a11f03e6472f7c27c5500aff0f1ca1",
+          "fills": "b5633d7257566e75b1c5a365b34f2f238be73a2565cf154aef8d893e01da4de1",
+          "equity_curve": "b482dd6bc5f10092175b6c9d52edffd30a0408a0646b94e6952fa09b9d031f95",
+          "metrics": "cd321716e1e3672c8335b97bce1738441ad9a4fbee2f00cd0a0fff652573c2a2",
+          "final_equity": "3fd455805842f7df128ef7053c664d263edccea8016fc9572f272b81f8e90059"
+        }
+      },
+      "after_sha256": "fcac6f0be54d4de11f64e599a17fec17f0c52f0d86c606c7c957782138603878",
+      "identical": true
+    },
+    {
+      "id": "verify_addition_short_percent_geometric",
+      "definition": {
+        "schema_version": 1,
+        "id": "verify_addition_short_percent_geometric",
+        "name": "verify_addition_short_percent_geometric",
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbols": [
+            "ETH-USDT"
+          ],
+          "timeframe": "15m",
+          "start": "2026-10-01T00:00:00Z",
+          "end": "2026-10-15T00:00:00Z"
+        },
+        "account": {
+          "market_type": "perpetual",
+          "initial_cash": 10000,
+          "quote_currency": "USDT",
+          "exchange_leverage": 10
+        },
+        "behavior": {
+          "allow_additions": true,
+          "allow_pyramiding": false,
+          "allow_same_bar_reversal": false,
+          "cooldown_bars": 0
+        },
+        "position": {
+          "position_leverage": 1
+        },
+        "exit_policies": [
+          {
+            "id": "take_profit",
+            "side": "short",
+            "purpose": "take_profit",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.01
+            },
+            "execution": "next_open"
+          },
+          {
+            "id": "stop_loss",
+            "side": "short",
+            "purpose": "stop_loss",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.05
+            },
+            "execution": "next_open"
+          }
+        ],
+        "execution": {
+          "signal_time": "bar_close",
+          "market_fill_time": "next_bar_open",
+          "intrabar_conflict": "conservative",
+          "fee": {
+            "maker_rate": 0,
+            "taker_rate": 0.0004
+          },
+          "slippage": {
+            "type": "none",
+            "value": 0
+          }
+        },
+        "risk": {
+          "max_symbol_equity_pct": 10,
+          "max_total_exposure_pct": 10,
+          "max_open_positions": 1,
+          "max_drawdown_halt_pct": 0.5
+        },
+        "indicators": [
+          {
+            "id": "atr",
+            "type": "atr",
+            "inputs": null,
+            "params": {
+              "period": 14
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "enter",
+            "when": {
+              "kind": "operator",
+              "op": "gt",
+              "args": [
+                {
+                  "kind": "reference",
+                  "ref": {
+                    "scope": "indicator",
+                    "name": "atr",
+                    "field": "value"
+                  }
+                },
+                {
+                  "kind": "number",
+                  "number": 0
+                }
+              ]
+            },
+            "action": {
+              "type": "enter",
+              "side": "short",
+              "size_pct": 0.01
+            }
+          },
+          {
+            "id": "add_1",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 1,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "last_entry_price"
+              },
+              "distance": {
+                "type": "percent",
+                "value": 0.002
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "geometric",
+                "value": 1.5
+              }
+            }
+          },
+          {
+            "id": "add_2",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 2,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "last_entry_price"
+              },
+              "distance": {
+                "type": "percent",
+                "value": 0.002
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "geometric",
+                "value": 1.5
+              }
+            }
+          },
+          {
+            "id": "add_3",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 3,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "last_entry_price"
+              },
+              "distance": {
+                "type": "percent",
+                "value": 0.002
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "geometric",
+                "value": 1.5
+              }
+            }
+          }
+        ]
+      },
+      "before": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "b4f8af300172dc07feb1a3ef37d2b988f54971473d2014a911b5772e5276de74"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 71,
+        "fill_count": 71,
+        "final_equity": 10024.664487239585,
+        "report_sha256": "b671988fefe21e5d92b87b31dea21e47bd41ad1485e512fe79a45855be3dc049",
+        "component_sha256": {
+          "orders": "451d3c5756c8b8cc03c7f2af60df81fcbd310a2a1d5371d76c113f0e7a705843",
+          "fills": "3da3062c2a1e586b7c3e5b96d6437d821d999cb0ef69fbc349110e95829ccd87",
+          "equity_curve": "3ce4a59ce2adf666b05e39c179a53658ad1b0a8a1990f2355e47081cc4969da9",
+          "metrics": "08f6abd699383236055f8f8ea306852da4f837a3f26fc6a9ec10bdaa3cc009a4",
+          "final_equity": "0217129efd8bb924bee8c953c6418c5fd40c6bf2fe3898d18c4973306f762a86"
+        }
+      },
+      "before_sha256": "63fe0dd7f728bd854f4215638389ae80d629ca68f9f53b249be27cabaee8d352",
+      "after": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "b4f8af300172dc07feb1a3ef37d2b988f54971473d2014a911b5772e5276de74"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 71,
+        "fill_count": 71,
+        "final_equity": 10024.664487239585,
+        "report_sha256": "b671988fefe21e5d92b87b31dea21e47bd41ad1485e512fe79a45855be3dc049",
+        "component_sha256": {
+          "orders": "451d3c5756c8b8cc03c7f2af60df81fcbd310a2a1d5371d76c113f0e7a705843",
+          "fills": "3da3062c2a1e586b7c3e5b96d6437d821d999cb0ef69fbc349110e95829ccd87",
+          "equity_curve": "3ce4a59ce2adf666b05e39c179a53658ad1b0a8a1990f2355e47081cc4969da9",
+          "metrics": "08f6abd699383236055f8f8ea306852da4f837a3f26fc6a9ec10bdaa3cc009a4",
+          "final_equity": "0217129efd8bb924bee8c953c6418c5fd40c6bf2fe3898d18c4973306f762a86"
+        }
+      },
+      "after_sha256": "63fe0dd7f728bd854f4215638389ae80d629ca68f9f53b249be27cabaee8d352",
+      "identical": true
+    },
+    {
+      "id": "verify_addition_short_percent_linear",
+      "definition": {
+        "schema_version": 1,
+        "id": "verify_addition_short_percent_linear",
+        "name": "verify_addition_short_percent_linear",
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbols": [
+            "ETH-USDT"
+          ],
+          "timeframe": "15m",
+          "start": "2026-10-01T00:00:00Z",
+          "end": "2026-10-15T00:00:00Z"
+        },
+        "account": {
+          "market_type": "perpetual",
+          "initial_cash": 10000,
+          "quote_currency": "USDT",
+          "exchange_leverage": 10
+        },
+        "behavior": {
+          "allow_additions": true,
+          "allow_pyramiding": false,
+          "allow_same_bar_reversal": false,
+          "cooldown_bars": 0
+        },
+        "position": {
+          "position_leverage": 1
+        },
+        "exit_policies": [
+          {
+            "id": "take_profit",
+            "side": "short",
+            "purpose": "take_profit",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.01
+            },
+            "execution": "next_open"
+          },
+          {
+            "id": "stop_loss",
+            "side": "short",
+            "purpose": "stop_loss",
+            "anchor": {
+              "type": "avg_entry_price"
+            },
+            "distance": {
+              "type": "percent",
+              "value": 0.05
+            },
+            "execution": "next_open"
+          }
+        ],
+        "execution": {
+          "signal_time": "bar_close",
+          "market_fill_time": "next_bar_open",
+          "intrabar_conflict": "conservative",
+          "fee": {
+            "maker_rate": 0,
+            "taker_rate": 0.0004
+          },
+          "slippage": {
+            "type": "none",
+            "value": 0
+          }
+        },
+        "risk": {
+          "max_symbol_equity_pct": 10,
+          "max_total_exposure_pct": 10,
+          "max_open_positions": 1,
+          "max_drawdown_halt_pct": 0.5
+        },
+        "indicators": [
+          {
+            "id": "atr",
+            "type": "atr",
+            "inputs": null,
+            "params": {
+              "period": 14
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "enter",
+            "when": {
+              "kind": "operator",
+              "op": "gt",
+              "args": [
+                {
+                  "kind": "reference",
+                  "ref": {
+                    "scope": "indicator",
+                    "name": "atr",
+                    "field": "value"
+                  }
+                },
+                {
+                  "kind": "number",
+                  "number": 0
+                }
+              ]
+            },
+            "action": {
+              "type": "enter",
+              "side": "short",
+              "size_pct": 0.01
+            }
+          },
+          {
+            "id": "add_1",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 1,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "percent",
+                "value": 0.002
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "linear",
+                "value": 0.001
+              }
+            }
+          },
+          {
+            "id": "add_2",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 2,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "percent",
+                "value": 0.002
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "linear",
+                "value": 0.001
+              }
+            }
+          },
+          {
+            "id": "add_3",
+            "when": {
+              "kind": "boolean",
+              "bool": true
+            },
+            "action": {
+              "type": "add",
+              "side": "short",
+              "size_pct": 0,
+              "addition_index": 3,
+              "size_multiplier": 1.5,
+              "sizing_mode": "first_entry_geometric"
+            },
+            "addition_trigger": {
+              "anchor": {
+                "type": "avg_entry_price"
+              },
+              "distance": {
+                "type": "percent",
+                "value": 0.002
+              },
+              "direction": "adverse",
+              "trigger_price": "close",
+              "spacing": {
+                "mode": "linear",
+                "value": 0.001
+              }
+            }
+          }
+        ]
+      },
+      "before": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "08b4d5cb2354eb3864975136b4db58683b3371205aec41325d3c7b247f693ee1"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 72,
+        "fill_count": 72,
+        "final_equity": 10047.377583705365,
+        "report_sha256": "aeb6857625e5335cd7349ad5db88190d2dae9b3affd93dd1099b8555d37769c9",
+        "component_sha256": {
+          "orders": "79c0cb13812362f7c253cb1e0f5daeb63123f070c2d020533310f0e40f845645",
+          "fills": "9e618eb8acf762d70b92fff73902a0cfeaf52dd5df95d1399b14b0fa36bc6c16",
+          "equity_curve": "2faec98cdd14fc14a271c0e13b03ca87d0f5d0f583db70eeda510229687fd423",
+          "metrics": "771a5267d85d0236bd3940a8912bb5620cc8fd405977794368e097c6450ff6ff",
+          "final_equity": "e2f59a5e69a1c00154d03d0749d6e1ba7211102678eb7f72132a953517336117"
+        }
+      },
+      "before_sha256": "e5c2583487551f7af92d240a728784994d2f1ce94963d21a4543ff0370c348fa",
+      "after": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "08b4d5cb2354eb3864975136b4db58683b3371205aec41325d3c7b247f693ee1"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 72,
+        "fill_count": 72,
+        "final_equity": 10047.377583705365,
+        "report_sha256": "aeb6857625e5335cd7349ad5db88190d2dae9b3affd93dd1099b8555d37769c9",
+        "component_sha256": {
+          "orders": "79c0cb13812362f7c253cb1e0f5daeb63123f070c2d020533310f0e40f845645",
+          "fills": "9e618eb8acf762d70b92fff73902a0cfeaf52dd5df95d1399b14b0fa36bc6c16",
+          "equity_curve": "2faec98cdd14fc14a271c0e13b03ca87d0f5d0f583db70eeda510229687fd423",
+          "metrics": "771a5267d85d0236bd3940a8912bb5620cc8fd405977794368e097c6450ff6ff",
+          "final_equity": "e2f59a5e69a1c00154d03d0749d6e1ba7211102678eb7f72132a953517336117"
+        }
+      },
+      "after_sha256": "e5c2583487551f7af92d240a728784994d2f1ce94963d21a4543ff0370c348fa",
+      "identical": true
+    }
+  ],
+  "updated_port": 8082,
+  "negative_offset_witnesses": [
+    {
+      "id": "verify_history_long",
+      "definition": {
+        "schema_version": 1,
+        "id": "verify_history_long",
+        "name": "verify_history_long",
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbols": [
+            "ETH-USDT"
+          ],
+          "timeframe": "15m",
+          "start": "2026-10-01T00:00:00Z",
+          "end": "2026-10-15T00:00:00Z"
+        },
+        "account": {
+          "market_type": "perpetual",
+          "initial_cash": 10000,
+          "quote_currency": "USDT",
+          "exchange_leverage": 10
+        },
+        "behavior": {
+          "allow_additions": false,
+          "allow_pyramiding": false,
+          "allow_same_bar_reversal": false,
+          "cooldown_bars": 0
+        },
+        "position": {
+          "position_leverage": 1
+        },
+        "exit_policies": [],
+        "execution": {
+          "signal_time": "bar_close",
+          "market_fill_time": "next_bar_open",
+          "intrabar_conflict": "conservative",
+          "fee": {
+            "maker_rate": 0,
+            "taker_rate": 0.0004
+          },
+          "slippage": {
+            "type": "none",
+            "value": 0
+          }
+        },
+        "risk": {
+          "max_symbol_equity_pct": 10,
+          "max_total_exposure_pct": 10,
+          "max_open_positions": 1,
+          "max_drawdown_halt_pct": 0
+        },
+        "indicators": [
+          {
+            "id": "atr",
+            "type": "atr",
+            "inputs": null,
+            "params": {
+              "period": 14
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "enter",
+            "when": {
+              "kind": "operator",
+              "op": "eq",
+              "args": [
+                {
+                  "kind": "reference",
+                  "ref": {
+                    "scope": "position",
+                    "name": "current",
+                    "field": "quantity",
+                    "offset": -1
+                  }
+                },
+                {
+                  "kind": "number",
+                  "number": 0
+                }
+              ]
+            },
+            "action": {
+              "type": "enter",
+              "side": "long",
+              "size_pct": 0.01
+            }
+          },
+          {
+            "id": "close",
+            "when": {
+              "kind": "operator",
+              "op": "eq",
+              "args": [
+                {
+                  "kind": "reference",
+                  "ref": {
+                    "scope": "position",
+                    "name": "current",
+                    "field": "quantity",
+                    "offset": -1
+                  }
+                },
+                {
+                  "kind": "number",
+                  "number": 0
+                }
+              ]
+            },
+            "priority": 10,
+            "action": {
+              "type": "close",
+              "side": "long",
+              "size_pct": 1
+            }
+          }
+        ]
+      },
+      "before": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "695105160457a348a81c700309edef3140cd33c4f492d221324025b85292c2a3"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 1,
+        "fill_count": 1,
+        "final_equity": 9990.246920555117,
+        "report_sha256": "dde7cbed0b1051ad58eed28dbe0a9b346f8ee9725f7e93b69bfe0c093c7df01b",
+        "component_sha256": {
+          "orders": "188c0fd81fbf4ecf9b137d9c6a4f25a54e6964d79f65b8600ed953f1772762ce",
+          "fills": "5fb10eaf20be0e451f54ee780448255359eeb132c6d32df7088be99596da6806",
+          "equity_curve": "78946a68a8aee3829ae81e7dadb1fde1818ee61bab62b7fecaef04a0a7e76dd6",
+          "metrics": "3f0aa5c13c1cf9c05b4e26d73276131549f8bf92635ad1695a4b818ebe85ed21",
+          "final_equity": "7706bd38a80bd6cdab1ae9e9c145cd2696a76c2e26655481834a2a102d916fad"
+        }
+      },
+      "after": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "695105160457a348a81c700309edef3140cd33c4f492d221324025b85292c2a3"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 896,
+        "fill_count": 895,
+        "final_equity": 9960.719353772784,
+        "report_sha256": "b510319c3b9d409ddb60a5901c6bea0619bcc981dfb93a367037c75dbca1a9f6",
+        "component_sha256": {
+          "orders": "ffe48f5d11ccac8637f0c812b125d759a3a283fe02d88c7564411c0d3bd7f6ff",
+          "fills": "54643385db1abd32829b05964d4870ea1a26edf64bbdfb8ec7a9362223cb1963",
+          "equity_curve": "fc25ca4287c74976cab5b19cdfd47e8dfb27b21dcc92511bd698a8da6140bdd0",
+          "metrics": "1b9acc105489a55be14e1924df4ebb027fb9963d9d600cf85132ae975f3d880e",
+          "final_equity": "f3e4a3ef5b85dcd2585301ef08aa69d476374b8177a2803103ef71fe4dabdc2d"
+        }
+      },
+      "historical_snapshot_audit": {
+        "checked_orders": 896,
+        "passed": 896,
+        "condition": "position.quantity[offset=-1] == 0",
+        "first_orders": [
+          {
+            "id": "order-1",
+            "rule_id": "enter",
+            "signal_time_ms": 1790814600000,
+            "action": {
+              "type": "enter",
+              "side": "long",
+              "size_pct": 0.01
+            },
+            "status": "filled"
+          },
+          {
+            "id": "order-2",
+            "rule_id": "close",
+            "signal_time_ms": 1790815500000,
+            "action": {
+              "type": "close",
+              "side": "long",
+              "size_pct": 1
+            },
+            "status": "filled"
+          },
+          {
+            "id": "order-3",
+            "rule_id": "enter",
+            "signal_time_ms": 1790817300000,
+            "action": {
+              "type": "enter",
+              "side": "long",
+              "size_pct": 0.01
+            },
+            "status": "filled"
+          },
+          {
+            "id": "order-4",
+            "rule_id": "close",
+            "signal_time_ms": 1790818200000,
+            "action": {
+              "type": "close",
+              "side": "long",
+              "size_pct": 1
+            },
+            "status": "filled"
+          },
+          {
+            "id": "order-5",
+            "rule_id": "enter",
+            "signal_time_ms": 1790820000000,
+            "action": {
+              "type": "enter",
+              "side": "long",
+              "size_pct": 0.01
+            },
+            "status": "filled"
+          },
+          {
+            "id": "order-6",
+            "rule_id": "close",
+            "signal_time_ms": 1790820900000,
+            "action": {
+              "type": "close",
+              "side": "long",
+              "size_pct": 1
+            },
+            "status": "filled"
+          }
+        ],
+        "first_equity_points": [
+          {
+            "time_ms": 1790813700000,
+            "equity": 10000,
+            "cash": 10000,
+            "position_qty": 0,
+            "position_leverage": 0,
+            "close": 2681.16
+          },
+          {
+            "time_ms": 1790814600000,
+            "equity": 10000,
+            "cash": 10000,
+            "position_qty": 0,
+            "position_leverage": 0,
+            "close": 2681.22
+          },
+          {
+            "time_ms": 1790815500000,
+            "equity": 10000.152821951118,
+            "cash": 9999.96,
+            "position_qty": 0.037296315496992055,
+            "position_leverage": 0.010019129080826483,
+            "close": 2686.4
+          },
+          {
+            "time_ms": 1790816400000,
+            "equity": 10000.112744822338,
+            "cash": 10000.112744822338,
+            "position_qty": 0,
+            "position_leverage": 0,
+            "close": 2683.33
+          },
+          {
+            "time_ms": 1790817300000,
+            "equity": 10000.112744822338,
+            "cash": 10000.112744822338,
+            "position_qty": 0,
+            "position_leverage": 0,
+            "close": 2686.5
+          },
+          {
+            "time_ms": 1790818200000,
+            "equity": 10000.18739255377,
+            "cash": 10000.07274459685,
+            "position_qty": 0.03722336263633828,
+            "position_leverage": 0.010011333563007969,
+            "close": 2689.58
+          },
+          {
+            "time_ms": 1790819100000,
+            "equity": 10000.147718553832,
+            "cash": 10000.147718553832,
+            "position_qty": 0,
+            "position_leverage": 0,
+            "close": 2689.7
+          },
+          {
+            "time_ms": 1790820000000,
+            "equity": 10000.147718553832,
+            "cash": 10000.147718553832,
+            "position_qty": 0,
+            "position_leverage": 0,
+            "close": 2688.41
+          }
+        ]
+      },
+      "before_sha256": "2b2acdca14357a8e6dd72d07069efd40ecc4c319d3751d503ada6c4357534079",
+      "after_sha256": "96566ed2974af04f4e0f4aa47bb04e47042eaff479e123aa1bc3bc79c87bbbe8"
+    },
+    {
+      "id": "verify_history_short",
+      "definition": {
+        "schema_version": 1,
+        "id": "verify_history_short",
+        "name": "verify_history_short",
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbols": [
+            "ETH-USDT"
+          ],
+          "timeframe": "15m",
+          "start": "2026-10-01T00:00:00Z",
+          "end": "2026-10-15T00:00:00Z"
+        },
+        "account": {
+          "market_type": "perpetual",
+          "initial_cash": 10000,
+          "quote_currency": "USDT",
+          "exchange_leverage": 10
+        },
+        "behavior": {
+          "allow_additions": false,
+          "allow_pyramiding": false,
+          "allow_same_bar_reversal": false,
+          "cooldown_bars": 0
+        },
+        "position": {
+          "position_leverage": 1
+        },
+        "exit_policies": [],
+        "execution": {
+          "signal_time": "bar_close",
+          "market_fill_time": "next_bar_open",
+          "intrabar_conflict": "conservative",
+          "fee": {
+            "maker_rate": 0,
+            "taker_rate": 0.0004
+          },
+          "slippage": {
+            "type": "none",
+            "value": 0
+          }
+        },
+        "risk": {
+          "max_symbol_equity_pct": 10,
+          "max_total_exposure_pct": 10,
+          "max_open_positions": 1,
+          "max_drawdown_halt_pct": 0
+        },
+        "indicators": [
+          {
+            "id": "atr",
+            "type": "atr",
+            "inputs": null,
+            "params": {
+              "period": 14
+            }
+          }
+        ],
+        "rules": [
+          {
+            "id": "enter",
+            "when": {
+              "kind": "operator",
+              "op": "eq",
+              "args": [
+                {
+                  "kind": "reference",
+                  "ref": {
+                    "scope": "position",
+                    "name": "current",
+                    "field": "quantity",
+                    "offset": -1
+                  }
+                },
+                {
+                  "kind": "number",
+                  "number": 0
+                }
+              ]
+            },
+            "action": {
+              "type": "enter",
+              "side": "short",
+              "size_pct": 0.01
+            }
+          },
+          {
+            "id": "close",
+            "when": {
+              "kind": "operator",
+              "op": "eq",
+              "args": [
+                {
+                  "kind": "reference",
+                  "ref": {
+                    "scope": "position",
+                    "name": "current",
+                    "field": "quantity",
+                    "offset": -1
+                  }
+                },
+                {
+                  "kind": "number",
+                  "number": 0
+                }
+              ]
+            },
+            "priority": 10,
+            "action": {
+              "type": "close",
+              "side": "short",
+              "size_pct": 1
+            }
+          }
+        ]
+      },
+      "before": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "c397fb82ca8b28850945d100bf096582624db51011b8a8a63ed6245705293f2c"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 1,
+        "fill_count": 1,
+        "final_equity": 10009.673079444881,
+        "report_sha256": "47caf4abc4965a9c47a96eb33808594d4235e98c1ccea55f5b6902e7cd72148e",
+        "component_sha256": {
+          "orders": "dd617f52ab01ba9e9bba74ee9e7e139efc9100f5a2cb1a30dc8c52e7da81e800",
+          "fills": "e9b28c95bae4e75d0194f4ff72a774774254e82cea7ad389d1e6caa471435f1c",
+          "equity_curve": "0000cf5de1c5a6839e4046c36aef461912bcf0e1b3309e0585429489eb83983d",
+          "metrics": "5bd7b1cd5955340ae302187b55310e6d3dda68c89ff2634ceeda372f92e27441",
+          "final_equity": "134d8875bcbac0afe8c780b8a22a9aafb01ab63818a1e46bf98f707d20fc76e6"
+        }
+      },
+      "after": {
+        "status": "backtest_completed",
+        "strategy_version": {
+          "revision": 1,
+          "definition_sha256": "c397fb82ca8b28850945d100bf096582624db51011b8a8a63ed6245705293f2c"
+        },
+        "data": {
+          "dataset_id": "binance-perpetual-15m-20260805140000-20261103140000",
+          "symbol": "ETH-USDT",
+          "timeframe": "15m",
+          "start_ms": 1790812800000,
+          "end_ms": 1792022400000,
+          "manifest_sha256": "61f247bd0c69998c29fafcbaca997c8d3d09dfa3704477df875c7e500dfd3423",
+          "synthetic": false
+        },
+        "bar_count": 1344,
+        "order_count": 896,
+        "fill_count": 895,
+        "final_equity": 9967.810371404872,
+        "report_sha256": "d483b90898fb3ddd69d00d514c519e6905a1aff623b506185a326bebb0529c5e",
+        "component_sha256": {
+          "orders": "e1903686fa3df85eb94981fa30e31a07f678d9154b67d70d938b4e7c8c294448",
+          "fills": "4be71490448ade74d73b9ac1840f3ec71183d103ba06644fbd8d397fb84689c7",
+          "equity_curve": "e9dba41bc6e6a72fcb1e84debd8c1d72b85f72c7ff45479b4444e07c5885e9ca",
+          "metrics": "d17a836edd7e5b591c9fabafcaf8abae17ff004e8a40cb1b46240a60fb6f4e60",
+          "final_equity": "bd24acf231b392d2b427b63fb09c0189ce02262f2975268e67ca353de564be25"
+        }
+      },
+      "historical_snapshot_audit": {
+        "checked_orders": 896,
+        "passed": 896,
+        "condition": "position.quantity[offset=-1] == 0",
+        "first_orders": [
+          {
+            "id": "order-1",
+            "rule_id": "enter",
+            "signal_time_ms": 1790814600000,
+            "action": {
+              "type": "enter",
+              "side": "short",
+              "size_pct": 0.01
+            },
+            "status": "filled"
+          },
+          {
+            "id": "order-2",
+            "rule_id": "close",
+            "signal_time_ms": 1790815500000,
+            "action": {
+              "type": "close",
+              "side": "short",
+              "size_pct": 1
+            },
+            "status": "filled"
+          },
+          {
+            "id": "order-3",
+            "rule_id": "enter",
+            "signal_time_ms": 1790817300000,
+            "action": {
+              "type": "enter",
+              "side": "short",
+              "size_pct": 0.01
+            },
+            "status": "filled"
+          },
+          {
+            "id": "order-4",
+            "rule_id": "close",
+            "signal_time_ms": 1790818200000,
+            "action": {
+              "type": "close",
+              "side": "short",
+              "size_pct": 1
+            },
+            "status": "filled"
+          },
+          {
+            "id": "order-5",
+            "rule_id": "enter",
+            "signal_time_ms": 1790820000000,
+            "action": {
+              "type": "enter",
+              "side": "short",
+              "size_pct": 0.01
+            },
+            "status": "filled"
+          },
+          {
+            "id": "order-6",
+            "rule_id": "close",
+            "signal_time_ms": 1790820900000,
+            "action": {
+              "type": "close",
+              "side": "short",
+              "size_pct": 1
+            },
+            "status": "filled"
+          }
+        ],
+        "first_equity_points": [
+          {
+            "time_ms": 1790813700000,
+            "equity": 10000,
+            "cash": 10000,
+            "position_qty": 0,
+            "position_leverage": 0,
+            "close": 2681.16
+          },
+          {
+            "time_ms": 1790814600000,
+            "equity": 10000,
+            "cash": 10000,
+            "position_qty": 0,
+            "position_leverage": 0,
+            "close": 2681.22
+          },
+          {
+            "time_ms": 1790815500000,
+            "equity": 9999.76717804888,
+            "cash": 9999.96,
+            "position_qty": -0.037296315496992055,
+            "position_leverage": 0.010019515471426078,
+            "close": 2686.4
+          },
+          {
+            "time_ms": 1790816400000,
+            "equity": 9999.7271009201,
+            "cash": 9999.7271009201,
+            "position_qty": 0,
+            "position_leverage": 0,
+            "close": 2683.33
+          },
+          {
+            "time_ms": 1790817300000,
+            "equity": 9999.7271009201,
+            "cash": 9999.7271009201,
+            "position_qty": 0,
+            "position_leverage": 0,
+            "close": 2686.5
+          },
+          {
+            "time_ms": 1790818200000,
+            "equity": 9999.572457829783,
+            "cash": 9999.687102011696,
+            "position_qty": -0.03722213698462721,
+            "position_leverage": 0.01001161955806669,
+            "close": 2689.58
+          },
+          {
+            "time_ms": 1790819100000,
+            "equity": 9999.532040693448,
+            "cash": 9999.532040693448,
+            "position_qty": 0,
+            "position_leverage": 0,
+            "close": 2689.7
+          },
+          {
+            "time_ms": 1790820000000,
+            "equity": 9999.532040693448,
+            "cash": 9999.532040693448,
+            "position_qty": 0,
+            "position_leverage": 0,
+            "close": 2688.41
+          }
+        ]
+      },
+      "before_sha256": "f4529e9323ee275c25f688a80a2378392adb0802b43db3b7d13f3638117ac09e",
+      "after_sha256": "72b95cf5aee995d2e2b671a6f82b082fa6dce536bbf87f66e6ed91b254dd0d9d"
+    }
+  ],
+  "sha256_encoding": "SHA-256 of sorted compact JSON encoded as UTF-8 with ensure_ascii=False",
+  "checks": {
+    "go_race": "passed: go test -p 1 -race ./...",
+    "go_vet": "passed: go vet -p 1 ./...",
+    "frontend": "passed: 63 node tests and node syntax checks",
+    "diff_check": "passed",
+    "real_market_baselines_equal": 14,
+    "negative_offset_audited_orders": 1792
+  }
+}

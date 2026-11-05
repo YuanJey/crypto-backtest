@@ -5,6 +5,34 @@
 const Api = {
   baseUrl: window.location.origin.startsWith('http') ? window.location.origin : 'http://localhost:8080',
 
+  async request(path, body) {
+    const res = await fetch(`${this.baseUrl}/api/v1${path}`, body === undefined ? {} : {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = { error: text }; }
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  },
+
+  fetchStrategySnapshot(id, revision = 0) {
+    return this.request(`/strategies/${encodeURIComponent(id)}/snapshot${revision ? `?revision=${revision}` : ''}`);
+  },
+  startRun(request) { return this.request('/backtest-runs', request); },
+  fetchRun(id) { return this.request(`/backtest-runs/${encodeURIComponent(id)}`); },
+  fetchRunResult(id) { return this.request(`/backtest-runs/${encodeURIComponent(id)}/result`); },
+  fetchRunSnapshot(id) { return this.request(`/backtest-runs/${encodeURIComponent(id)}/snapshot`); },
+  fetchRunEvents(id) { return this.request(`/backtest-runs/${encodeURIComponent(id)}/events`); },
+  cancelRun(id) { return this.request(`/backtest-runs/${encodeURIComponent(id)}/cancel`, {}); },
+  replayRun(id) { return this.request(`/backtest-runs/${encodeURIComponent(id)}/replay`, {}); },
+  async fetchRuns(strategyId = '') {
+    const data = await this.request(`/backtest-runs${strategyId ? `?strategy_id=${encodeURIComponent(strategyId)}` : ''}`);
+    return data.runs || [];
+  },
+
   /**
    * 获取多周期 K 线数据
    */

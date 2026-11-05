@@ -3,6 +3,7 @@ package compiler
 import (
 	"encoding/json"
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/YuanJey/crypto-backtest/internal/indicator"
@@ -18,10 +19,11 @@ func TestCompileBuildsIndicatorRuntimesAndRules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan, err := Compile(definition, indicator.MustBuiltinRegistry())
+	compiled, err := Compile(definition, indicator.MustBuiltinRegistry())
 	if err != nil {
 		t.Fatal(err)
 	}
+	plan := compiled.Snapshot()
 	if len(plan.Indicators) != 4 {
 		t.Fatalf("len(plan.Indicators)=%d, want 4", len(plan.Indicators))
 	}
@@ -33,6 +35,40 @@ func TestCompileBuildsIndicatorRuntimesAndRules(t *testing.T) {
 	}
 	if plan.Indicators[1].Timeframe != "1h" {
 		t.Fatalf("second indicator timeframe=%q, want 1h", plan.Indicators[1].Timeframe)
+	}
+}
+
+func TestCompileOwnsInputsAndReturnsDetachedSnapshots(t *testing.T) {
+	raw, err := os.ReadFile("../../strategies/ema-boll-rsi.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	def, err := strategy.Decode(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := json.Marshal(def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compiled, err := Compile(def, indicator.MustBuiltinRegistry())
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, _ := json.Marshal(def)
+	if string(before) != string(after) {
+		t.Fatal("compile changed the source revision")
+	}
+	want := compiled.Snapshot()
+	def.Indicators[0].Inputs[0].Field = "volume"
+	def.Indicators[0].Params[0] = '['
+	def.Rules[0].ID = "mutated"
+	snapshot := compiled.Snapshot()
+	snapshot.Indicators[0].Inputs[0].Field = "low"
+	snapshot.Rules[0].ID = "mutated copy"
+	snapshot.Defaults.Data.Symbols[0] = "ETH-USDT"
+	if !reflect.DeepEqual(compiled.Snapshot(), want) {
+		t.Fatal("input or snapshot mutations changed the compiled plan")
 	}
 }
 
@@ -58,11 +94,12 @@ func TestCompileOrdersIndicatorsByDependency(t *testing.T) {
 	}
 	definition.Indicators = append([]strategy.IndicatorSpec{dependent}, definition.Indicators...)
 
-	plan, err := Compile(definition, indicator.MustBuiltinRegistry())
+	compiled, err := Compile(definition, indicator.MustBuiltinRegistry())
 	if err != nil {
 		t.Fatal(err)
 	}
 	indexByID := map[string]int{}
+	plan := compiled.Snapshot()
 	for index, item := range plan.Indicators {
 		indexByID[item.ID] = index
 	}
@@ -98,11 +135,12 @@ func TestCompileOrdersExitPoliciesByPriorityAndConservativeTieBreak(t *testing.T
 		policy("take_profit", strategy.ExitPurposeTakeProfit, 10),
 		policy("stop_loss", strategy.ExitPurposeStopLoss, 10),
 	}
-	plan, err := Compile(definition, indicator.MustBuiltinRegistry())
+	compiled, err := Compile(definition, indicator.MustBuiltinRegistry())
 	if err != nil {
 		t.Fatal(err)
 	}
 	wants := []string{"stop_loss", "take_profit", "low_priority"}
+	plan := compiled.Snapshot()
 	for index, want := range wants {
 		if plan.ExitPolicies[index].ID != want {
 			t.Fatalf("exit policy %d=%q, want %q", index, plan.ExitPolicies[index].ID, want)

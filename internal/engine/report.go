@@ -8,13 +8,13 @@ import (
 )
 
 func normalizeReportSpec(spec ReportSpec) ReportSpec {
-	if spec.EquityCurve || spec.Orders || spec.Fills || len(spec.Metrics) > 0 || len(spec.Indicators) > 0 {
+	if spec.EquityCurve || spec.Orders || spec.Fills || spec.Ledger || len(spec.Metrics) > 0 || len(spec.Indicators) > 0 {
 		return spec
 	}
 	return DefaultReportSpec()
 }
 
-func validateReportSpec(spec ReportSpec, plan compiler.Plan) error {
+func validateReportSpec(spec ReportSpec, plan compiler.ExecutionPlan) error {
 	validMetrics := map[MetricType]struct{}{
 		MetricFinalEquity:         {},
 		MetricTotalReturnPct:      {},
@@ -71,6 +71,9 @@ func applyReportSpec(result *Result, spec ReportSpec, indicatorSeries map[string
 	}
 	if !spec.Fills {
 		result.Fills = nil
+	}
+	if !spec.Ledger {
+		result.Ledger = nil
 	}
 	return nil
 }

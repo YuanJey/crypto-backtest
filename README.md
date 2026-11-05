@@ -78,6 +78,14 @@ go run ./cmd/backtest -strategy-id ema-boll-rsi -run -data-root data/market
 
 ## 📝 变更日志与追溯记录 (Change Log)
 
+### 2026-11-05：核心回测链路解耦
+
+- 前端分离编辑草稿、合约适配、能力目录、编辑组件及异步运行控制，运行入口固定策略 revision。
+- 策略逻辑与运行配置分开；新增不可变编译计划、独立 Runtime、数据内容校验、统一撮合账本及持久化运行记录。
+- 行情回测页支持独立资金、区间、费用、滑点及风险配置，任务进度、取消、归档查看与快照重跑。
+- CLI 支持 `-run-config <JSON文件>`、`-report ledger`；API 异步入口为 `POST /api/v1/backtest-runs`。
+- [实施与验证记录](strategy-architecture-completion-report.md)；[架构方案与后续能力边界](strategy-backtest-architecture-plan.md)。
+
 ### 2026-11-02
 - **新增模块**：前端多周期 K 线图分区（15m/1h/4h/1d）与动态回放终端（`web/index.html`、`web/styles.css`、`web/src/chart.js`、`web/src/replay.js`、`web/src/api.js`、`web/src/app.js`）。
 - **扩展接口**：在 `internal/api/server.go` 新增 `GET /api/v1/market/bars` 接口，支持按单周期或 `multi=true` 批量返回 15m/1h/4h/1d 数据；新增静态资源挂载与 `-web-root` 标志。

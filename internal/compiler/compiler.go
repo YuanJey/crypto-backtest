@@ -1,6 +1,7 @@
 package compiler
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -10,6 +11,15 @@ import (
 )
 
 func Compile(definition strategy.Definition, registry *indicator.Registry) (Plan, error) {
+	// Normalize may update nested policy/condition data. Own a complete copy
+	// before entering the compatibility boundary.
+	raw, err := json.Marshal(definition)
+	if err != nil {
+		return Plan{}, err
+	}
+	if err := json.Unmarshal(raw, &definition); err != nil {
+		return Plan{}, err
+	}
 	normalized, err := strategy.Normalize(definition)
 	if err != nil {
 		return Plan{}, err
@@ -28,6 +38,7 @@ func Compile(definition strategy.Definition, registry *indicator.Registry) (Plan
 		return Plan{}, err
 	}
 	indicators := make([]IndicatorPlan, 0, len(orderedSpecs))
+	factories := make([]func() (indicator.RuntimeIndicator, error), 0, len(orderedSpecs))
 	for _, spec := range orderedSpecs {
 		indicatorDefinition, ok := registry.Definition(spec.Type)
 		if !ok {
@@ -42,10 +53,14 @@ func Compile(definition strategy.Definition, registry *indicator.Registry) (Plan
 		if len(spec.Inputs) < requiredInputs {
 			return Plan{}, fmt.Errorf("indicator %q requires at least %d inputs", spec.ID, requiredInputs)
 		}
-		runtime, err := registry.BuildRuntime(spec.Type, spec.Params)
+		factory, err := registry.RuntimeFactory(spec.Type, spec.Params)
 		if err != nil {
 			return Plan{}, fmt.Errorf("indicator %q runtime: %w", spec.ID, err)
 		}
+		if _, err := factory(); err != nil {
+			return Plan{}, fmt.Errorf("indicator %q runtime: %w", spec.ID, err)
+		}
+		factories = append(factories, factory)
 		timeframe := spec.Timeframe
 		if timeframe == "" {
 			timeframe = definition.Data.Timeframe
@@ -65,7 +80,6 @@ func Compile(definition strategy.Definition, registry *indicator.Registry) (Plan
 			TimeframeMS: timeframeMS,
 			Inputs:      spec.Inputs,
 			Outputs:     outputs,
-			Runtime:     runtime,
 		})
 	}
 
@@ -111,13 +125,22 @@ func Compile(definition strategy.Definition, registry *indicator.Registry) (Plan
 		return exitPolicies[i].ID < exitPolicies[j].ID
 	})
 
-	return Plan{
-		Strategy:        definition,
+	logic, defaults, err := strategy.AdaptV1(definition)
+	if err != nil {
+		return Plan{}, err
+	}
+	encoded, err := json.Marshal(ExecutionPlan{
+		Logic:           logic,
+		Defaults:        defaults,
 		BaseTimeframeMS: baseTimeframeMS,
 		Indicators:      indicators,
 		Rules:           rules,
 		ExitPolicies:    exitPolicies,
-	}, nil
+	})
+	if err != nil {
+		return Plan{}, err
+	}
+	return Plan{encoded: encoded, factories: factories}, nil
 }
 
 func orderIndicators(specs []strategy.IndicatorSpec) ([]strategy.IndicatorSpec, error) {

@@ -2,39 +2,40 @@ package backtest
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/YuanJey/crypto-backtest/internal/compiler"
-	"github.com/YuanJey/crypto-backtest/internal/dataset"
 	"github.com/YuanJey/crypto-backtest/internal/engine"
 	"github.com/YuanJey/crypto-backtest/internal/indicator"
-	"github.com/YuanJey/crypto-backtest/internal/market"
 	"github.com/YuanJey/crypto-backtest/internal/strategy"
 )
 
 type Service struct {
 	repository strategy.Repository
 	registry   *indicator.Registry
-	dataRoot   string
+	provider   DataProvider
 }
 
 func NewService(repository strategy.Repository, registry *indicator.Registry, dataRoot string) *Service {
 	return &Service{
 		repository: repository,
 		registry:   registry,
-		dataRoot:   dataRoot,
+		provider:   FileDataProvider{Root: dataRoot},
 	}
 }
 
 type Request struct {
-	StrategyID       string            `json:"strategy_id"`
-	StrategyRevision int               `json:"strategy_revision,omitempty"`
-	DatasetID        string            `json:"dataset_id"`
-	Symbol           string            `json:"symbol"`
-	StartMS          int64             `json:"start_ms"`
-	EndMS            int64             `json:"end_ms"`
-	Report           engine.ReportSpec `json:"report"`
+	StrategyID       string              `json:"strategy_id"`
+	StrategyRevision int                 `json:"strategy_revision,omitempty"`
+	DatasetID        string              `json:"dataset_id"`
+	Symbol           string              `json:"symbol"`
+	StartMS          int64               `json:"start_ms"`
+	EndMS            int64               `json:"end_ms"`
+	Report           engine.ReportSpec   `json:"report"`
+	RunConfig        *strategy.RunConfig `json:"run_config,omitempty"`
 }
 
 type Response struct {
@@ -47,16 +48,20 @@ type Response struct {
 	FillCount       int                       `json:"fill_count"`
 	FinalEquity     float64                   `json:"final_equity"`
 	Report          engine.Result             `json:"report"`
+	RunID           string                    `json:"run_id,omitempty"`
+	RunConfig       strategy.RunConfig        `json:"run_config"`
 }
 
 type DataProvenance struct {
-	DatasetID      string `json:"dataset_id"`
-	Symbol         string `json:"symbol"`
-	Timeframe      string `json:"timeframe"`
-	StartMS        int64  `json:"start_ms"`
-	EndMS          int64  `json:"end_ms"`
-	ManifestSHA256 string `json:"manifest_sha256,omitempty"`
-	Synthetic      bool   `json:"synthetic"`
+	DatasetID      string     `json:"dataset_id"`
+	Symbol         string     `json:"symbol"`
+	Timeframe      string     `json:"timeframe"`
+	StartMS        int64      `json:"start_ms"`
+	EndMS          int64      `json:"end_ms"`
+	ManifestSHA256 string     `json:"manifest_sha256,omitempty"`
+	BarsSHA256     string     `json:"bars_sha256"`
+	Files          []DataFile `json:"files,omitempty"`
+	Synthetic      bool       `json:"synthetic"`
 }
 
 func (s *Service) CompileStrategy(ctx context.Context, strategyID string) (strategy.Definition, compiler.Plan, error) {
@@ -90,9 +95,9 @@ func (s *Service) compileStrategyRevision(
 		if revision > 0 {
 			definition, version, err = repository.LoadRevision(ctx, strategyID, revision)
 		} else {
-			definition, err = repository.LoadByID(ctx, strategyID)
+			version, err = repository.LatestRevision(ctx, strategyID)
 			if err == nil {
-				version, err = repository.LatestRevision(ctx, strategyID)
+				definition, version, err = repository.LoadRevision(ctx, strategyID, version.Revision)
 			}
 		}
 	} else {
@@ -111,144 +116,108 @@ func (s *Service) compileStrategyRevision(
 	if err != nil {
 		return strategy.Definition{}, compiler.Plan{}, strategy.RevisionMetadata{}, err
 	}
+	hash, err := strategy.DefinitionSHA256(definition)
+	if err != nil || hash != version.DefinitionSHA256 {
+		return strategy.Definition{}, compiler.Plan{}, strategy.RevisionMetadata{}, fmt.Errorf("strategy revision hash mismatch")
+	}
 	plan, err := compiler.Compile(definition, s.registry)
 	if err != nil {
 		return strategy.Definition{}, compiler.Plan{}, strategy.RevisionMetadata{}, err
 	}
-	return plan.Strategy, plan, version, nil
+	return plan.Definition(), plan, version, nil
 }
 
 func (s *Service) Run(ctx context.Context, request Request) (Response, error) {
+	prepared, err := s.Prepare(ctx, request)
+	if err != nil {
+		return Response{}, err
+	}
+	return s.Execute(ctx, prepared, nil)
+}
+
+type PreparedRun struct {
+	Request    Request
+	Definition strategy.Definition
+	Version    strategy.RevisionMetadata
+	Config     strategy.RunConfig
+	Data       DataSnapshot
+	Plan       compiler.Plan
+}
+
+func (s *Service) SetDataProvider(provider DataProvider) { s.provider = provider }
+
+func (s *Service) Prepare(ctx context.Context, request Request) (PreparedRun, error) {
 	definition, plan, version, err := s.compileStrategyRevision(
 		ctx,
 		request.StrategyID,
 		request.StrategyRevision,
 	)
 	if err != nil {
-		return Response{}, err
+		return PreparedRun{}, err
 	}
-
-	datasetID := definition.Data.DatasetID
-	if strings.TrimSpace(request.DatasetID) != "" {
-		datasetID = strings.TrimSpace(request.DatasetID)
-	}
-
-	symbol := ""
-	if len(definition.Data.Symbols) > 0 {
-		symbol = definition.Data.Symbols[0]
-	}
-	if strings.TrimSpace(request.Symbol) != "" {
-		symbol = strings.TrimSpace(request.Symbol)
-	}
-	if symbol == "" {
-		return Response{}, fmt.Errorf("initial engine supports exactly one symbol")
-	}
-	normalizedSymbol, err := market.NormalizeSymbol(symbol)
-	if err != nil {
-		return Response{}, err
-	}
-	symbol = normalizedSymbol
-
-	timeframe := definition.Data.Timeframe
-	if timeframe == "" {
-		timeframe = "15m"
-	}
-
-	startMS := definition.Data.Start.UTC().UnixMilli()
-	if request.StartMS > 0 {
-		startMS = request.StartMS
-	}
-	endMS := definition.Data.End.UTC().UnixMilli()
-	if request.EndMS > 0 {
-		endMS = request.EndMS
-	}
-	timeframeMS, err := market.ParseTimeframeMS(timeframe)
-	if err != nil {
-		return Response{}, err
-	}
-	if err := market.RequireAlignedRange(startMS, endMS, timeframeMS); err != nil {
-		return Response{}, fmt.Errorf("backtest range: %w", err)
-	}
-
-	var bars []market.Bar
-	provenance := DataProvenance{
-		DatasetID: datasetID,
-		Symbol:    symbol,
-		Timeframe: timeframe,
-		StartMS:   startMS,
-		EndMS:     endMS,
-	}
-	if datasetID == "__sample__" || strings.EqualFold(datasetID, "sample") {
-		bars = market.GenerateSampleBars(symbol, startMS, endMS)
-		expectedBars := (endMS - startMS) / timeframeMS
-		if int64(len(bars)) != expectedBars {
-			return Response{}, fmt.Errorf(
-				"synthetic range requires %d bars; maximum supported is %d",
-				expectedBars,
-				market.MaxSyntheticBars,
-			)
+	snapshot := plan.Snapshot()
+	config := snapshot.Defaults
+	if request.RunConfig != nil {
+		if request.DatasetID != "" || request.Symbol != "" || request.StartMS != 0 || request.EndMS != 0 {
+			return PreparedRun{}, fmt.Errorf("run_config cannot be combined with legacy data overrides")
 		}
-		provenance.DatasetID = "__sample__"
-		provenance.Synthetic = true
+		config = *request.RunConfig
 	} else {
-		if datasetID == "" {
-			return Response{}, fmt.Errorf("dataset_id is required; use __sample__ explicitly for synthetic data")
+		if request.DatasetID != "" {
+			config.Data.DatasetID = strings.TrimSpace(request.DatasetID)
 		}
-		manifest, _, manifestErr := dataset.ReadManifest(s.dataRoot, datasetID)
-		if manifestErr != nil {
-			return Response{}, fmt.Errorf("read manifest for dataset %q: %w", datasetID, manifestErr)
+		if request.Symbol != "" {
+			config.Data.Symbols = []string{strings.TrimSpace(request.Symbol)}
 		}
-		if manifest.MarketType != string(definition.Account.MarketType) {
-			return Response{}, fmt.Errorf(
-				"dataset %q market_type %q does not match strategy account market_type %q",
-				datasetID,
-				manifest.MarketType,
-				definition.Account.MarketType,
-			)
+		if request.StartMS != 0 {
+			config.Data.Start = time.UnixMilli(request.StartMS).UTC()
 		}
-		if startMS < manifest.StartMS || endMS > manifest.EndMS {
-			return Response{}, fmt.Errorf(
-				"backtest range [%d, %d) is outside dataset range [%d, %d)",
-				startMS,
-				endMS,
-				manifest.StartMS,
-				manifest.EndMS,
-			)
+		if request.EndMS != 0 {
+			config.Data.End = time.UnixMilli(request.EndMS).UTC()
 		}
-		manifestHash, hashErr := dataset.ManifestSHA256(s.dataRoot, datasetID)
-		if hashErr != nil {
-			return Response{}, fmt.Errorf("hash manifest for dataset %q: %w", datasetID, hashErr)
-		}
-		provenance.ManifestSHA256 = manifestHash
-		readBars, readErr := dataset.ReadBars(
-			s.dataRoot,
-			datasetID,
-			symbol,
-			timeframe,
-			startMS,
-			endMS,
-		)
-		if readErr != nil {
-			return Response{}, fmt.Errorf("read bars for dataset %q symbol %q: %w", datasetID, symbol, readErr)
-		}
-		if len(readBars) == 0 {
-			return Response{}, fmt.Errorf("no bars found in dataset %q for symbol %q", datasetID, symbol)
-		}
-		bars = readBars
 	}
-
-	if len(bars) == 0 {
-		return Response{}, fmt.Errorf("no bars available for backtest")
+	if err := strategy.ValidateRunConfig(config, snapshot.Logic); err != nil {
+		return PreparedRun{}, err
 	}
+	// Copy experiment slices and report overlays before crossing the run boundary.
+	raw, err := json.Marshal(struct {
+		Request Request
+		Config  strategy.RunConfig
+	}{request, config})
+	if err != nil {
+		return PreparedRun{}, err
+	}
+	var owned struct {
+		Request Request
+		Config  strategy.RunConfig
+	}
+	if err := json.Unmarshal(raw, &owned); err != nil {
+		return PreparedRun{}, err
+	}
+	data, err := s.provider.Load(ctx, owned.Config)
+	if err != nil {
+		return PreparedRun{}, err
+	}
+	owned.Request.StrategyRevision = version.Revision
+	owned.Request.RunConfig = &owned.Config
+	owned.Request.DatasetID, owned.Request.Symbol = "", ""
+	owned.Request.StartMS, owned.Request.EndMS = 0, 0
+	return PreparedRun{Request: owned.Request, Definition: definition, Plan: plan,
+		Version: version, Config: owned.Config, Data: data}, nil
+}
 
-	result, err := engine.Run(ctx, plan, engine.BacktestRequest{
-		Bars:   bars,
-		Report: request.Report,
+func (s *Service) Execute(ctx context.Context, prepared PreparedRun, progress func(int, int)) (Response, error) {
+	result, err := engine.Run(ctx, prepared.Plan, engine.RunRequest{
+		Bars: prepared.Data.Bars, Config: &prepared.Config,
+		Report: prepared.Request.Report, OnProgress: progress,
 	})
 	if err != nil {
 		return Response{}, err
 	}
-	return BuildResponse(definition, version, provenance, len(bars), result), nil
+	snapshot := prepared.Plan.Snapshot()
+	response := BuildResponse(strategy.ComposeV1(snapshot.Logic, prepared.Config), prepared.Version, prepared.Data.Provenance, len(prepared.Data.Bars), result)
+	response.RunConfig = prepared.Config
+	return response, nil
 }
 
 func BuildResponse(

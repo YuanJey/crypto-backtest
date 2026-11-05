@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css?v=20261105-1">
+  <link rel="stylesheet" href="run-panel.css?v=20261105-3">
 </head>
 <body class="theme-dark">
   <div class="terminal-container">
@@ -102,6 +103,30 @@
               <strong class="m-val" id="bmEquity">--</strong>
             </div>
           </div>
+        </div>
+
+        <details class="run-settings">
+          <summary>本次回测配置与运行历史 <span id="btRunRevision">请选择策略</span></summary>
+          <div class="run-config-grid">
+            <label>初始资金<input id="btInitialCash" type="number" min="0.01" step="100" class="form-control"></label>
+            <label>吃单手续费 (%)<input id="btTakerFee" type="number" min="0" step="0.01" class="form-control"></label>
+            <label>滑点 (bps)<input id="btSlippageBps" type="number" min="0" step="0.1" class="form-control"></label>
+            <label>交易所杠杆<input id="btExchangeLeverage" type="number" min="1" step="0.1" class="form-control"></label>
+            <label>总敞口 / 权益上限<input id="btExposureLimit" type="number" min="0" step="0.1" class="form-control"></label>
+            <label>单标的敞口 / 权益上限<input id="btSymbolLimit" type="number" min="0" step="0.1" class="form-control"></label>
+            <label>回撤停机 (%)，0 为关闭<input id="btDrawdownLimit" type="number" min="0" max="100" step="0.1" class="form-control"></label>
+            <label>开始时间 (UTC)<input id="btRunStart" type="datetime-local" step="900" class="form-control"></label>
+            <label>结束时间 (UTC)<input id="btRunEnd" type="datetime-local" step="900" class="form-control"></label>
+          </div>
+          <div class="run-settings-actions">
+            <button class="btn btn-outline btn-xs" id="btnRefreshRunRevision">加载最新策略版本与默认配置</button>
+            <button class="btn btn-outline btn-xs" id="btnRefreshRuns">刷新运行历史</button>
+          </div>
+          <div id="btRunHistory" class="run-history" aria-live="polite">正在读取运行记录…</div>
+        </details>
+        <div class="run-status-row">
+          <span id="btRunStatus" role="status">运行就绪</span>
+          <button class="btn btn-outline btn-xs" id="btnCancelBacktest" disabled>取消当前任务</button>
         </div>
 
         <div class="backtest-workspace" id="backtestWorkspace">
@@ -298,9 +323,15 @@
 
   <script src="src/chart.js?v=20261103-8"></script>
   <script src="src/replay.js?v=20261103-8"></script>
-  <script src="src/api.js?v=20261103-8"></script>
-  <script src="src/strategy.js?v=20261105-1"></script>
+  <script src="src/api.js?v=20261105-3"></script>
+  <script src="src/strategy-contract-adapter.js?v=20261105-2"></script>
+  <script src="src/strategy-store.js?v=20261105-3"></script>
+  <script src="src/capability-catalog.js?v=20261105-3"></script>
+  <script src="src/strategy-editors.js?v=20261105-3"></script>
+  <script src="src/strategy.js?v=20261105-3"></script>
+  <script src="src/backtest-run-controller.js?v=20261105-3"></script>
+  <script src="src/backtest-run-panel.js?v=20261105-3"></script>
   <script src="src/data.js?v=20261103-8"></script>
-  <script src="src/app.js?v=20261103-8"></script>
+  <script src="src/app.js?v=20261105-3"></script>
 </body>
 </html>

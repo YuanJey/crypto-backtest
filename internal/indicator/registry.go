@@ -73,3 +73,16 @@ func (r *Registry) BuildRuntime(indicatorType string, params json.RawMessage) (R
 	}
 	return builder(params)
 }
+
+// RuntimeFactory captures the registered constructor and immutable parameters.
+// Each call receives its own parameters and must construct a fresh runtime.
+func (r *Registry) RuntimeFactory(indicatorType string, params json.RawMessage) (func() (RuntimeIndicator, error), error) {
+	builder, ok := r.builders[indicatorType]
+	if !ok {
+		return nil, fmt.Errorf("indicator %q has no runtime builder", indicatorType)
+	}
+	frozen := append(json.RawMessage(nil), params...)
+	return func() (RuntimeIndicator, error) {
+		return builder(append(json.RawMessage(nil), frozen...))
+	}, nil
+}

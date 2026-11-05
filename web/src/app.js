@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const indicatorColors = ['#22d3ee', '#f59e0b', '#a78bfa', '#34d399', '#fb7185', '#60a5fa', '#facc15'];
   let strategySummaries = [];
   let activeBacktest = null;
+  let marketLoadGeneration = 0;
 
   timeframes.forEach(({ tf, ms }) => {
     charts[tf] = new CandleChart(`canvas-${tf}`, {
@@ -449,10 +450,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // 7. 加载行情数据并启动
   async function loadMarketData(symbol = 'BTC-USDT', datasetID = '') {
+    const ticket = ++marketLoadGeneration;
+    runController.invalidate();
     resetBacktestVisualization('等待回测');
     replayStatusText.textContent = '正在获取行情数据...';
     try {
       const data = await Api.fetchMarketBars(symbol, datasetID, true);
+      if (ticket !== marketLoadGeneration) return;
       const bars15m = (data.timeframes && data.timeframes['15m']) || data.bars || [];
       if (bars15m.length === 0) {
         throw new Error('No 15m bars returned');
@@ -460,8 +464,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       document.getElementById('currentSymbol').textContent = symbol;
       replay.loadData(bars15m);
+      runPanel.updateDataSelection();
       replayStatusText.textContent = '回放就绪 (READY)';
     } catch (err) {
+      if (ticket !== marketLoadGeneration) return;
       console.error('Failed to load market data:', err);
       replayStatusText.textContent = '加载失败，请重试';
     }
@@ -480,6 +486,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   const selStrategy = document.getElementById('btSelectStrategy');
   const btnRun = document.getElementById('btnRunBacktest');
   const metricsBar = document.getElementById('btMetricsBar');
+  const runController = new BacktestRunController(Api);
+  const runPanel = new BacktestRunPanel(runController, {
+    onReset: () => resetBacktestVisualization('等待任务结果'),
+    onResult: acceptBacktestResponse,
+    getDataSelection: () => {
+      const option = selDataset.options[selDataset.selectedIndex];
+      const sample = selDataset.value === '__sample__';
+      return {
+        datasetID: selDataset.value,
+        symbol: option?.dataset.symbol || 'BTC-USDT',
+        startMS: sample ? replay.baseBars[0]?.open_time_ms : Number(option?.dataset.start),
+        endMS: sample ? (replay.baseBars.at(-1)?.open_time_ms || 0) + 15 * 60 * 1000 : Number(option?.dataset.end),
+      };
+    },
+  });
 
   async function refreshDatasetOptions() {
     if (!selDataset) return;
@@ -527,6 +548,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       selStrategy.value = currentVal;
     }
     updateHeaderMarketType();
+    if (runController.selection?.definition.id !== selStrategy.value) {
+      await runPanel.bindStrategy(selStrategy.value);
+    }
   }
 
   function updateHeaderMarketType() {
@@ -553,63 +577,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     selStrategy.addEventListener('change', () => {
       updateHeaderMarketType();
       resetBacktestVisualization('策略已切换');
+      runPanel.bindStrategy(selStrategy.value);
     });
   }
 
-  // 执行回测按钮
-  if (btnRun) {
-    btnRun.addEventListener('click', async () => {
-      const strategyId = selStrategy.value;
-      if (!strategyId) {
-        alert('请先选择一个回测策略！若策略库为空，可前往【⚙️ 策略管理】页面新建策略。');
-        return;
-      }
-
-      const opt = selDataset.options[selDataset.selectedIndex];
-      const datasetVal = selDataset.value;
-      const sym = (opt && opt.dataset.symbol) || 'BTC-USDT';
-      const startMS = parseInt((opt && opt.dataset.start) || '0', 10);
-      const endMS = parseInt((opt && opt.dataset.end) || '0', 10);
-      let strategyMeta = strategySummaries.find(item => item.id === strategyId);
-      if (!strategyMeta || !Array.isArray(strategyMeta.indicators)) {
-        strategyMeta = await Api.fetchStrategyById(strategyId);
-      }
-      const strategyIndicators = strategyMeta?.indicators || [];
-
-      btnRun.disabled = true;
-      btnRun.innerHTML = `<span class="spinner-sm"></span> 回测撮合中...`;
-
-      try {
-        const payload = {
-          dataset_id: datasetVal,
-          symbol: sym,
-          report: {
-            equity_curve: true,
-            metrics: [
-              'final_equity',
-              'total_return_pct',
-              'max_drawdown_pct',
-              'max_position_leverage',
-              'order_count',
-              'fill_count'
-            ],
-            indicators: strategyIndicators.map(indicator => ({ id: indicator.id }))
-          }
-        };
-        if (startMS > 0) payload.start_ms = startMS;
-        if (endMS > 0) payload.end_ms = endMS;
-        if (datasetVal === '__sample__' && replay.baseBars.length > 0) {
-          payload.start_ms = replay.baseBars[0].open_time_ms;
-          payload.end_ms = replay.baseBars[replay.baseBars.length - 1].open_time_ms + 15 * 60 * 1000;
-        }
-
-        const resp = await Api.runBacktest(strategyId, payload);
+  // Presentation consumes the archived run snapshot, including its exact bars.
+  function acceptBacktestResponse(resp, snapshot) {
+        ++marketLoadGeneration;
+        const strategyIndicators = snapshot.definition.indicators || [];
+        document.getElementById('currentSymbol').textContent = resp.data.symbol;
+        replay.loadData(snapshot.data.bars);
         const marketTypeTag = document.getElementById('currentMarketType');
         if (marketTypeTag && resp.strategy?.market_type) {
           marketTypeTag.textContent = resp.strategy.market_type.toUpperCase();
         }
         const equityPoints = resp.report?.equity_curve || [];
-        const initialCash = resp.strategy?.initial_cash || 0;
+        const initialCash = resp.run_config?.account.initial_cash ?? resp.strategy?.initial_cash ?? 0;
         // 预计算累计峰值权益，回放时按下标 O(1) 读取回撤
         const peakEquity = new Float64Array(equityPoints.length);
         let runningPeak = initialCash;
@@ -636,7 +619,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (metricsBar && resp && resp.report) {
           metricsBar.style.display = 'flex';
           const metrics = resp.report.metrics || {};
-          const initialCapital = (resp.strategy && resp.strategy.initial_cash) || 10000;
+          const initialCapital = initialCash;
           const finalEq = resp.final_equity ?? initialCapital;
           const retPct = ((finalEq - initialCapital) / initialCapital) * 100;
 
@@ -667,14 +650,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         replayStatusText.textContent = `回测完成: ${resp.bar_count || 0} 根K线, 产生 ${resp.fill_count || 0} 笔撮合`;
-      } catch (err) {
-        console.error('Backtest run error:', err);
-        alert(`执行回测失败: ${err.message}`);
-      } finally {
-        btnRun.disabled = false;
-        btnRun.innerHTML = `<span class="btn-icon" aria-hidden="true">▶</span> 执行回测`;
-      }
-    });
   }
 
   // 9. 多 Tab 导航切换

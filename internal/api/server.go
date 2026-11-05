@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +18,7 @@ import (
 	"github.com/YuanJey/crypto-backtest/internal/dataset"
 	"github.com/YuanJey/crypto-backtest/internal/indicator"
 	"github.com/YuanJey/crypto-backtest/internal/market"
+	"github.com/YuanJey/crypto-backtest/internal/runstore"
 	"github.com/YuanJey/crypto-backtest/internal/strategy"
 )
 
@@ -25,15 +28,45 @@ type Server struct {
 	dataRoot   string
 	webRoot    string
 	runner     *backtest.Service
+	runs       *backtest.Manager
+	runDB      *sql.DB
 }
 
 func NewServer(repository strategy.Repository, registry *indicator.Registry, dataRoot string) *Server {
-	return &Server{
+	server := &Server{
 		repository: repository,
 		registry:   registry,
 		dataRoot:   dataRoot,
 		webRoot:    "web",
 		runner:     backtest.NewService(repository, registry, dataRoot),
+	}
+	var db *sql.DB
+	if provider, ok := repository.(interface{ Database() *sql.DB }); ok {
+		db = provider.Database()
+	} else {
+		var err error
+		db, err = sql.Open("sqlite", ":memory:")
+		if err != nil {
+			panic(err)
+		}
+		db.SetMaxOpenConns(1)
+		server.runDB = db
+	}
+	store, err := runstore.NewSQLite(context.Background(), db)
+	if err != nil {
+		panic(err)
+	}
+	server.runs, err = backtest.NewManager(context.Background(), server.runner, store)
+	if err != nil {
+		panic(err)
+	}
+	return server
+}
+
+func (s *Server) Close() {
+	s.runs.Close()
+	if s.runDB != nil {
+		_ = s.runDB.Close()
 	}
 }
 
@@ -48,7 +81,16 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/strategies", s.handleListStrategies)
 	mux.HandleFunc("POST /api/v1/strategies", s.handleCreateStrategy)
 	mux.HandleFunc("GET /api/v1/strategies/{id}", s.handleGetStrategy)
+	mux.HandleFunc("GET /api/v1/strategies/{id}/snapshot", s.handleStrategySnapshot)
 	mux.HandleFunc("POST /api/v1/backtests", s.handleRunBacktest)
+	mux.HandleFunc("POST /api/v1/backtest-runs", s.handleStartRun)
+	mux.HandleFunc("GET /api/v1/backtest-runs", s.handleListRuns)
+	mux.HandleFunc("GET /api/v1/backtest-runs/{id}", s.handleGetRun)
+	mux.HandleFunc("POST /api/v1/backtest-runs/{id}/cancel", s.handleCancelRun)
+	mux.HandleFunc("GET /api/v1/backtest-runs/{id}/result", s.handleRunResult)
+	mux.HandleFunc("GET /api/v1/backtest-runs/{id}/snapshot", s.handleRunSnapshot)
+	mux.HandleFunc("GET /api/v1/backtest-runs/{id}/events", s.handleRunEvents)
+	mux.HandleFunc("POST /api/v1/backtest-runs/{id}/replay", s.handleReplayRun)
 	mux.HandleFunc("GET /api/v1/market/bars", s.handleGetMarketBars)
 	mux.HandleFunc("GET /api/v1/market/datasets", s.handleListDatasets)
 	mux.HandleFunc("POST /api/v1/market/download", s.handleDownloadMarketData)
@@ -75,6 +117,13 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"indicators": s.registry.Definitions(),
+		"capabilities": map[string]interface{}{
+			"schema_version": 1, "base_timeframes": []string{"15m"},
+			"position_modes":    []string{"net"},
+			"actions":           []string{"enter", "add", "open", "close"},
+			"execution":         []string{"next_bar_open", "trigger_price"},
+			"run_configuration": true, "archived_runs": true, "ledger": true,
+		},
 	})
 }
 
@@ -171,7 +220,7 @@ func (s *Server) handleRunBacktest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("strategy_revision must be a positive integer"))
 		return
 	}
-	response, err := s.runner.Run(r.Context(), request)
+	response, err := s.runs.Run(r.Context(), request)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return

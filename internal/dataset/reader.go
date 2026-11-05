@@ -1,15 +1,12 @@
 package dataset
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
-
-	"github.com/parquet-go/parquet-go"
 
 	"github.com/YuanJey/crypto-backtest/internal/market"
 )
@@ -49,28 +46,6 @@ func ManifestSHA256(outputRoot string, datasetID string) (string, error) {
 }
 
 func ReadBars(outputRoot string, datasetID string, symbol string, timeframe string, startMS int64, endMS int64) ([]market.Bar, error) {
-	manifest, root, err := ReadManifest(outputRoot, datasetID)
-	if err != nil {
-		return nil, err
-	}
-	partPrefix := "exchange=" + manifest.Exchange + "/symbol=" + symbol + "/timeframe=" + timeframe + "/"
-	bars := make([]market.Bar, 0)
-	for _, file := range manifest.Files {
-		if !strings.HasPrefix(file.Path, partPrefix) {
-			continue
-		}
-		rows, err := parquet.ReadFile[market.Bar](filepath.Join(root, filepath.FromSlash(file.Path)))
-		if err != nil {
-			return nil, err
-		}
-		for _, row := range rows {
-			if row.OpenTimeMS >= startMS && row.OpenTimeMS < endMS {
-				bars = append(bars, row)
-			}
-		}
-	}
-	sort.Slice(bars, func(i, j int) bool {
-		return bars[i].OpenTimeMS < bars[j].OpenTimeMS
-	})
-	return bars, nil
+	snapshot, err := ReadSnapshot(context.Background(), outputRoot, datasetID, symbol, timeframe, startMS, endMS)
+	return snapshot.Bars, err
 }

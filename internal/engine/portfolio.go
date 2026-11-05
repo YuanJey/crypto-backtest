@@ -47,47 +47,11 @@ func (p portfolio) currentSide() strategy.TradeSide {
 }
 
 func (p *portfolio) open(side strategy.TradeSide, price float64, notionalPct float64, feeRate float64, allowPyramiding bool) (float64, float64, bool) {
-	if !isPositiveFinite(p.cash) {
-		return 0, 0, false
+	match, ok := quoteOpen(*p, side, price, notionalPct, feeRate, allowPyramiding)
+	if ok {
+		applyMatchedFill(p, match, strategy.ActionOpen, price)
 	}
-	if p.quantity != 0 {
-		if p.currentSide() != side || !allowPyramiding {
-			return 0, 0, false
-		}
-	}
-	notional := p.equity(price) * notionalPct
-	if notional <= 0 {
-		return 0, 0, false
-	}
-	if p.marketType == strategy.MarketTypeSpot {
-		maxNotional := p.cash / (1 + feeRate)
-		if notional > maxNotional {
-			notional = maxNotional
-		}
-		if notional <= 0 {
-			return 0, 0, false
-		}
-	}
-	quantity := notional / price
-	fee := notional * feeRate
-	if side == strategy.TradeSideShort {
-		quantity = -quantity
-	}
-	if p.marketType == strategy.MarketTypeSpot {
-		p.cash -= notional + fee
-	} else {
-		p.cash -= fee
-	}
-	if p.entryCount == 0 {
-		p.firstNotional = notional
-		p.firstEntryPrice = price
-		p.highestSinceEntry = price
-		p.lowestSinceEntry = price
-	}
-	p.addQuantity(quantity, price)
-	p.entryCount++
-	p.lastEntryPrice = price
-	return quantity, fee, true
+	return match.quantity, match.fee, ok
 }
 
 func isPositiveFinite(value float64) bool {
@@ -119,36 +83,11 @@ func (p portfolio) positionLeverage(markPrice float64) float64 {
 }
 
 func (p *portfolio) close(side strategy.TradeSide, price float64, sizePct float64, feeRate float64) (float64, float64, float64, bool) {
-	if p.quantity == 0 || p.currentSide() != side {
-		return 0, 0, 0, false
+	match, ok := quoteClose(*p, side, price, sizePct, feeRate)
+	if ok {
+		applyMatchedFill(p, match, strategy.ActionClose, price)
 	}
-	closeAbs := math.Abs(p.quantity) * sizePct
-	if closeAbs <= 0 {
-		return 0, 0, 0, false
-	}
-	notional := closeAbs * price
-	fee := notional * feeRate
-	var realized float64
-	var signedQty float64
-	if p.quantity > 0 {
-		realized = (price - p.avgPrice) * closeAbs
-		signedQty = closeAbs
-		if p.marketType == strategy.MarketTypeSpot {
-			p.cash += notional - fee
-		} else {
-			p.cash += realized - fee
-		}
-		p.quantity -= closeAbs
-	} else {
-		realized = (p.avgPrice - price) * closeAbs
-		signedQty = -closeAbs
-		p.cash += realized - fee
-		p.quantity += closeAbs
-	}
-	if math.Abs(p.quantity) < 1e-12 {
-		p.resetPosition()
-	}
-	return signedQty, fee, realized, true
+	return match.quantity, match.fee, match.realized, ok
 }
 
 func (p *portfolio) addQuantity(quantity float64, price float64) {

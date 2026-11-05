@@ -11,6 +11,7 @@ type Result struct {
 	EquityCurve []EquityPoint              `json:"equity_curve,omitempty"`
 	Indicators  map[string]IndicatorReport `json:"indicators,omitempty"`
 	Metrics     map[MetricType]float64     `json:"metrics,omitempty"`
+	Ledger      []LedgerEvent              `json:"ledger,omitempty"`
 	FinalEquity float64                    `json:"final_equity"`
 	TotalOrders int                        `json:"-"`
 	TotalFills  int                        `json:"-"`
@@ -53,8 +54,10 @@ type EquityPoint struct {
 }
 
 type RunRequest struct {
-	Bars   []market.Bar
-	Report ReportSpec
+	Bars       []market.Bar
+	Report     ReportSpec
+	Config     *strategy.RunConfig
+	OnProgress func(completed, total int)
 }
 
 type BacktestRequest = RunRequest
@@ -63,6 +66,7 @@ type ReportSpec struct {
 	EquityCurve bool               `json:"equity_curve,omitempty"`
 	Orders      bool               `json:"orders,omitempty"`
 	Fills       bool               `json:"fills,omitempty"`
+	Ledger      bool               `json:"ledger,omitempty"`
 	Metrics     []MetricType       `json:"metrics,omitempty"`
 	Indicators  []IndicatorOverlay `json:"indicators,omitempty"`
 }

@@ -9,10 +9,11 @@ import (
 )
 
 type evalContext struct {
-	bars       []market.Bar
-	barIndex   int
-	indicators map[string]map[string][]float64
-	portfolio  portfolio
+	bars            []market.Bar
+	barIndex        int
+	indicators      map[string]map[string][]float64
+	portfolio       portfolio
+	positionHistory *positionHistory
 }
 
 func evalBool(expression strategy.Expression, ctx evalContext) (bool, error) {
@@ -134,10 +135,17 @@ func evalNumber(expression strategy.Expression, ctx evalContext, offsetDelta int
 }
 
 func evalRef(ref strategy.ValueRef, ctx evalContext, offsetDelta int) (float64, bool, error) {
-	index := ctx.barIndex + ref.Offset + offsetDelta
-	if index < 0 || index >= len(ctx.bars) {
+	// Add non-positive offsets separately, rejecting an unavailable reference
+	// before either addition. This also rejects future data and int overflow.
+	if ctx.barIndex < 0 || ctx.barIndex >= len(ctx.bars) ||
+		ref.Offset > 0 || ref.Offset < -ctx.barIndex || offsetDelta > 0 {
 		return math.NaN(), false, nil
 	}
+	index := ctx.barIndex + ref.Offset
+	if offsetDelta < -index {
+		return math.NaN(), false, nil
+	}
+	index += offsetDelta
 	switch ref.Scope {
 	case strategy.ValueScopeMarket:
 		return marketField(ctx.bars[index], ref.Field)
@@ -155,7 +163,15 @@ func evalRef(ref strategy.ValueRef, ctx evalContext, offsetDelta int) (float64, 
 		}
 		return series[index], true, nil
 	case strategy.ValueScopePosition:
-		return positionField(ctx.portfolio, ref.Field, ctx.bars[index].Close)
+		p := ctx.portfolio
+		if index < ctx.barIndex {
+			var ok bool
+			p, ok = ctx.positionHistory.lookup(index)
+			if !ok {
+				return math.NaN(), false, nil
+			}
+		}
+		return positionField(p, ref.Field, ctx.bars[index].Close)
 	default:
 		return 0, false, fmt.Errorf("unknown ref scope %q", ref.Scope)
 	}

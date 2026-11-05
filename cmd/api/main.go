@@ -49,6 +49,7 @@ func run(args []string) error {
 	}
 
 	apiServer := api.NewServer(repository, indicator.MustBuiltinRegistry(), *dataRoot)
+	defer apiServer.Close()
 	apiServer.SetWebRoot(*webRoot)
 
 	server := &http.Server{

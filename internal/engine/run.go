@@ -2,11 +2,13 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"sort"
 
 	"github.com/YuanJey/crypto-backtest/internal/compiler"
+	"github.com/YuanJey/crypto-backtest/internal/indicator"
 	"github.com/YuanJey/crypto-backtest/internal/market"
 	"github.com/YuanJey/crypto-backtest/internal/strategy"
 )
@@ -15,9 +17,34 @@ type indicatorState struct {
 	plan       compiler.IndicatorPlan
 	aggregator barAggregator
 	last       map[string]float64
+	runtime    indicator.RuntimeIndicator
 }
 
-func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, error) {
+func Run(ctx context.Context, compiled compiler.Plan, request RunRequest) (Result, error) {
+	plan := compiled.Snapshot()
+	if plan.BaseTimeframeMS <= 0 {
+		return Result{}, fmt.Errorf("compiled plan is required")
+	}
+	config := plan.Defaults
+	if request.Config != nil {
+		raw, err := json.Marshal(request.Config)
+		if err != nil {
+			return Result{}, err
+		}
+		if err := json.Unmarshal(raw, &config); err != nil {
+			return Result{}, err
+		}
+	}
+	if err := strategy.ValidateRunConfig(config, plan.Logic); err != nil {
+		return Result{}, err
+	}
+	if config.Data.Timeframe != plan.Defaults.Data.Timeframe {
+		return Result{}, fmt.Errorf("run timeframe differs from compiled plan")
+	}
+	runtimes, err := compiled.NewIndicatorRuntimes()
+	if err != nil {
+		return Result{}, fmt.Errorf("initialize indicator runtime: %w", err)
+	}
 	reportSpec := normalizeReportSpec(request.Report)
 	if err := validateReportSpec(reportSpec, plan); err != nil {
 		return Result{}, err
@@ -38,8 +65,7 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 
 	states := make([]indicatorState, 0, len(plan.Indicators))
 	indicatorSeries := map[string]map[string][]float64{}
-	for _, indicatorPlan := range plan.Indicators {
-		indicatorPlan.Runtime.Reset()
+	for index, indicatorPlan := range plan.Indicators {
 		last := map[string]float64{}
 		indicatorSeries[indicatorPlan.ID] = map[string][]float64{}
 		for _, output := range indicatorPlan.Outputs {
@@ -50,17 +76,18 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 			plan:       indicatorPlan,
 			aggregator: newBarAggregator(indicatorPlan.TimeframeMS, plan.BaseTimeframeMS),
 			last:       last,
+			runtime:    runtimes[index],
 		})
 	}
 
-	portfolio := newPortfolio(plan.Strategy.Account.MarketType, plan.Strategy.Account.InitialCash)
+	portfolio := newPortfolio(config.Account.MarketType, config.Account.InitialCash)
+	positionHistory := newPositionHistory(plan.Rules, len(bars))
 	exitPolicies := newExitPolicyRuntimes(plan.ExitPolicies)
 	additions := newAdditionRuntimes(plan.Rules)
 	result := Result{}
 	pendingOrderIndexes := make([]int, 0)
 	orderSequence := 0
-	peakEquity := plan.Strategy.Account.InitialCash
-	riskHalted := false
+	risk := riskController{spec: config.Risk, peak: config.Account.InitialCash}
 	lastFillBarIndex := -1
 
 	for index, bar := range bars {
@@ -71,16 +98,12 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 			return Result{}, fmt.Errorf("bar at open_time_ms=%d is not closed", bar.OpenTimeMS)
 		}
 		openEquity := portfolio.equity(bar.Open)
-		riskHalted = riskHalted || !isPositiveFinite(openEquity) || drawdownHalted(
-			openEquity,
-			peakEquity,
-			plan.Strategy.Risk.MaxDrawdownHaltPct,
-		)
+		riskHalted := risk.observe(openEquity, false)
 		if len(pendingOrderIndexes) > 0 {
 			for _, orderIndex := range pendingOrderIndexes {
 				previousEntryCount := portfolio.entryCount
 				hadPosition := portfolio.quantity != 0
-				if fillOrder(&portfolio, &result, orderIndex, bar, plan, riskHalted) {
+				if executeOrder(&portfolio, &result, orderIndex, bar.Open, bar.OpenTimeMS, plan.Logic, config, riskHalted) {
 					lastFillBarIndex = index
 					if portfolio.entryCount > previousEntryCount {
 						snapshotExitPolicies(exitPolicies, states, previousEntryCount == 0)
@@ -116,32 +139,13 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 				pendingOrderIndexes = append(pendingOrderIndexes, orderIndex)
 			} else {
 				rawPrice := exitTriggerFillPrice(candidate.runtime.spec, candidate.target, bar)
-				price := fillPrice(rawPrice, action, plan.Strategy.Execution.Slippage)
-				quantity, fee, realized, ok := portfolio.close(
-					action.Side,
-					price,
-					action.SizePct,
-					plan.Strategy.Execution.Fee.TakerRate,
-				)
-				if ok {
-					result.Orders[orderIndex].Status = OrderStatusFilled
-					result.Fills = append(result.Fills, Fill{
-						OrderID:     result.Orders[orderIndex].ID,
-						RuleID:      candidate.runtime.spec.ID,
-						TimeMS:      bar.OpenTimeMS + plan.BaseTimeframeMS,
-						Price:       price,
-						Quantity:    quantity,
-						Fee:         fee,
-						RealizedPNL: realized,
-						Side:        action.Side,
-					})
+				if executeOrder(&portfolio, &result, orderIndex, rawPrice,
+					bar.OpenTimeMS+plan.BaseTimeframeMS, plan.Logic, config, riskHalted) {
 					lastFillBarIndex = index
 					if portfolio.quantity == 0 {
 						resetExitPolicyRuntimes(exitPolicies)
 						resetAdditionRuntimes(additions)
 					}
-				} else {
-					result.Orders[orderIndex].Status = OrderStatusSkipped
 				}
 			}
 			exitHandled = true
@@ -171,7 +175,7 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 					}
 					inputs = append(inputs, value)
 				}
-				outputValues := state.plan.Runtime.Update(inputs)
+				outputValues := state.runtime.Update(inputs)
 				for outputIndex, outputName := range state.plan.Outputs {
 					value := math.NaN()
 					if outputIndex < len(outputValues) {
@@ -187,18 +191,14 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 		portfolio.updateExtremes(bar.High, bar.Low)
 
 		currentEquity := portfolio.equity(bar.Close)
-		if currentEquity > peakEquity {
-			peakEquity = currentEquity
-		}
-		riskHalted = riskHalted || !isPositiveFinite(currentEquity) || drawdownHalted(
-			currentEquity,
-			peakEquity,
-			plan.Strategy.Risk.MaxDrawdownHaltPct,
-		)
+		riskHalted = risk.observe(currentEquity, true)
 
-		evalCtx := evalContext{bars: bars, barIndex: index, indicators: indicatorSeries, portfolio: portfolio}
+		evalCtx := evalContext{
+			bars: bars, barIndex: index, indicators: indicatorSeries,
+			portfolio: portfolio, positionHistory: positionHistory,
+		}
 		cooldownActive := lastFillBarIndex >= 0 &&
-			index-lastFillBarIndex < plan.Strategy.Behavior.CooldownBars
+			index-lastFillBarIndex < plan.Logic.Behavior.CooldownBars
 		for ruleIndex, rule := range plan.Rules {
 			if exitHandled {
 				break
@@ -207,7 +207,7 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 			if err != nil {
 				return Result{}, fmt.Errorf("rule %q: %w", rule.ID, err)
 			}
-			if !matched || !eligible(portfolio, rule.Action, plan.Strategy, riskHalted, cooldownActive) {
+			if !matched || !eligibleLogic(portfolio, rule.Action, plan.Logic, riskHalted, cooldownActive) {
 				continue
 			}
 			if !additionHit(portfolio, rule.Action, additions[ruleIndex], bar, states) {
@@ -224,6 +224,10 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 			pendingOrderIndexes = append(pendingOrderIndexes, len(result.Orders)-1)
 			break
 		}
+		// Signals above create orders, not fills. This value is the closing
+		// portfolio after this bar's opening fills, exits, and extreme updates.
+		// Record after evaluation so a maxLag ring never evicts a needed bar.
+		positionHistory.record(index, portfolio)
 
 		result.EquityCurve = append(result.EquityCurve, EquityPoint{
 			TimeMS:           bar.OpenTimeMS + plan.BaseTimeframeMS,
@@ -233,6 +237,9 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 			PositionLeverage: portfolio.positionLeverage(bar.Close),
 			Close:            bar.Close,
 		})
+		if request.OnProgress != nil && ((index+1)%256 == 0 || index+1 == len(bars)) {
+			request.OnProgress(index+1, len(bars))
+		}
 	}
 
 	if len(result.EquityCurve) > 0 {
@@ -240,63 +247,72 @@ func Run(ctx context.Context, plan compiler.Plan, request RunRequest) (Result, e
 	}
 	result.TotalOrders = len(result.Orders)
 	result.TotalFills = len(result.Fills)
-	if err := applyReportSpec(&result, reportSpec, indicatorSeries, plan.Strategy.Account.InitialCash); err != nil {
+	if err := applyReportSpec(&result, reportSpec, indicatorSeries, config.Account.InitialCash); err != nil {
 		return Result{}, err
 	}
 	return result, nil
 }
 
-func fillOrder(portfolio *portfolio, result *Result, orderIndex int, bar market.Bar, plan compiler.Plan, riskHalted bool) bool {
+func executeOrder(portfolio *portfolio, result *Result, orderIndex int, rawPrice float64, timeMS int64,
+	logic strategy.LogicDefinition, config strategy.RunConfig, riskHalted bool) bool {
 	order := &result.Orders[orderIndex]
-	price := fillPrice(bar.Open, order.Action, plan.Strategy.Execution.Slippage)
-	feeRate := plan.Strategy.Execution.Fee.TakerRate
-	var quantity, fee, realized float64
+	price := fillPrice(rawPrice, order.Action, config.Execution.Slippage)
+	feeRate := config.Execution.Fee.TakerRate
+	var match matchedFill
 	var ok bool
 	switch order.Action.Type {
 	case strategy.ActionEnter, strategy.ActionAdd, strategy.ActionOpen:
-		if !eligible(*portfolio, order.Action, plan.Strategy, riskHalted, false) {
+		if !eligibleLogic(*portfolio, order.Action, logic, riskHalted, false) {
 			break
 		}
 		notionalPct, sizeOK := resolveOpenNotionalPct(
 			*portfolio,
 			order.Action,
-			plan.Strategy.Position,
-			plan.Strategy.Account.InitialCash,
-			plan.Strategy.Account.ExchangeLeverage,
+			logic.Position,
+			config.Account.InitialCash,
+			config.Account.ExchangeLeverage,
 			price,
 		)
 		if !sizeOK {
 			ok = false
 			break
 		}
-		quantity, fee, ok = portfolio.open(
+		notionalPct = capRiskNotional(*portfolio, notionalPct, price, config.Risk)
+		match, ok = quoteOpen(*portfolio,
 			order.Action.Side,
 			price,
 			notionalPct,
 			feeRate,
-			additionsAllowed(plan.Strategy, order.Action.Type),
+			additionsAllowedLogic(logic, order.Action.Type),
 		)
 	case strategy.ActionClose:
 		sizePct := order.Action.SizePct
 		if sizePct == 0 {
 			sizePct = 1
 		}
-		quantity, fee, realized, ok = portfolio.close(order.Action.Side, price, sizePct, feeRate)
+		match, ok = quoteClose(*portfolio, order.Action.Side, price, sizePct, feeRate)
 	}
 	if !ok {
 		order.Status = OrderStatusSkipped
 		return false
 	}
 	order.Status = OrderStatusFilled
-	result.Fills = append(result.Fills, Fill{
+	fill := Fill{
 		OrderID:     order.ID,
 		RuleID:      order.RuleID,
-		TimeMS:      bar.OpenTimeMS,
+		TimeMS:      timeMS,
 		Price:       price,
-		Quantity:    quantity,
-		Fee:         fee,
-		RealizedPNL: realized,
+		Quantity:    match.quantity,
+		Fee:         match.fee,
+		RealizedPNL: match.realized,
 		Side:        order.Action.Side,
+	}
+	applyMatchedFill(portfolio, match, order.Action.Type, price)
+	result.Fills = append(result.Fills, fill)
+	result.Ledger = append(result.Ledger, LedgerEvent{
+		Sequence: len(result.Ledger) + 1, Action: order.Action.Type, Fill: fill,
+		Notional: match.notional, Cash: portfolio.cash, PositionQty: portfolio.quantity,
+		AveragePrice: portfolio.avgPrice,
 	})
 	return true
 }
@@ -329,13 +345,19 @@ func eligible(
 	riskHalted bool,
 	cooldownActive bool,
 ) bool {
+	logic := strategy.LogicDefinition{Behavior: strategyDef.Behavior, Position: strategyDef.Position}
+	return eligibleLogic(portfolio, action, logic, riskHalted, cooldownActive)
+}
+
+func eligibleLogic(portfolio portfolio, action strategy.ActionSpec, strategyDef strategy.LogicDefinition,
+	riskHalted, cooldownActive bool) bool {
 	currentSide := portfolio.currentSide()
 	switch action.Type {
 	case strategy.ActionEnter:
 		return canFundOpen(portfolio) && !riskHalted && !cooldownActive && currentSide == ""
 	case strategy.ActionAdd:
 		return canFundOpen(portfolio) && !riskHalted && !cooldownActive &&
-			additionsAllowed(strategyDef, action.Type) &&
+			additionsAllowedLogic(strategyDef, action.Type) &&
 			currentSide == action.Side && portfolio.entryCount == action.AdditionIndex
 	case strategy.ActionOpen:
 		if !canFundOpen(portfolio) || riskHalted || cooldownActive {
@@ -344,7 +366,7 @@ func eligible(
 		if currentSide == "" {
 			return true
 		}
-		if currentSide != action.Side || !additionsAllowed(strategyDef, action.Type) {
+		if currentSide != action.Side || !additionsAllowedLogic(strategyDef, action.Type) {
 			return false
 		}
 		maxEntries := 1 + strategyDef.Position.MaxAdditions
@@ -361,6 +383,10 @@ func canFundOpen(portfolio portfolio) bool {
 }
 
 func additionsAllowed(def strategy.Definition, actionType strategy.ActionType) bool {
+	return additionsAllowedLogic(strategy.LogicDefinition{Behavior: def.Behavior}, actionType)
+}
+
+func additionsAllowedLogic(def strategy.LogicDefinition, actionType strategy.ActionType) bool {
 	if def.Behavior.AllowAdditions != nil {
 		return *def.Behavior.AllowAdditions
 	}
@@ -452,11 +478,4 @@ func capitalDecayFactor(initialEquity, currentEquity, power float64) float64 {
 		power = strategy.DefaultCapitalDecayPower
 	}
 	return math.Min(1, math.Pow(initialEquity/currentEquity, power))
-}
-
-func drawdownHalted(equity, peak, limit float64) bool {
-	if limit <= 0 || peak <= 0 {
-		return false
-	}
-	return (peak-equity)/peak >= limit
 }

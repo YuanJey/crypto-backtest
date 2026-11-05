@@ -1,0 +1,19 @@
+.run-settings {
+  margin: 8px 16px 0;
+  padding: 10px 14px;
+  border: 1px solid #273449;
+  border-radius: 8px;
+  background: #111b2b;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+.run-settings summary { cursor: pointer; }
+.run-settings summary span { margin-left: 16px; color: #67e8f9; overflow-wrap: anywhere; }
+.run-config-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-top: 16px; }
+.run-config-grid label { display: flex; flex-direction: column; gap: 6px; }
+.run-settings-actions { display: flex; gap: 10px; margin: 12px 0; flex-wrap: wrap; }
+.run-history { max-height: 160px; overflow: auto; }
+.run-history-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid #273449; flex-wrap: wrap; }
+.run-history-row span { flex: 1; min-width: 230px; overflow-wrap: anywhere; }
+.run-status-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 16px; font-size: 12px; color: #94a3b8; }
+.run-status-row span { overflow-wrap: anywhere; }
