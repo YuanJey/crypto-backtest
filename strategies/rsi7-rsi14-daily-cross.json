@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "id": "rsi7-rsi14-daily-cross",
+  "name": "日线 RSI7 / RSI14 金叉死叉（只做多）",
+  "description": "ETH-USDT 日线 RSI(7) 上穿 RSI(14) 开多，下穿全平；仅使用已收盘日线，下一根基础 K 线开盘成交。1 倍杠杆、首仓名义金额上限为权益的 20%，保留项目默认资金衰减，不加仓。",
+  "data": {
+    "dataset_id": "binance-perpetual-15m-20191231160000-20261102140000",
+    "symbols": ["ETH-USDT"],
+    "timeframe": "15m",
+    "start": "2026-01-01T00:00:00Z",
+    "end": "2026-11-02T00:00:00Z"
+  },
+  "account": {
+    "market_type": "perpetual",
+    "initial_cash": 10000,
+    "quote_currency": "USDT",
+    "exchange_leverage": 1,
+    "maintenance_margin_rate": 0.005
+  },
+  "behavior": {
+    "allow_additions": false,
+    "allow_pyramiding": false,
+    "allow_same_bar_reversal": false,
+    "cooldown_bars": 0
+  },
+  "position": {
+    "position_leverage": 1,
+    "long_capital_decay_power": 0.5,
+    "short_capital_decay_power": 0.5
+  },
+  "exit_policies": [],
+  "execution": {
+    "signal_time": "bar_close",
+    "market_fill_time": "next_bar_open",
+    "intrabar_conflict": "conservative",
+    "fee": {
+      "maker_rate": 0.0002,
+      "taker_rate": 0.0004
+    },
+    "slippage": {
+      "type": "bps",
+      "value": 2
+    }
+  },
+  "risk": {
+    "max_symbol_equity_pct": 1,
+    "max_total_exposure_pct": 1,
+    "max_open_positions": 1,
+    "max_drawdown_halt_pct": 0
+  },
+  "indicators": [
+    {
+      "id": "rsi_7_1d",
+      "type": "rsi",
+      "timeframe": "1d",
+      "inputs": [{"scope": "market", "name": "bar", "field": "close"}],
+      "params": {"period": 7}
+    },
+    {
+      "id": "rsi_14_1d",
+      "type": "rsi",
+      "timeframe": "1d",
+      "inputs": [{"scope": "market", "name": "bar", "field": "close"}],
+      "params": {"period": 14}
+    }
+  ],
+  "rules": [
+    {
+      "id": "daily_death_cross",
+      "name": "日线 RSI7 下穿 RSI14：平多",
+      "priority": 200,
+      "when": {
+        "kind": "operator",
+        "op": "cross_down",
+        "args": [
+          {"kind": "reference", "ref": {"scope": "indicator", "name": "rsi_7_1d", "field": "value"}},
+          {"kind": "reference", "ref": {"scope": "indicator", "name": "rsi_14_1d", "field": "value"}}
+        ]
+      },
+      "action": {"type": "close", "side": "long", "size_pct": 1}
+    },
+    {
+      "id": "daily_golden_cross",
+      "name": "日线 RSI7 上穿 RSI14：开多",
+      "priority": 100,
+      "when": {
+        "kind": "operator",
+        "op": "cross_up",
+        "args": [
+          {"kind": "reference", "ref": {"scope": "indicator", "name": "rsi_7_1d", "field": "value"}},
+          {"kind": "reference", "ref": {"scope": "indicator", "name": "rsi_14_1d", "field": "value"}}
+        ]
+      },
+      "action": {"type": "enter", "side": "long", "size_pct": 0.2}
+    }
+  ]
+}

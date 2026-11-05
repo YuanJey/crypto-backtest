@@ -2,6 +2,10 @@
 
 策略文件使用版本化 JSON 存储，文件名为 `<strategy_id>.json`。回测入口通过 `-strategy-id` 选择指定策略。
 
+示例 [rsi7-rsi14-daily-cross.json](rsi7-rsi14-daily-cross.json) 使用已收盘日线 RSI(7) / RSI(14)：
+金叉开多，死叉全平，不加仓。底层 15m 数据用于撮合，两个指标均声明 `timeframe: "1d"`。
+实际 ETH 行情的验证结果见 [回测报告](../daily-rsi-cross-backtest-report.md)。
+
 正式服务模式下，策略保存到 SQLite：
 
 ```bash
